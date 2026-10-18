@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waystation icons</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Barlow:wght@400;500&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#04050A; --bg:#090B12; --surface-1:#0F1119; --surface-2:#161A25; --surface-3:#1E2432;
+    --hairline:#262C3A; --hairline-2:#343B4C; --amber:#E9A23B; --ivory:#F3E9D6;
+    --ink:#E6E8EC; --ink-2:#A3A7B0; --ink-3:#6B707C;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px 28px 48px;background:var(--bg);color:var(--ink);font:400 13px/1.45 'Barlow','Segoe UI',system-ui,sans-serif}
+  header{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;margin-bottom:18px}
+  h1{margin:0;font:600 18px 'Barlow Condensed','Bahnschrift Condensed','Arial Narrow',sans-serif;letter-spacing:.3em;text-transform:uppercase;color:var(--ivory)}
+  .tag{font:500 10px 'JetBrains Mono','Cascadia Mono',Consolas,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+  .controls{margin-left:auto;display:flex;gap:10px;align-items:center}
+  .controls label{font:500 11px 'Barlow Condensed',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);display:flex;gap:6px;align-items:center;cursor:pointer}
+  h2{position:relative;margin:26px 0 10px;padding-top:8px;border-top:1px solid var(--hairline);font:600 12px 'Barlow Condensed',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);display:flex;align-items:baseline;gap:12px}
+  h2::before{content:'';position:absolute;left:0;top:-1px;width:24px;height:2px;background:var(--amber)}
+  h2 .tag{margin-left:auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(172px,1fr));gap:8px}
+  .card{background:var(--surface-2);border-radius:3px;padding:10px 10px 8px 14px;position:relative;display:flex;flex-direction:column;gap:8px}
+  .card::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:4px;background:var(--keel,var(--ink-3));clip-path:polygon(0 4px,100% 0,100% calc(100% - 4px),0 100%)}
+  .row{display:flex;align-items:center;gap:14px;height:40px}
+  .plate{width:36px;height:36px;border-radius:3px;background:var(--surface-3);display:flex;align-items:center;justify-content:center;flex:none;box-shadow:inset 0 0 0 1px var(--plate-stroke,transparent)}
+  .ic{display:inline-block;vertical-align:-3px;flex:none}
+  .name{font:600 15px 'Barlow Condensed',sans-serif;letter-spacing:.01em;color:var(--ink)}
+  .id{font:500 10px 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+  .strip{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;background:var(--surface-1);padding:10px 12px;border-radius:3px;color:var(--ink-2)}
+  .strip span{display:inline-flex;align-items:center;gap:6px;font:500 12px 'JetBrains Mono',monospace;color:var(--ink-2)}
+  body.light-plates .plate{background:#2A3142}
+  body.ink .card{color:var(--ink)!important}
+  body.pixel .ic{image-rendering:pixelated;shape-rendering:crispEdges}
+  table{border-collapse:collapse;width:100%;max-width:560px;background:var(--surface-1)}
+  td,th{padding:0 10px;height:30px;border-bottom:1px solid var(--hairline);text-align:left;font:500 13px 'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+  th{font:500 11px 'Barlow Condensed',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+  tr:nth-child(even) td{background:var(--surface-2)}
+  td .ic{margin-right:8px}
+  .note{color:var(--ink-2);font-size:12px;margin:0 0 10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Waystation</h1>
+  <span class="tag" id="count">icon library</span>
+  <div class="controls">
+    <label><input type="checkbox" id="ck-ink"> all ivory</label>
+    <label><input type="checkbox" id="ck-plates"> lighter plates</label>
+    <label><input type="checkbox" id="ck-pixel"> crisp edges</label>
+  </div>
+</header>
+
+<p class="note">Each card shows the icon at 16, 20 (on a 36px glyph plate, as in a Build card) and 32px. Modules are family-colored, goods kind-colored, UI icons ivory. Judge the 16px column: every icon must still read.</p>
+
+<h2>Modules <span class="tag" id="n-modules"></span></h2>
+<div class="grid" id="g-modules"></div>
+
+<h2>Goods <span class="tag" id="n-goods"></span></h2>
+<div class="grid" id="g-goods"></div>
+
+<h2>UI <span class="tag" id="n-ui"></span></h2>
+<div class="grid" id="g-ui"></div>
+
+<h2>16px in running text <span class="tag">ink-2 on surface-1</span></h2>
+<div class="strip" id="strip"></div>
+
+<h2>Market row sample <span class="tag">16px kind-colored</span></h2>
+<table id="market"><thead><tr><th>Good</th><th>Stock</th><th>Price</th></tr></thead><tbody></tbody></table>
+
+<script src="../js/data.js"></script>
+<script src="../js/art.js"></script>
+<script>
+'use strict';
+PAL.load();
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+
+function card(id, color, name) {
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.style.setProperty('--keel', color);
+  el.style.setProperty('--plate-stroke', withAlpha(color, .55));
+  el.style.color = color;
+  el.innerHTML =
+    `<div class="row">${Icons.svg(id, 16)}<span class="plate">${Icons.svg(id, 20)}</span>${Icons.svg(id, 32)}</div>` +
+    `<div><div class="name">${esc(name)}</div><div class="id">${esc(id)}${ICONS[id] && ICONS[id].fill ? ' · fill' : ''}${ICONS[id] ? '' : ' · MISSING'}</div></div>`;
+  return el;
+}
+
+function fill(group, host, colorFn, nameFn) {
+  const ids = ICON_GROUPS[group];
+  const wrap = $(host);
+  for (const id of ids) wrap.appendChild(card(id, colorFn(id), nameFn(id)));
+  $('#n-' + group).textContent = ids.length + ' icons';
+}
+
+fill('modules', '#g-modules', id => PAL.family(id), id => (MODULES[id] ? MODULES[id].name : id));
+fill('goods', '#g-goods', id => PAL.kind(GOODS[id] ? GOODS[id].kind : ''), id => (GOODS[id] ? GOODS[id].name : id));
+fill('ui', '#g-ui', () => PAL.ivory, id => id);
+
+// 16px strip: every id in ink-2, with its label, as it would sit beside text
+const strip = $('#strip');
+for (const group of ['modules', 'goods', 'ui']) for (const id of ICON_GROUPS[group]) {
+  const s = document.createElement('span');
+  s.innerHTML = Icons.svg(id, 16) + esc(id);
+  strip.appendChild(s);
+}
+
+// Market sample rows
+const tb = $('#market tbody');
+for (const id of GOOD_IDS) {
+  const tr = document.createElement('tr');
+  const col = PAL.kind(GOODS[id].kind);
+  tr.innerHTML = `<td><span style="color:${col}">${Icons.svg(id, 16)}</span>${esc(GOODS[id].name)}</td><td>${(id.length * 17) % 90}</td><td>${Icons.svg(['trend-up', 'trend-flat', 'trend-down'][id.length % 3], 8)} ${GOODS[id].base}</td>`;
+  tb.appendChild(tr);
+}
+
+const total = Object.keys(ICONS).length;
+$('#count').textContent = `${total} icons · ${ICON_GROUPS.modules.length} modules · ${ICON_GROUPS.goods.length} goods · ${ICON_GROUPS.ui.length} ui`;
+
+$('#ck-ink').addEventListener('change', e => document.body.classList.toggle('ink', e.target.checked));
+$('#ck-plates').addEventListener('change', e => document.body.classList.toggle('light-plates', e.target.checked));
+$('#ck-pixel').addEventListener('change', e => document.body.classList.toggle('pixel', e.target.checked));
+</script>
+</body>
+</html>

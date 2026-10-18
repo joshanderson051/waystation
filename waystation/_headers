@@ -1,0 +1,26 @@
+# Cache and security headers. Read by Cloudflare Pages and Netlify; GitHub Pages ignores this file
+# (it always sends Cache-Control: max-age=600). See README.md, "Hosting and caching".
+#
+# Nothing here is fingerprinted, so HTML is revalidated on every visit and code is held
+# for ten minutes at most. Images and icons change rarely and may be held for a week.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Cache-Control: public, max-age=0, must-revalidate
+
+/play/js/*
+  Cache-Control: public, max-age=600, must-revalidate
+
+/play/css/*
+  Cache-Control: public, max-age=600, must-revalidate
+
+/site.css
+  Cache-Control: public, max-age=600, must-revalidate
+
+/assets/*
+  Cache-Control: public, max-age=604800
+
+/favicon.svg
+  Cache-Control: public, max-age=604800

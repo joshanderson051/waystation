@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waystation module art</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Barlow:wght@400;500&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#04050A; --bg:#090B12; --surface-1:#0F1119; --surface-2:#161A25; --surface-3:#1E2432;
+    --hairline:#262C3A; --hairline-2:#343B4C; --amber:#E9A23B; --ivory:#F3E9D6;
+    --ink:#E6E8EC; --ink-2:#A3A7B0; --ink-3:#6B707C; --warn:#FF8F3D; --bad:#FF4F5E;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px 28px 48px;background:var(--bg);color:var(--ink);font:400 13px/1.45 'Barlow','Segoe UI',system-ui,sans-serif}
+  header{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;margin-bottom:14px}
+  h1{margin:0;font:600 18px 'Barlow Condensed','Bahnschrift Condensed','Arial Narrow',sans-serif;letter-spacing:.3em;text-transform:uppercase;color:var(--ivory)}
+  .tag{font:500 10px 'JetBrains Mono','Cascadia Mono',Consolas,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+  .controls{margin-left:auto;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .controls label{font:500 11px 'Barlow Condensed',sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);display:flex;gap:6px;align-items:center;cursor:pointer}
+  .note{color:var(--ink-2);font-size:12px;margin:0 0 14px;max-width:900px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 16px}
+  .legend span{font:500 10px 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+  .mod{background:var(--surface-2);border-radius:3px;padding:10px 12px 10px 16px;position:relative}
+  .mod::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:4px;background:var(--keel);clip-path:polygon(0 4px,100% 0,100% calc(100% - 4px),0 100%)}
+  .head{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+  .name{font:600 15px 'Barlow Condensed',sans-serif;letter-spacing:.01em}
+  .head .tag{margin-left:auto}
+  .cells{display:flex;align-items:flex-end;gap:10px;margin-bottom:8px}
+  .cell{display:flex;flex-direction:column;align-items:center;gap:4px}
+  .cell canvas{background:var(--void);display:block;border-radius:2px}
+  .cell .tag{font-size:9px}
+  .cells.alt{padding-top:8px;border-top:1px solid var(--hairline)}
+  .missing{outline:1px dashed var(--bad);outline-offset:-1px}
+  .ic{display:inline-block;vertical-align:-3px;flex:none}
+  .status{margin-top:4px;font:500 10px 'JetBrains Mono',monospace;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Waystation</h1>
+  <span class="tag">module art · 100x100 unit space</span>
+  <div class="controls">
+    <label><input type="checkbox" id="ck-pause"> pause tells</label>
+    <label><input type="checkbox" id="ck-nostrip"> hide signal strip</label>
+    <label><input type="checkbox" id="ck-notell"> tells off</label>
+    <label><input type="checkbox" id="ck-nolit"> lit off</label>
+    <label><input type="checkbox" id="ck-reduced"> reduced motion</label>
+    <label><input type="checkbox" id="ck-hover"> hover</label>
+    <span class="tag" id="fps"></span>
+  </div>
+</header>
+<p class="note">Row 1: each module at 48, 72 and 120px with the Render plate (shadow skirt, hull, rim, key-light edges, signal strip, rivets, registry tag) and the module's <code>silhouette</code>, <code>lit</code> and <code>tell</code> drawn live with a plausible state (powered, ratio .6, load .7, docked ship at 40%, converting, xenofauna in stock). Row 2: the same module at 72px in its alternate state: under-powered (efficiency .6, lit at 50%), empty (ratio 0), idle (no conversion, no xenofauna); solar shows the <b>offline</b> variant, dock shows a <b>blocked</b> berth. Cells whose ART entry is absent print <b>missing</b>.</p>
+<div class="legend" id="legend"></div>
+<div class="grid" id="grid"></div>
+
+<script src="../js/data.js"></script>
+<script src="../js/sim.js"></script>
+<script src="../js/art.js"></script>
+<script src="../js/art-mod-a.js"></script>
+<script src="../js/art-mod-b.js"></script>
+<script>
+'use strict';
+PAL.load();
+
+const $ = s => document.querySelector(s);
+const IDS = ICON_GROUPS.modules;
+const SIZES = [48, 72, 120];
+const DPR = Math.max(1, window.devicePixelRatio || 1);
+const OFFLINE = { plate: '#2A2F3D', rim: '#55596A', strip: '#55596A', sil: '#6C7284' };
+const opts = { pause: false, nostrip: false, notell: false, nolit: false, reduced: false, hover: false };
+const errors = new Map();   // `${id}.${fn}` -> message (logged once)
+
+// Legend: family swatches
+const legend = $('#legend');
+for (const fam of ['hub', 'ops', 'power', 'trade', 'life', 'culture']) {
+  const s = document.createElement('span');
+  const col = PAL.resolve(FAMILY_COLOR[fam]);
+  s.innerHTML = `<i style="display:inline-block;width:10px;height:10px;background:${col};vertical-align:-1px;margin-right:6px"></i>${fam} ${FAMILY_COLOR[fam]}`;
+  legend.appendChild(s);
+}
+
+// ---- fake per-frame state (DESIGN.md 8.2) ----
+const fakeT = { produced: 20, used: 14, efficiency: 1, flare: false, stockTotal: 150, storage: 250, docks: 3, counts: {}, modules: 10 };
+function makeState(id, px, alt) {
+  const T = Object.assign({}, fakeT);
+  if (alt) { T.used = 24; T.efficiency = 0.6; }
+  const st = {
+    color: PAL.family(id),
+    lamp: PAL.lamp,
+    T,
+    efficiency: alt ? 0.6 : 1,
+    powered: !alt,
+    hover: opts.hover, selected: false, reduced: opts.reduced,
+    cellPx: px, dpr: DPR,
+    dock: alt
+      ? { open: 'e', usable: false, approaching: false, docked: false, progress: 0, berth: 2 }
+      : { open: 'e', usable: true, approaching: false, docked: true, progress: 0.4, berth: 2 },
+    ratio: alt ? 0 : 0.6,
+    load: alt ? 1.2 : 0.7,
+    day: 0,
+    trends: [1, -1, 0, 1],
+    flags: { flare: alt && id === 'solar', festival: false, alert: false, loan: false,
+      converting: !alt, xeno: !alt, linerNear: false, shipAdjacent: false, stockChanged: false },
+  };
+  if (alt && id === 'solar') st.color = OFFLINE.sil;
+  return st;
+}
+
+// ---- plate per DESIGN.md 8.0 (what Render bakes), drawn live here ----
+function devPx(n, u) { return n / (u * DPR); }   // device px -> units
+function plate(g, u, color, offline) {
+  const dp = n => devPx(n, u);
+  // 1. shadow skirt: three rounded rects offset (+2,+3) device px, growing 1 device px each
+  const skirt = [[0.25, 0], [0.15, 1], [0.08, 2]];
+  for (const [a, grow] of skirt) {
+    const gr = dp(grow);
+    ArtKit.rrect(g, 6 - gr + dp(2), 6 - gr + dp(3), 88 + gr * 2, 88 + gr * 2, 10 + gr);
+    ArtKit.fill(g, `rgba(0,0,0,${a})`);
+  }
+  // 2. plate
+  ArtKit.rrect(g, 6, 6, 88, 88, 10);
+  ArtKit.fill(g, offline ? OFFLINE.plate : PAL.hull);
+  // offline hatch (45 deg, 3u pitch, 12% white), clipped to the plate
+  if (offline) {
+    g.save(); ArtKit.rrect(g, 6, 6, 88, 88, 10); g.clip();
+    ArtKit.hatch(g, 6, 6, 88, 88, 3, 45);
+    ArtKit.stroke(g, 'rgba(255,255,255,.12)', Math.max(dp(1), 0.6));
+    g.restore();
+  }
+  // key light: 2 device px top/left highlight, bottom/right shade (clipped to the plate)
+  g.save(); ArtKit.rrect(g, 6, 6, 88, 88, 10); g.clip();
+  const e = dp(2);
+  g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(6, 6, 88, e); g.fillRect(6, 6, e, 88);
+  g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(6, 94 - e, 88, e); g.fillRect(94 - e, 6, e, 88);
+  g.restore();
+  // rim 1.5u
+  ArtKit.rrect(g, 6.75, 6.75, 86.5, 86.5, 9.5);
+  ArtKit.stroke(g, offline ? OFFLINE.rim : PAL['hull-rim'], 1.5);
+  // 3. signal strip: 4u tall along the top edge inside the rim, inset by the radius
+  if (!opts.nostrip) {
+    g.fillStyle = offline ? OFFLINE.strip : color;
+    g.fillRect(16, 8, 68, 4);
+  }
+  // 4. rivets: r=2u at the plate corners
+  g.fillStyle = 'rgba(255,255,255,.3)';
+  for (const [x, y] of [[12, 12], [88, 12], [12, 88], [88, 88]]) { ArtKit.dot(g, x, y, 2); g.fill(); }
+}
+
+function tagText(g, id, u, px, st) {
+  if (px < 48) return;
+  g.save();
+  g.font = '500 12px "JetBrains Mono","Cascadia Mono",Consolas,monospace';
+  g.textBaseline = 'alphabetic'; g.textAlign = 'right';
+  g.fillStyle = withAlpha(PAL.ivory, .3);
+  g.fillText(`${TAG_PREFIX[id]}-01`, 90, 90);
+  if (id === 'dock' || id === 'hub') {
+    g.font = '500 14px "JetBrains Mono","Cascadia Mono",Consolas,monospace';
+    g.fillStyle = withAlpha(PAL.ivory, .5);
+    g.fillText(String(st.dock.berth).padStart(2, '0'), 90, 24);
+  }
+  g.restore();
+}
+
+// ---- cells ----
+const cells = [];   // { cv, id, px, alt, phase, label }
+function makeCell(host, id, px, alt) {
+  const wrap = document.createElement('div');
+  wrap.className = 'cell';
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(px * DPR); cv.height = Math.round(px * DPR);
+  cv.style.width = px + 'px'; cv.style.height = px + 'px';
+  const lab = document.createElement('span');
+  lab.className = 'tag';
+  lab.textContent = alt ? `${px}px · ${id === 'solar' ? 'offline' : id === 'dock' ? 'blocked' : 'unpowered'}` : `${px}px`;
+  wrap.appendChild(cv); wrap.appendChild(lab);
+  host.appendChild(wrap);
+  const r = IDS.indexOf(id), c = alt ? 1 : 0;
+  cells.push({ cv, id, px, alt, phase: (r * 7 + c * 13) * 0.37, wrap });
+}
+
+const grid = $('#grid');
+for (const id of IDS) {
+  const def = MODULES[id] || { name: id };
+  const box = document.createElement('div');
+  box.className = 'mod';
+  box.style.setProperty('--keel', PAL.family(id));
+  const art = ART[id];
+  box.innerHTML = `<div class="head"><span style="color:${PAL.family(id)}">${Icons.svg(id, 16)}</span><span class="name">${def.name}</span>` +
+    `<span class="tag">${id} · ${FAMILY[id]}${art ? ' · tell ' + (art.tellClass || '?') : ' · <b style="color:var(--bad)">missing</b>'}</span></div>`;
+  const row = document.createElement('div'); row.className = 'cells';
+  for (const px of SIZES) makeCell(row, id, px, false);
+  box.appendChild(row);
+  const row2 = document.createElement('div'); row2.className = 'cells alt';
+  makeCell(row2, id, 72, true);
+  box.appendChild(row2);
+  const status = document.createElement('div'); status.className = 'status'; status.dataset.id = id;
+  box.appendChild(status);
+  grid.appendChild(box);
+}
+
+function callArt(id, fn, args) {
+  const art = ART[id];
+  if (!art || typeof art[fn] !== 'function') return;
+  const g = args[0];
+  g.save();
+  try { art[fn].apply(art, args); }
+  catch (e) {
+    const key = id + '.' + fn;
+    if (!errors.has(key)) { errors.set(key, e.message); console.error(`ART.${key} threw:`, e); }
+    const status = document.querySelector(`.status[data-id="${id}"]`);
+    if (status) status.textContent = `${fn}() error: ${e.message}`;
+  }
+  g.restore();
+}
+
+function drawCell(cell, t) {
+  const { cv, id, px, alt } = cell;
+  const g = cv.getContext('2d');
+  const u = px / 100;
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.fillStyle = PAL.void; g.fillRect(0, 0, px, px);
+  g.save();
+  g.scale(u, u);
+  const st = makeState(id, px, alt);
+  const offline = alt && id === 'solar';
+  plate(g, u, PAL.family(id), offline);
+  const art = ART[id];
+  if (!art) {
+    g.restore();
+    g.font = '500 11px "JetBrains Mono","Cascadia Mono",Consolas,monospace';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = PAL.bad; g.fillText('missing', px / 2, px / 2);
+    cell.wrap.classList.add('missing');
+    return;
+  }
+  callArt(id, 'silhouette', [g, u, st]);
+  tagText(g, id, u, px, st);
+  if (!opts.nolit && !offline) callArt(id, 'lit', [g, u, st]);
+  if (!opts.notell) {
+    const tt = offline ? 0 : t + cell.phase;   // offline: tell frozen at phase 0
+    callArt(id, 'tell', [g, u, tt, st]);
+  }
+  g.restore();
+}
+
+// ---- loop ----
+let t0 = performance.now(), paused = 0, pauseAt = 0, frames = 0, fpsT = performance.now();
+function frame(now) {
+  const t = opts.pause ? (pauseAt - t0 - paused) / 1000 : (now - t0 - paused) / 1000;
+  for (const cell of cells) drawCell(cell, t);
+  frames++;
+  if (now - fpsT > 1000) { $('#fps').textContent = `${frames} fps · dpr ${DPR}`; frames = 0; fpsT = now; }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+for (const k of Object.keys(opts)) {
+  const el = $('#ck-' + (k === 'pause' ? 'pause' : k));
+  if (!el) continue;
+  el.addEventListener('change', e => {
+    if (k === 'pause') {
+      if (e.target.checked) pauseAt = performance.now();
+      else paused += performance.now() - pauseAt;
+    }
+    opts[k] = e.target.checked;
+  });
+}
+PAL.onChange(() => { /* colors are re-read every frame via PAL.* */ });
+</script>
+</body>
+</html>

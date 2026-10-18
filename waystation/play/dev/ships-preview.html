@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waystation ships preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --void:#04050A; --ivory:#F3E9D6; --ink-2:#A3A7B0; --ink-3:#6B707C; --warn:#FF8F3D; --lamp:#FFE9B8; --ice:#8FD3E8; --amber:#E9A23B; }
+  html, body { margin:0; height:100%; background:var(--void); color:var(--ink-2); font:12px/1.4 'Barlow Condensed','Bahnschrift Condensed','Arial Narrow',sans-serif; overflow:hidden; }
+  #c { display:block; width:100vw; height:100vh; }
+  #hud { position:fixed; left:12px; top:10px; font:500 10px 'JetBrains Mono','Cascadia Mono',Consolas,monospace; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); pointer-events:none; }
+  #hud b { color:var(--ivory); font-weight:500; }
+  #thumbs { position:fixed; right:12px; top:10px; display:flex; gap:6px; align-items:center; }
+  #thumbs canvas { display:block; background:#0F1119; border-radius:3px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud"></div>
+<div id="thumbs"></div>
+
+<script src="../js/data.js"></script>
+<script src="../js/sim.js"></script>
+<script src="../js/art.js"></script>
+<script src="../js/fx.js"></script>
+<script src="../js/ships.js"></script>
+<script>
+'use strict';
+// ------------------------------------------------------------
+// Ships preview: 4 classes x 7 companies at cell 48 and 72, each flying a
+// slow circle (so bloom, exhaust and nav lights show), plus one queued ship
+// with the HOLD plate and one hovered ship. No Sim state is needed; ships are
+// plain objects shaped like Sim's.
+// ------------------------------------------------------------
+if (typeof PAL !== 'undefined' && PAL && typeof PAL.load === 'function') PAL.load();
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const hud = document.getElementById('hud');
+let W = 0, H = 0, dpr = 1;
+
+const CLASSES = ['courier', 'freighter', 'hauler', 'liner'];
+const CELLS = [48, 72];
+const ships = [];   // { ship, cell, cx, cy, radius, w (rad/s), phase, hovered, overHull }
+let nextId = 1;
+
+function layout() {
+  dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (typeof Ships !== 'undefined') Ships.purge();
+  ships.length = 0;
+  // grid: rows = companies, columns = classes x cell sizes (48 block then 72 block)
+  const cols = CLASSES.length * CELLS.length, rows = COMPANIES.length;
+  const top = 44, bottom = H - 120;
+  const colW = (W - 40) / cols, rowH = (bottom - top) / rows;
+  COMPANIES.forEach((co, r) => {
+    CELLS.forEach((cell, ci) => {
+      CLASSES.forEach((cls, k) => {
+        const col = ci * CLASSES.length + k;
+        const cx = 20 + colW * (col + 0.5), cy = top + rowH * (r + 0.5);
+        const radius = Math.min(colW, rowH) * 0.22;
+        ships.push({
+          ship: { id: nextId++, company: co.id, cls, state: Math.random() < 0.5 ? 'approach' : 'depart', x: 0, y: 0, angle: 0, waitStart: 0 },
+          cell, cx, cy, radius, w: 0.35 + Math.random() * 0.25, phase: Math.random() * Math.PI * 2,
+          hovered: false, overHull: (r + col) % 3 === 0,
+        });
+      });
+    });
+  });
+  // bottom row: a queued ship with the HOLD plate, a hovered ship, and a docked ship
+  const by = H - 60;
+  ships.push({ ship: { id: nextId++, company: 'redsand', cls: 'freighter', state: 'queue', x: 0, y: 0, angle: 0, waitStart: 0 },
+    cell: 72, cx: W * 0.3, cy: by, radius: 26, w: 0.3, phase: 0, hovered: false, overHull: false, queued: true });
+  ships.push({ ship: { id: nextId++, company: 'kestrel', cls: 'courier', state: 'approach', x: 0, y: 0, angle: 0, waitStart: 0 },
+    cell: 72, cx: W * 0.5, cy: by, radius: 26, w: 0.5, phase: 1, hovered: true, overHull: false });
+  ships.push({ ship: { id: nextId++, company: 'aurelian', cls: 'liner', state: 'docked', x: 0, y: 0, angle: -Math.PI / 2, waitStart: 0 },
+    cell: 72, cx: W * 0.7, cy: by, radius: 0, w: 0, phase: 0, hovered: false, overHull: true, fixed: true });
+  renderThumbs();
+}
+
+function renderThumbs() {
+  const box = document.getElementById('thumbs');
+  box.innerHTML = '';
+  if (typeof Ships === 'undefined') return;
+  for (const cls of CLASSES) box.appendChild(Ships.thumb(cls, 'halvorsen', 28));
+  const big = Ships.hullCanvas('liner', 'aurelian', 72 * 1.5);
+  box.appendChild(big);
+}
+
+// slow game clock: 1 day = 6 real seconds, like Sim at 1x
+let t = 0, last = performance.now(), frames = 0, ema = 0, fxTimer = 0.5;
+function frame(nowMs) {
+  const dt = Math.min(0.1, (nowMs - last) / 1000); last = nowMs; t += dt;
+  const now = t / 6;   // game days
+  const f0 = performance.now();
+
+  ctx.fillStyle = '#04050A'; ctx.fillRect(0, 0, W, H);
+  // faint cell rings under each ship so cell size reads
+  ctx.strokeStyle = 'rgba(243,233,214,.06)'; ctx.lineWidth = 1;
+  for (const s of ships) { ctx.beginPath(); ctx.arc(s.cx, s.cy, s.cell / 2, 0, Math.PI * 2); ctx.stroke(); }
+
+  FX.update(dt);
+  for (const s of ships) {
+    const sh = s.ship;
+    if (!s.fixed) {
+      const a = s.phase + t * s.w;
+      sh.x = s.cx + Math.cos(a) * s.radius; sh.y = s.cy + Math.sin(a) * s.radius;
+      sh.angle = a + Math.PI / 2;    // tangent, counter-clockwise on screen
+    } else { sh.x = s.cx; sh.y = s.cy; }
+    Ships.draw(ctx, sh, { x: sh.x, y: sh.y, cell: s.cell, t, now, hovered: s.hovered, overHull: s.overHull, reduced: false, tier: 0, speed: 1 });
+  }
+  // FX demo (bottom-right): weld sparks + ring every 1.6s, amber motes along a bent path, a dot
+  fxTimer -= dt;
+  if (fxTimer <= 0) {
+    fxTimer = 1.6;
+    const fx = W * 0.88, fy = H - 60;
+    FX.sparks(fx, fy, '#8FD3E8', 12, 300);
+    FX.ring(fx, fy, 6, 36, '#F3E9D6', 400);
+    FX.motes([{ x: fx - 70, y: fy + 30 }, { x: fx - 70, y: fy - 30 }, { x: fx + 70, y: fy - 30 }], '#E9A23B', 3, 600, 'inout');
+    FX.motes([{ x: fx + 70, y: fy + 30 }, { x: fx - 10, y: fy + 30 }], '#FFE28A', 6, 600, 'in');
+    FX.dot(fx + 70, fy - 30, '#6FD3A3', 500);
+  }
+  FX.draw(ctx);
+
+  // labels
+  ctx.font = '500 10px "JetBrains Mono","Cascadia Mono",Consolas,monospace';
+  ctx.fillStyle = 'rgba(243,233,214,.35)'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const cols = CLASSES.length * CELLS.length, colW = (W - 40) / cols;
+  for (let col = 0; col < cols; col++) {
+    const cls = CLASSES[col % CLASSES.length], cell = CELLS[Math.floor(col / CLASSES.length)];
+    ctx.fillText(cls.toUpperCase() + ' ' + cell, 20 + colW * (col + 0.5), 28);
+  }
+  ctx.textAlign = 'left';
+  COMPANIES.forEach((co, r) => {
+    const rows = COMPANIES.length, top = 44, bottom = H - 120, rowH = (bottom - top) / rows;
+    ctx.fillStyle = Ships.companyColor(co.id);
+    ctx.fillText(co.name.toUpperCase(), 8, top + rowH * r + 4);
+  });
+  ctx.fillStyle = 'rgba(243,233,214,.35)'; ctx.textAlign = 'center';
+  ctx.fillText('QUEUE / HOLD PLATE', W * 0.3, H - 22);
+  ctx.fillText('HOVERED', W * 0.5, H - 22);
+  ctx.fillText('DOCKED (NO BLOOM) OVER HULL', W * 0.7, H - 22);
+  ctx.fillText('FX: SPARKS / RING / MOTES / DOT', W * 0.88, H - 22);
+
+  const ms = performance.now() - f0; ema = ema ? ema * 0.95 + ms * 0.05 : ms;
+  if ((++frames & 15) === 0) hud.innerHTML = 'SHIPS <b>' + ships.length + '</b> &middot; PARTICLES <b>' + FX.count() + '</b>/' + FX.cap + ' &middot; FRAME <b>' + ema.toFixed(2) + '</b>ms &middot; DPR <b>' + dpr + '</b>';
+  requestAnimationFrame(frame);
+}
+
+window.addEventListener('resize', layout);
+layout();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

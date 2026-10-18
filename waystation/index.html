@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waystation — a space station builder for the browser</title>
+<meta name="description" content="Run a way station on the edge of interstellar space. Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate. Plays in the browser, saves on your device, no account.">
+<meta name="theme-color" content="#04050A">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/icon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+<link rel="canonical" href="https://joshanderson051.github.io/waystation/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Waystation">
+<meta property="og:title" content="Waystation — a space station builder for the browser">
+<meta property="og:description" content="Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate. Plays in the browser, saves on your device, no account.">
+<meta property="og:url" content="https://joshanderson051.github.io/waystation/">
+<meta property="og:image" content="https://joshanderson051.github.io/waystation/assets/og.png">
+<meta property="og:image:width" content="1440">
+<meta property="og:image:height" content="756">
+<meta property="og:image:alt" content="The Waystation bridge console: a station in plan view beside the build panel">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Waystation — a space station builder for the browser">
+<meta name="twitter:description" content="Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate. Plays in the browser, saves on your device, no account.">
+<meta name="twitter:image" content="https://joshanderson051.github.io/waystation/assets/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Barlow:wght@400;500&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- Icon sprite: the exact 24x24 paths from play/js/art.js ICONS (generated, do not hand-edit) -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-hub" viewBox="0 0 24 24"><path d="M12 2.5 20.23 7.25v9.5L12 21.5l-8.23-4.75v-9.5Z M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z M12 11.75v.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-dock" viewBox="0 0 24 24"><path d="M16.5 4.5H8a3.5 3.5 0 0 0-3.5 3.5v8A3.5 3.5 0 0 0 8 19.5h8.5 M17 2.5v4 M17 17.5v4 M11.5 11.75v.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-warehouse" viewBox="0 0 24 24"><path d="M4 4h16v16H4Z M9.33 4v16 M14.67 4v16 M4 9.33h16 M4 14.67h16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-solar" viewBox="0 0 24 24"><path d="M12 2.5v19 M3 6.5h7v11H3Z M14 6.5h7v11h-7Z M3 12h7 M14 12h7 M10.5 10.5h3v3h-3Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-fuel" viewBox="0 0 24 24"><path d="M4.5 20V7.5a3 3 0 0 1 6 0V20Z M13.5 20V7.5a3 3 0 0 1 6 0V20Z M4.5 15h6 M13.5 15h6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-quarters" viewBox="0 0 24 24"><path d="M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z M5.5 10h3 M10.5 10h3 M15.5 10h3 M5.5 14h3 M10.5 14h3 M15.5 14h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-cantina" viewBox="0 0 24 24"><path d="M17 10a5 5 0 1 1-10 0 5 5 0 0 1 10 0Z M4.5 10h2 M17.5 10h2 M12 2.5v2.5 M4 20h16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-comms" viewBox="0 0 24 24"><path d="M14 11a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z M10 15v6 M7 21h6 M14 5.27A7 7 0 0 1 16.97 10.39 M15.45 3.22A9.5 9.5 0 0 1 19.46 10.17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-market" viewBox="0 0 24 24"><path d="M4 7h16 M12 7v12 M8 19h8 M6 7v3.5 M18 7v3.5 M3 10.5a3 3 0 0 0 6 0Z M15 10.5a3 3 0 0 0 6 0Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-rec" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z M12 11.75v.5 M4 3.75v.5 M20 3.75v.5 M4 19.75v.5 M20 19.75v.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-hydro" viewBox="0 0 24 24"><path d="M3 14a9 9 0 0 1 18 0Z M5 17.5h14 M7 20.5h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-clinic" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z M12 8v8 M8 12h8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-habitat" viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z M9 10h6v6H9Z M12 5V2.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-reactor" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-17 0 8.5 8.5 0 0 1 17 0Z M14.5 12a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z M7.24 9.25A5.5 5.5 0 0 1 16.76 9.25 M16.76 14.75A5.5 5.5 0 0 1 7.24 14.75" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-customs" viewBox="0 0 24 24"><path d="M3 9h7v7H3Z M10 12.5h11 M3 20h18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-security" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6Z M19 6.5h2.5 M2.5 6.5H5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-school" viewBox="0 0 24 24"><path d="M3 9.5a9 9 0 0 0 18 0Z M6.5 9.5a5.5 5.5 0 0 0 11 0 M12 9.25v.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 6h18 M5 6v7 M9.67 6v7 M14.33 6v7 M19 6v7 M3 13h18 M15 17.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-plaza" viewBox="0 0 24 24"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6Z M5.5 5.25v.5 M18.5 5.25v.5 M5.5 18.25v.5 M18.5 18.25v.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-menagerie" viewBox="0 0 24 24"><path d="M3 13a9 9 0 0 1 18 0Z M9 4.5V13 M15 4.5V13 M6 20.5c1.5-4 3.5-4 5 0c1.5-4 3.5-4 5 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-refinery" viewBox="0 0 24 24"><path d="M3 14h18v2.5L18 20H6l-3-3.5Z M5 14V4.5h3V14 M10.5 14V7h3v7 M16 14V4.5h3V14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-shipyard" viewBox="0 0 24 24"><path d="M3 5h18 M4.5 5v15.5 M19.5 5v15.5 M12 5v3 M7 10.5h7l3.5 2.5L14 15.5H7Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-observatory" viewBox="0 0 24 24"><path d="M3.5 13a8.5 8.5 0 0 1 17 0Z M12 13l7.5-7.5 M6.5 13v7.5 M17.5 13v7.5 M4 20.5h16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-gate" viewBox="0 0 24 24"><path d="M19.5 14a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z M16.25 14a4.25 4.25 0 1 1-8.5 0 4.25 4.25 0 0 1 8.5 0Z M9.5 5 12 2.5l2.5 2.5 M12 13.75v.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-ship" viewBox="0 0 24 24"><path d="M3 12 20.5 4.5l-4 7.5 4 7.5Z M3 12h13.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-dish" viewBox="0 0 24 24"><path d="M3.5 8.5A8.5 8.5 0 0 0 15.5 20.5Z M9.5 14.5 14.5 9.5 M11.67 6.67A4 4 0 0 1 17.33 6.67 M9.55 4.55A7 7 0 0 1 19.45 4.55" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M13 2.5 5.5 13.5H12l-1 8 7.5-11H13Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-people" viewBox="0 0 24 24"><path d="M12.5 7.5a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Z M3 20.5v-1a5.5 5.5 0 0 1 5.5-5.5h1a5.5 5.5 0 0 1 5.5 5.5v1 M15 4.25a3.5 3.5 0 0 1 0 6.5 M17.5 14.25a5.5 5.5 0 0 1 3.5 5.25v1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-credits" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z M15 9.5a3.5 3.5 0 1 0 0 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-rep" viewBox="0 0 24 24"><path d="M12 3 14.47 9.1 21.03 9.56 15.99 13.8 17.58 20.19 12 16.7 6.42 20.19 8.01 13.8 2.97 9.56 9.53 9.1Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M4.5 4.5h12l3 3v12h-15Z M8 4.5v5h7v-5 M8 19.5v-5h8v5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5 9.5 17.5 19.5 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<header class="rail">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="Waystation home">
+      <span class="wordmark">Waystation</span>
+      <span class="micro">A space station builder &middot; in the browser</span>
+    </a>
+    <nav class="rail-nav" aria-label="Sections">
+      <a class="link" href="#what">What you do</a>
+      <a class="link" href="#modules">Modules</a>
+      <a class="link" href="#notes">Notes</a>
+      <a class="btn primary" href="play/"><svg class="ic" aria-hidden="true"><use href="#i-ship"/></svg>Play</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ================= Lead ================= -->
+  <section class="lead" aria-labelledby="lead-title">
+    <div class="wrap">
+      <div class="lead-col">
+        <h1 id="lead-title" class="wordmark hero">Waystation</h1>
+        <p class="section sub">Station commissioning &middot; open to all captains</p>
+        <p class="pitch">Run a way station on the edge of interstellar space. Dock freighters, trade their cargo, keep the power on, and grow one docking collar into a town with a bank, an academy and a jump gate.</p>
+        <div class="actions">
+          <a class="btn primary big" href="play/"><svg class="ic" aria-hidden="true"><use href="#i-ship"/></svg>Commission a station</a>
+          <a class="btn ghost big" href="#what">How it plays</a>
+        </div>
+        <ul class="facts micro">
+          <li>Plays in the browser</li>
+          <li>Saves on your device</li>
+          <li>No account</li>
+          <li>Desktop first</li>
+        </ul>
+      </div>
+      <figure class="shot keel">
+        <img src="assets/hero.png" width="1440" height="900" alt="The Waystation console: a station in plan view beside a planet, with the build panel, credits, power and reputation readouts on the top rail" fetchpriority="high">
+        <figcaption class="micro"><span>Lantern Reach &middot; Day 042 &middot; L3 Town in Space</span><span>Plan view &middot; Build console</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ================= What you do ================= -->
+  <section id="what" class="block" aria-labelledby="what-title">
+    <div class="wrap">
+      <h2 class="shelf"><span class="shelf-label" id="what-title">What you do</span><span class="shelf-tag">Six systems &middot; one console</span></h2>
+      <div class="cards">
+        <article class="card" data-fam="ops">
+          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-dock"/></svg></span>
+          <div class="card-main">
+            <h3 class="name">Dock the traffic <span class="tag">Ops</span></h3>
+            <p class="desc">Freighters pull up to your bays for fuel, repairs and a hot meal. One bay, one ship at a time, and every bay needs an open side for the approach.</p>
+          </div>
+        </article>
+        <article class="card" data-fam="trade">
+          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-market"/></svg></span>
+          <div class="card-main">
+            <h3 class="name">Trade the cargo <span class="tag">Trade</span></h3>
+            <p class="desc">Ships sell what their home world exports and buy what it imports. Set Buy and Sell per good, hold ore for a refinery, and ride the booms.</p>
+          </div>
+        </article>
+        <article class="card" data-fam="power">
+          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-solar"/></svg></span>
+          <div class="card-main">
+            <h3 class="name">Keep the lights on <span class="tag">Power</span></h3>
+            <p class="desc">Every module draws power. Solar arrays are cheap and go dark in a flare; a fusion reactor does not. Overdraw and everything runs worse.</p>
+          </div>
+        </article>
+        <article class="card" data-fam="life">
+          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-habitat"/></svg></span>
+          <div class="card-main">
+            <h3 class="name">Grow a town <span class="tag">Life</span></h3>
+            <p class="desc">Crews need beds, food and something to do. Keep quality of life high and residents move in, pay rent and open shops on the promenade.</p>
+          </div>
+        </article>
+        <article class="card" data-fam="ops">
+          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-dish"/></svg></span>
+          <div class="card-main">
+            <h3 class="name">Answer the transmissions <span class="tag">Events</span></h3>
+            <p class="desc">Flares, pirate raids, refugee convoys, trade booms and shipping contracts arrive every few days. Each one is a call for the bridge to make.</p>
+          </div>
+        </article>
+        <article class="card" data-fam="culture">
+          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-gate"/></svg></span>
+          <div class="card-main">
+            <h3 class="name">Open the gate <span class="tag">Galactic</span></h3>
+            <p class="desc">Serve companies well and they open offices on your station. Reach the galactic tier and long-haul liners start calling at your jump gate.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Tiers ================= -->
+  <section class="block" aria-labelledby="tiers-title">
+    <div class="wrap">
+      <h2 class="shelf"><span class="shelf-label" id="tiers-title">Five tiers</span><span class="shelf-tag">Unlocked by reputation and module count</span></h2>
+      <ol class="tiers">
+        <li><span class="chip">L1</span><span class="tname">Way Station</span><p class="tdesc">One docking collar and 6,000 credits. Build a bay, a warehouse and a solar array, then serve your first ships.</p></li>
+        <li><span class="chip">L2</span><span class="tname">Trading Hub</span><p class="tdesc">A comms relay, a trade exchange, habitats and a reactor. Companies begin to trust you.</p></li>
+        <li><span class="chip">L3</span><span class="tname">Town in Space</span><p class="tdesc">An academy, a bank, a promenade and a shipyard. Residents run businesses; you lend credits at interest.</p></li>
+        <li><span class="chip rose">L4</span><span class="tname">Galactic Gate</span><p class="tdesc">A deep-space observatory and the jump gate beacon. Long-haul liners arrive.</p></li>
+        <li><span class="chip rose">L5</span><span class="tname">Galactic Hub</span><p class="tdesc">The end of the line: a port the whole reach routes through.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ================= Module roster ================= -->
+  <section id="modules" class="block" aria-labelledby="modules-title">
+    <div class="wrap">
+      <h2 class="shelf"><span class="shelf-label" id="modules-title">The module roster</span><span class="shelf-tag">24 modules &middot; six families</span></h2>
+      <ul class="roster">
+        <li data-fam="hub"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-hub"/></svg></span><span class="rname">Core Hub</span><span class="rtier micro">Core</span></li>
+        <li data-fam="ops"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-dock"/></svg></span><span class="rname">Docking Bay</span><span class="rtier micro">Tier 1</span></li>
+        <li data-fam="trade"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-warehouse"/></svg></span><span class="rname">Cargo Warehouse</span><span class="rtier micro">Tier 1</span></li>
+        <li data-fam="power"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-solar"/></svg></span><span class="rname">Solar Array</span><span class="rtier micro">Tier 1</span></li>
+        <li data-fam="trade"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-fuel"/></svg></span><span class="rname">Fuel Depot</span><span class="rtier micro">Tier 1</span></li>
+        <li data-fam="life"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-quarters"/></svg></span><span class="rname">Crew Quarters</span><span class="rtier micro">Tier 1</span></li>
+        <li data-fam="life"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-cantina"/></svg></span><span class="rname">Cantina</span><span class="rtier micro">Tier 1</span></li>
+        <li data-fam="ops"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-comms"/></svg></span><span class="rname">Comms Relay</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="trade"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-market"/></svg></span><span class="rname">Trade Exchange</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="culture"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-rec"/></svg></span><span class="rname">Rec Deck</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="life"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-hydro"/></svg></span><span class="rname">Hydroponics</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="life"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-clinic"/></svg></span><span class="rname">Med Bay</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="life"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-habitat"/></svg></span><span class="rname">Residential Habitat</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="power"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-reactor"/></svg></span><span class="rname">Fusion Reactor</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="ops"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-customs"/></svg></span><span class="rname">Customs Office</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="ops"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-security"/></svg></span><span class="rname">Security Post</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="life"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-school"/></svg></span><span class="rname">Academy</span><span class="rtier micro">Tier 3</span></li>
+        <li data-fam="trade"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-bank"/></svg></span><span class="rname">Mercantile Bank</span><span class="rtier micro">Tier 3</span></li>
+        <li data-fam="culture"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-plaza"/></svg></span><span class="rname">Promenade</span><span class="rtier micro">Tier 3</span></li>
+        <li data-fam="culture"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-menagerie"/></svg></span><span class="rname">Xeno Menagerie</span><span class="rtier micro">Tier 3</span></li>
+        <li data-fam="trade"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-refinery"/></svg></span><span class="rname">Ore Refinery</span><span class="rtier micro">Tier 3</span></li>
+        <li data-fam="ops"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-shipyard"/></svg></span><span class="rname">Shipyard</span><span class="rtier micro">Tier 3</span></li>
+        <li data-fam="culture"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-observatory"/></svg></span><span class="rname">Deep Space Observatory</span><span class="rtier micro">Tier 4</span></li>
+        <li data-fam="culture"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-gate"/></svg></span><span class="rname">Jump Gate Beacon</span><span class="rtier micro">Tier 4</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= Bridge notes ================= -->
+  <section id="notes" class="block" aria-labelledby="notes-title">
+    <div class="wrap">
+      <h2 class="shelf"><span class="shelf-label" id="notes-title">Bridge notes</span><span class="shelf-tag">Keys &middot; saves &middot; screens</span></h2>
+      <div class="notes">
+        <div class="note keel">
+          <h3>Controls</h3>
+          <dl class="keys">
+            <dt>Space</dt><dd>Pause</dd>
+            <dt>1 &middot; 2 &middot; 4</dt><dd>Game speed</dd>
+            <dt>B</dt><dd>Build console</dd>
+            <dt>M</dt><dd>Market console</dd>
+            <dt>Esc</dt><dd>Stop placing, clear selection</dd>
+            <dt>Click</dt><dd>Place a module, or inspect one</dd>
+          </dl>
+        </div>
+        <div class="note keel">
+          <h3>Saves</h3>
+          <p>The station auto-saves to your browser every few seconds and when you leave the tab. Come back later and the title screen offers to resume.</p>
+          <p>One station per browser. New scraps the current one after a confirm step. Nothing leaves your device: no account, no server.</p>
+        </div>
+        <div class="note keel">
+          <h3>Screens</h3>
+          <p>Built for a desktop browser at 1280 px and wider. A landscape tablet works; a phone does not, yet.</p>
+          <p>Current Chrome, Edge, Firefox and Safari. Reduced-motion settings are honoured throughout.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Commission ================= -->
+  <section class="cta" aria-labelledby="cta-title">
+    <div class="wrap">
+      <h2 class="section sub" id="cta-title">Ready for commissioning</h2>
+      <div class="commission keel">
+        <span class="label">Station name</span>
+        <span class="mono">Pick one on the title screen, or take the one the registry hands you.</span>
+        <span class="registry micro">Registry WS-0000 will be assigned on commission</span>
+        <div class="actions"><a class="btn primary" href="play/"><svg class="ic" aria-hidden="true"><use href="#i-ship"/></svg>Commission a station</a></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap micro">
+    <span>Waystation</span><span class="sep"></span><span>2026</span><span class="sep"></span><a href="play/">Play</a><span class="sep"></span><a href="#main">Top</a>
+    <span class="right">Black glass &middot; flat colour &middot; real numbers</span>
+  </div>
+</footer>
+</body>
+</html>

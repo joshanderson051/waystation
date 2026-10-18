@@ -1,0 +1,933 @@
+/* ==========================================================================
+   WAYSTATION — css/style.css            (Engineer H1; source of truth: DESIGN.md)
+   Direction: Bridge Console: Keel & Shelf. True-black surfaces, detached
+   chamfered keels, ruled shelves with an amber index tick, flat semantic hues.
+   ==========================================================================
+
+   MINI STYLE GUIDE — the class names ui.js / main.js (H2) must emit
+   --------------------------------------------------------------------------
+   Hue plumbing
+     Every keeled surface reads its keel colour from the custom property --hue.
+     Set it with data-fam on cards (ops|power|trade|life|culture|hub) or inline
+     style="--hue:#rrggbb;--hue-dim:rgba(..)" for company colours. Defaults amber.
+     Text colour utilities: .c-ink .c-ink2 .c-ink3 .c-amber .c-amber-hi .c-ice
+     .c-sage .c-rose .c-ivory .c-good .c-warn .c-bad
+
+   Type roles (utility classes)
+     .wordmark  .section  .tab-label  .label  .card-name  .body  .strong
+     .num  .num-hero  .log  .micro  .mono        (.num/.val/.mono = tabular-nums)
+
+   Shapes (status is never hue alone)
+     <i class="tri up|down|flat"></i>  6px triangle / dash, currentColor
+     <i class="sq"></i>                6px filled square, currentColor
+     .chip[data-shape="up|sq|down"]    leading shape inside a chip
+
+   Top rail (#topbar)
+     .brand > .brand-row > .wordmark + #station-name(.label)
+            > .registry-line(.micro) > #registry + .sep + "DAY " + #s-day
+     .stat(.credits|.income|.power|.visitors|.residents|.rep|.level) > .lbl + .val
+       #s-credits            .val.num-hero  (+ .bad when negative; text carries the leading \25BC)
+       #s-income-delta       <i class="tri up c-good"> | <i class="tri down c-bad">
+       #s-income             .num text "+380" / "-140"
+       #s-power              .num.c-ice text "14 / 20"  (.c-warn + "\25A0 " during flare,
+                             .c-bad + "\25BC " when overdrawn)
+       #power-pips           children <i class="pip on|spare|over">
+       #power-chip           .chip.warn, hidden attr toggled, text "FLARE"
+       #s-visitors / #s-residents   .num.c-sage "22 / 26"
+       #stars                five <span class="pip [full]"><i style="height:NN%"></i></span>
+       #s-level              .chip.amber.level, text "L2 \B7 TRADING HUB"
+     .rail-right > #speed(.seg) > button[data-speed] (.on)   + #btn-save(.btn) #btn-new(.btn.danger)
+       each .btn: <span class="ic-slot" data-icon="save"></span><span class="btn-label">Save</span>
+     Flash: add .flash-good / .flash-bad to any value, remove after 600ms.
+
+   Canvas overlays (children of #canvas-wrap, after the two canvases)
+     #condition             text set by H2; colour/hazard driven by body[data-condition]
+     #orders (hidden attr)  > .order[data-order] (.done) > <i></i><span>text</span>
+     #level-banner          text set by H2; add .show to play the 2s wipe, remove on animationend
+     #tooltip (.show, .more) > .tt-title .tt-body(.warn) .tt-row .tt-foot(.bad) .tt-more
+                            hue: inline style="--hue:..."
+     #toasts > .toast(.good|.bad|.warn|.gold) > .chip + .toast-msg ; remove after 4000ms
+
+   Sidebar
+     #sidebar::before is the amber keel (CSS only).
+     #tabs > .tab[data-tab] (.active) > .tab-tick .tab-idx .tab-label .tab-key
+            + #tab-indicator  — position with style vars --x (px) and --w (unitless px width):
+              el.style.setProperty('--x', left+'px'); el.style.setProperty('--w', width)
+     .panel (.active)       panel wipe plays whenever .active is added
+     #sidebar-foot(.micro)  text "WS-1910 \B7 DAY 041 \B7 Lantern Reach"
+     .shelf [.tier-head] [.locked] [.placing] [style="--i:n"]
+            > .shelf-label + .shelf-tag(.warn)      (locked tag: CSS draws the leading \25A0)
+     .divider
+     .note > .note-text + button.note-close(.btn.icon.ghost)   first-open notes
+
+   Build card (also used static in the Station panel)
+     .card[data-mod][data-fam] (.selected|.poor|.locked|.static|.fade-in style="--i:n")
+       > .plate (icon svg inside, 20px)
+       > .card-main > .name (+ <span class="tag">\D73</span> | <span class="chip ivory">Placing</span>)
+                    > .desc
+       > .card-side > .cost  > .pips (<span class="pnum">+8</span> <i class="pip [off]">...)  > .need
+
+   Station panel
+     .qol > .qol-ring[style="--p:NN;--c:var(--good)"] > .qol-pct   + .qol-meta > .label + .chip
+     .qol-row(.good|.warn|.bad) > .qol-lbl + .qol-bar[style="--n:0..20"] + .qol-val(.num) + .chip
+     .kv > span, span.num (.amber|.good|.bad)      (odd = label, even = value)
+     .ledger-total(.num.good|.bad)  .sel-status(.good|.bad)  .sel-actions > .btn.danger + .why
+     .idle (idle text)
+
+   Market
+     .lead (.mono inside)  .chips > .chip   .shelf-note(.warn)
+     table.market > thead th(.r) ; tbody tr[title] (.boom|.glut)
+       td.kind > i   td.icon   td.gname   td.stock.num   td.price.num > .tri + .prc + .stk-s + .mult
+       td.pol > .seg.small > button[data-g][data-k] (.on)   td.act > button.btn.icon.small.danger.dump
+       (.stk-s duplicates the stock; CSS shows it only when the sidebar is <= 360px)
+
+   Company card
+     .co[style="--hue:..."] (.locked) > .co-head > .name ; .co-chips > .chip ; .blurb ; .home(.label)
+       .goods-row > .lbl + svg.ic...   .trust > .trust-bar > i(.on) x10 + .trust-val(.num) + .chip
+       .co-foot > .tag + .btn (.primary)
+
+   Log
+     #log-list > .line(.good|.warn|.bad|.newday|.new) > .day + .cat + .msg ;  .empty
+
+   Modal
+     #modal(.open)[style="--mx:..px;--my:..px"] > .box[data-kind="event|confirm|lend|alert"]
+       > .modal-head > .ic-slot + #modal-tag ; .modal-body > #modal-title #modal-text #modal-extra
+       > #modal-actions > .btn(.primary)
+
+   Title
+     body[data-screen="title"] hides the HUD chrome. #title(.out) > .title-col > .wordmark.hero
+       .title-sub .commission > #title-resume(hidden) > #btn-resume(.card-button) > .resume-main
+       (.resume-head .resume-meta) + #title-thumb ; .title-actions > #btn-newstation
+       #title-form > .field #title-name #btn-reroll #title-registry #title-confirm(hidden) #btn-commission
+
+   Body attributes (main.js): data-level, data-condition, data-placing, data-motion, data-boot, data-screen
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   2. Tokens (verbatim from DESIGN.md section 2) + motion + fonts
+   -------------------------------------------------------------------------- */
+:root{
+  /* black is the material */
+  --void:#04050A;          /* canvas space, title backdrop */
+  --bg:#090B12;            /* page body */
+  --surface-1:#0F1119;     /* top rail, sidebar, status bar, modal, tooltip, toast */
+  --surface-2:#161A25;     /* cards, table zebra, inputs, glyph plates */
+  --surface-3:#1E2432;     /* hover, active row, pressed */
+  --hairline:#262C3A;      /* shelves, dividers, table rules */
+  --hairline-2:#343B4C;    /* hover border, focused input border */
+
+  /* canvas structure (also read by PAL) */
+  --hull:#1B2030;          /* module plate fill */
+  --hull-edge:#2A3142;     /* truss edge, plate inner line */
+  --hull-rim:rgba(243,233,214,.25);   /* 1px ivory plate rim */
+  --truss:#232838;         /* truss fill */
+
+  /* identity hues: solid / hi / dim(55%) / ghost(14%) */
+  --amber:#E9A23B; --amber-hi:#FFC46A; --amber-dim:rgba(233,162,59,.55); --amber-ghost:rgba(233,162,59,.14);
+  --ice:#8FD3E8;   --ice-hi:#BFE8F4;   --ice-dim:rgba(143,211,232,.55);  --ice-ghost:rgba(143,211,232,.14);
+  --sage:#A8C8A0;  --sage-hi:#CBE2C4;  --sage-dim:rgba(168,200,160,.55); --sage-ghost:rgba(168,200,160,.14);
+  --rose:#E58BB8;  --rose-hi:#F2B6D3;  --rose-dim:rgba(229,139,184,.55); --rose-ghost:rgba(229,139,184,.14);
+  --gold:#FFE28A;          /* POWER module family only; never used for DOM text */
+  --ivory:#F3E9D6; --ivory-dim:rgba(243,233,214,.6); --ivory-ghost:rgba(243,233,214,.14);
+  --lamp:#FFE9B8;          /* every lit window, lamp and beacon on the canvas */
+
+  /* status: never decorative, always paired with a shape or a word */
+  --good:#6FD3A3; --warn:#FF8F3D; --bad:#FF4F5E;
+  --good-ghost:rgba(111,211,163,.14); --warn-ghost:rgba(255,143,61,.14); --bad-ghost:rgba(255,79,94,.14);
+
+  /* text (neutral, never warm-tinted) */
+  --ink:#E6E8EC; --ink-2:#A3A7B0; --ink-3:#6B707C;
+  --on-accent:#140C00;     /* text on filled amber / ivory */
+
+  /* glow: one layer, hero values only */
+  --glow-amber:0 0 8px rgba(233,162,59,.35);
+  --glow-ice:0 0 8px rgba(143,211,232,.35);
+
+  /* hazard hatch: the only striped surface in the product */
+  --hazard:repeating-linear-gradient(135deg,var(--warn) 0 5px,#140C00 5px 10px);
+
+  /* derived (not in the spec block; used only for the gold family plate stroke) */
+  --gold-dim:rgba(255,226,138,.55);
+  --ink-3-dim:rgba(107,112,124,.55);
+
+  /* 11. motion */
+  --ease:cubic-bezier(.2,.7,.2,1);
+  --ease-exit:cubic-bezier(.3,0,.8,.15);
+  --ease-back:cubic-bezier(.34,1.3,.64,1);
+  --dur-micro:160ms;   /* hover, toggles, focus, chip, log fade */
+  --dur-state:240ms;   /* tab wipe, modal, bracket draw, banner enter/exit */
+  --dur-number:400ms;  /* tickers, ring expand */
+  --dur-long:600ms;    /* boot, motes */
+
+  /* 3. faces */
+  --font-cond:'Barlow Condensed','Bahnschrift Condensed','Arial Narrow',sans-serif;
+  --font-body:'Barlow','Segoe UI',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono','Cascadia Mono',Consolas,monospace;
+}
+
+/* 2.3 level evolution: the only level-dependent styling */
+body[data-level="4"], body[data-level="5"] { --ink:#F2F4F7; }
+body[data-level="4"] .shelf::before, body[data-level="5"] .shelf::before { box-shadow: var(--glow-amber); }
+
+/* --------------------------------------------------------------------------
+   Base
+   -------------------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 400 13px/1.45 var(--font-body);
+  overflow: hidden; user-select: none; -webkit-font-smoothing: antialiased;
+}
+button, input { font: inherit; color: inherit; margin: 0; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+h1, h2, h3, p { margin: 0; }
+[hidden] { display: none !important; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--hairline); }
+::-webkit-scrollbar-thumb:hover { background: var(--hairline-2); }
+::-webkit-scrollbar-track { background: transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--hairline) transparent; }
+
+/* 5.9 focus: ivory is the player's hand */
+:focus-visible { outline: 2px solid var(--ivory); outline-offset: 2px; }
+:focus:not(:focus-visible) { outline: none; }
+
+/* 6.0 inline icons (Icons.svg output) and the empty slots H2 fills */
+.ic { display: inline-block; vertical-align: -3px; flex: none; }
+.ic-slot { display: inline-flex; align-items: center; justify-content: center; flex: none; line-height: 0; }
+.ic-slot:empty { width: 14px; height: 14px; }
+
+/* --------------------------------------------------------------------------
+   3. Type roles
+   -------------------------------------------------------------------------- */
+.wordmark   { font: 600 18px/1 var(--font-cond); letter-spacing: .30em; text-transform: uppercase; color: var(--ivory); }
+.section    { font: 600 12px/1 var(--font-cond); letter-spacing: .12em; text-transform: uppercase; }
+.tab-label  { font: 600 12px/1 var(--font-cond); letter-spacing: .10em; text-transform: uppercase; }
+.label      { font: 500 11px/14px var(--font-cond); letter-spacing: .10em; text-transform: uppercase; }
+.card-name  { font: 600 15px/18px var(--font-cond); letter-spacing: .01em; }
+.body       { font: 400 13px/1.45 var(--font-body); }
+.strong     { font-weight: 500; }
+.num        { font: 500 13px/18px var(--font-mono); }
+.num-hero   { font: 600 18px/18px var(--font-mono); }
+.log        { font: 500 12px/16px var(--font-mono); }
+.micro      { font: 500 10px/12px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+.mono       { font-family: var(--font-mono); }
+.num, .num-hero, .val, .mono, .log, .micro { font-variant-numeric: tabular-nums; }
+
+/* colour utilities (text only; family hues never colour DOM text except via these status/telemetry roles) */
+.c-ink { color: var(--ink); } .c-ink2 { color: var(--ink-2); } .c-ink3 { color: var(--ink-3); }
+.c-amber { color: var(--amber); } .c-amber-hi { color: var(--amber-hi); } .c-ice { color: var(--ice); }
+.c-sage { color: var(--sage); } .c-rose { color: var(--rose); } .c-ivory { color: var(--ivory); }
+.c-good { color: var(--good); } .c-warn { color: var(--warn); } .c-bad { color: var(--bad); }
+
+/* shapes: 6px triangles / dash / square in currentColor */
+.tri { display: inline-block; width: 0; height: 0; flex: none; vertical-align: 1px;
+       border-left: 3px solid transparent; border-right: 3px solid transparent; }
+.tri.up   { border-bottom: 6px solid currentColor; }
+.tri.down { border-top: 6px solid currentColor; }
+.tri.flat { width: 6px; height: 2px; border: 0; background: currentColor; }
+.sq  { display: inline-block; width: 6px; height: 6px; background: currentColor; flex: none; vertical-align: 1px; }
+
+/* --------------------------------------------------------------------------
+   4. Frame
+   -------------------------------------------------------------------------- */
+#app { display: grid; grid-template-rows: 60px 1fr 28px; height: 100vh; height: 100dvh; min-width: 0; }
+#main { display: grid; grid-template-columns: 1fr clamp(344px, 27vw, 392px); min-height: 0; min-width: 0; }
+#canvas-wrap { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--void); }
+#canvas-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#bg { z-index: 0; }
+#station { z-index: 1; }
+
+/* --------------------------------------------------------------------------
+   4.3 / 6.2 Top rail
+   -------------------------------------------------------------------------- */
+#topbar {
+  display: flex; align-items: center; gap: 14px; padding: 0 14px; min-width: 0;
+  background: var(--surface-1); border-bottom: 1px solid var(--hairline);
+  white-space: nowrap; transition: border-color var(--dur-state) var(--ease);
+}
+body[data-condition="alert"] #topbar { border-bottom-color: var(--bad); }
+
+.brand { display: flex; flex-direction: column; justify-content: center; min-width: 170px; gap: 3px; }
+.brand-row { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+#station-name { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.registry-line { color: var(--ink-3); display: flex; gap: 5px; align-items: baseline; }
+.registry-line .sep { color: var(--ink-3); }
+
+.stat { position: relative; display: flex; flex-direction: column; justify-content: center; height: 60px; padding-left: 14px; flex: none; }
+.stat::before { content: ''; position: absolute; left: 0; top: 16px; width: 1px; height: 28px; background: var(--hairline); }
+.stat .lbl { font: 500 11px/14px var(--font-cond); letter-spacing: .10em; text-transform: uppercase; color: var(--ink-2); }
+.stat .val { display: inline-flex; align-items: center; gap: 6px; font: 500 13px/18px var(--font-mono); color: var(--ink); min-height: 18px; }
+.stat .val .num { font: inherit; }
+.stat .val.good { color: var(--good); }
+.stat .val.bad { color: var(--bad); }
+.stat .val.warn { color: var(--warn); }
+
+#s-credits { font: 600 18px/18px var(--font-mono); color: var(--amber-hi); text-shadow: var(--glow-amber); }
+#s-credits.bad { color: var(--bad); text-shadow: none; }
+
+#power-pips { display: inline-flex; align-items: center; gap: 2px; }
+#power-pips .pip { width: 6px; height: 10px; background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--hairline); flex: none; }
+#power-pips .pip.on { background: var(--ice); box-shadow: none; }
+#power-pips .pip.over {
+  background: repeating-linear-gradient(45deg, var(--bad) 0 2px, transparent 2px 4px);
+  box-shadow: inset 0 0 0 1px var(--bad);
+}
+
+#stars { display: inline-flex; align-items: center; gap: 3px; }
+#stars .pip { position: relative; width: 8px; height: 14px; border-radius: 2px; overflow: hidden; flex: none;
+              background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--hairline); }
+#stars .pip i { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--amber); }
+#stars .pip.full i { height: 100%; }
+
+.stat.level { justify-content: center; }
+.chip.level { font: 600 11px/18px var(--font-cond); letter-spacing: .10em; }
+
+.rail-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+#speed button { min-width: 36px; }
+.pause-ic { display: inline-block; width: 6px; height: 6px; background: currentColor; }
+
+/* value flash (removed by H2 after 600ms) */
+.flash-good { animation: flash-good 600ms var(--ease) both; }
+.flash-bad  { animation: flash-bad 600ms var(--ease) both; }
+
+/* 4.4 degradation: nothing wraps, nothing scrolls horizontally */
+@media (max-width: 1366px) {
+  .stat.visitors .lbl, .stat.residents .lbl, .stat.rep .lbl { display: none; }
+  .registry-line { display: none; }
+  .brand { min-width: 0; }
+  #btn-save .btn-label, #btn-new .btn-label { display: none; }
+  #btn-save, #btn-new { width: 28px; min-height: 28px; padding: 0; }
+  #btn-save::before, #btn-new::before { display: none; }
+  .tab-key { display: none; }
+}
+@media (max-width: 1180px) {
+  #station-name { display: none; }
+}
+
+/* --------------------------------------------------------------------------
+   5.1 Keel: 4px chamfered rail, detached from every horizontal edge.
+   A ::before on a position:relative, non-scrolling wrapper. Colour = --hue.
+   -------------------------------------------------------------------------- */
+#sidebar::before, .card::before, .co::before, .toast::before, #tooltip::before,
+#modal .box::before, .note::before, .commission::before, #level-banner::before {
+  content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 4px;
+  background: var(--hue, var(--amber));
+  clip-path: polygon(0 4px, 100% 0, 100% calc(100% - 4px), 0 100%);
+  pointer-events: none; z-index: 1;
+}
+.toast::before, #tooltip::before { top: 6px; bottom: 6px; }
+#tooltip::before { width: 3px; clip-path: polygon(0 3px, 100% 0, 100% calc(100% - 3px), 0 100%); }
+
+/* --------------------------------------------------------------------------
+   5.4 Shelf: hairline rule, 24x2 amber index tick, label riding the rule
+   -------------------------------------------------------------------------- */
+.shelf {
+  position: relative; display: flex; align-items: center; gap: 8px; height: 28px;
+  margin: 16px 0 8px; border-top: 1px solid var(--hairline);
+  font: 600 12px/1 var(--font-cond); letter-spacing: .12em; text-transform: uppercase; color: var(--ink);
+  white-space: nowrap; min-width: 0;
+}
+.shelf::before { content: ''; position: absolute; left: 0; top: -1px; width: 24px; height: 2px;
+                 background: var(--hue, var(--amber)); transform-origin: left center; }
+.panel > .shelf:first-child, .shelf.first { margin-top: 0; }
+.shelf-label { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.shelf-tag { margin-left: auto; flex: none; font: 500 10px/12px var(--font-mono); letter-spacing: .08em;
+             text-transform: uppercase; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.shelf-tag.warn { color: var(--warn); }
+.shelf.locked { color: var(--ink-3); }
+.shelf.locked::before { background: var(--ink-3); box-shadow: none; }
+.shelf.locked .shelf-tag { color: var(--warn); }
+.shelf.locked .shelf-tag::before { content: '\25A0'; margin-right: 5px; font-size: 8px; vertical-align: 1px; }
+/* placing state: the selected module's tier rule becomes a 3px hazard strip (sanctioned surface #1) */
+body[data-placing] .tier-head.placing { border-top-color: transparent; }
+body[data-placing] .tier-head.placing::before { display: none; }
+body[data-placing] .tier-head.placing::after { content: ''; position: absolute; left: 0; right: 0; top: -1px; height: 3px; background: var(--hazard); }
+
+.divider { height: 0; border-top: 1px solid var(--hairline); margin: 10px 0; }
+
+/* --------------------------------------------------------------------------
+   5.5 Lozenge buttons
+   -------------------------------------------------------------------------- */
+.btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 28px; padding: 0 12px 0 14px; border-radius: 3px;
+  background: var(--surface-2); border: 1px solid var(--hairline); color: var(--ink);
+  font: 600 12px/1 var(--font-cond); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+  transition: background-color var(--dur-micro) var(--ease), border-color var(--dur-micro) var(--ease), color var(--dur-micro) var(--ease);
+}
+.btn::before { content: ''; position: absolute; left: 4px; top: 4px; bottom: 4px; width: 2px; background: var(--amber); pointer-events: none; }
+.btn:hover:not(:disabled) { border-color: var(--hairline-2); background: var(--surface-3); }
+.btn:active:not(:disabled) { background: var(--surface-3); }
+.btn:active:not(:disabled)::before { background: var(--amber-hi); }
+.btn .ic { width: 14px; height: 14px; }
+
+.btn.primary { background: var(--amber); border-color: var(--amber); color: var(--on-accent); padding: 0 12px; }
+.btn.primary::before { display: none; }
+.btn.primary:hover:not(:disabled) { background: var(--amber-hi); border-color: var(--amber-hi); }
+
+.btn.danger { color: var(--bad); }
+.btn.danger::before { background: var(--bad); }
+.btn.danger:hover:not(:disabled) { background: var(--bad-ghost); border-color: var(--hairline-2); }
+
+.btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
+.btn.ghost::before { background: var(--hairline-2); }
+.btn.ghost:hover:not(:disabled) { color: var(--ink); background: transparent; border-color: transparent; }
+
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.btn.icon { width: 28px; height: 28px; min-height: 28px; padding: 0; }
+.btn.icon::before { display: none; }
+.btn.icon.small { width: 22px; height: 22px; min-height: 22px; }
+.btn.icon .ic { width: 14px; height: 14px; }
+
+/* --------------------------------------------------------------------------
+   5.6 Segmented control (speed, Buy | Sell)
+   -------------------------------------------------------------------------- */
+.seg { display: inline-flex; gap: 1px; background: var(--surface-1); border-radius: 3px; vertical-align: middle; }
+.seg > button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  height: 28px; padding: 0 8px; background: var(--surface-2); border: 1px solid var(--hairline);
+  color: var(--ink-2); font: 500 12px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+  transition: background-color var(--dur-micro) var(--ease), border-color var(--dur-micro) var(--ease), color var(--dur-micro) var(--ease);
+}
+.seg > button:first-child { border-radius: 3px 0 0 3px; }
+.seg > button:last-child { border-radius: 0 3px 3px 0; }
+.seg > button::before { content: ''; width: 4px; height: 4px; border: 1px solid currentColor; flex: none; }
+.seg > button.on { background: var(--ivory); border-color: var(--ivory); color: var(--on-accent); }
+.seg > button.on::before { background: currentColor; }
+.seg > button:hover:not(.on):not(:disabled) { background: var(--surface-3); border-color: var(--hairline-2); color: var(--ink); }
+.seg > button:disabled { opacity: .4; cursor: not-allowed; }
+.seg.small > button { height: 22px; min-width: 44px; padding: 0 6px; font-size: 11px; }
+
+/* --------------------------------------------------------------------------
+   5.7 Chips
+   -------------------------------------------------------------------------- */
+.chip {
+  display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 3px;
+  font: 500 10px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+  background: var(--amber-ghost); color: var(--amber); vertical-align: middle; flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.chip.amber { background: var(--amber-ghost); color: var(--amber); }
+.chip.ice   { background: var(--ice-ghost);   color: var(--ice); }
+.chip.sage  { background: var(--sage-ghost);  color: var(--sage); }
+.chip.rose  { background: var(--rose-ghost);  color: var(--rose); }
+.chip.good  { background: var(--good-ghost);  color: var(--good); }
+.chip.warn  { background: var(--warn-ghost);  color: var(--warn); }
+.chip.bad   { background: var(--bad-ghost);   color: var(--bad); }
+.chip.ink   { background: var(--surface-3);   color: var(--ink-3); }
+.chip.ivory { background: var(--ivory);       color: var(--on-accent); }
+.chip[data-shape]::before { content: ''; flex: none; }
+.chip[data-shape="up"]::before   { width: 0; height: 0; border-left: 3px solid transparent; border-right: 3px solid transparent; border-bottom: 6px solid currentColor; }
+.chip[data-shape="sq"]::before   { width: 5px; height: 5px; background: currentColor; }
+.chip[data-shape="down"]::before { width: 0; height: 0; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 6px solid currentColor; }
+
+/* --------------------------------------------------------------------------
+   5.8 Inputs
+   -------------------------------------------------------------------------- */
+input[type="text"], input[type="number"], .input {
+  height: 32px; width: 100%; padding: 0 10px; border-radius: 3px;
+  background: var(--surface-2); border: 1px solid var(--hairline); color: var(--ink);
+  font: 500 14px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+  transition: border-color var(--dur-micro) var(--ease);
+}
+input:focus { border-color: var(--hairline-2); }
+input::placeholder { color: var(--ink-3); }
+input[type="number"]::-webkit-inner-spin-button { opacity: .5; }
+
+/* --------------------------------------------------------------------------
+   5.2 Sidebar
+   -------------------------------------------------------------------------- */
+#sidebar {
+  position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  background: var(--surface-1); --hue: var(--amber);
+  container-type: inline-size; container-name: sidebar;
+}
+body[data-boot] #sidebar::before { animation: keel-boot 300ms var(--ease) both; transform-origin: top center; }
+
+/* 5.3 Tabs: numbered horizontal row, one sliding amber underline */
+#tabs { position: relative; display: flex; height: 36px; flex: none; padding: 0 4px 0 8px; border-bottom: 1px solid var(--hairline); }
+/* tabs share the row equally beyond their content (COMPANIES is wider than a fifth of the row) */
+.tab {
+  flex: 1 1 auto; display: flex; align-items: center; gap: 5px; min-width: 0; height: 100%; padding: 0 4px;
+  color: var(--ink-2); font: 600 12px/1 var(--font-cond); letter-spacing: .10em; text-transform: uppercase;
+  border-radius: 0; transition: color var(--dur-micro) var(--ease); white-space: nowrap;
+}
+.tab:hover, .tab.active { color: var(--ink); }
+.tab-tick { width: 2px; height: 10px; background: var(--hue, var(--amber)); flex: none; }
+.tab[data-tab="build"], .tab[data-tab="market"] { --hue: var(--amber); }
+.tab[data-tab="station"] { --hue: var(--ice); }
+.tab[data-tab="companies"] { --hue: var(--sage); }
+.tab[data-tab="log"] { --hue: var(--ink-3); }
+.tab-idx { font: 500 10px/1 var(--font-mono); letter-spacing: 0; color: var(--ink-3); flex: none; }
+.tab-label { overflow: hidden; text-overflow: ellipsis; }
+.tab-key { margin-left: auto; font: 500 10px/1 var(--font-mono); letter-spacing: 0; color: var(--ink-3); flex: none; }
+.tab-key:empty { display: none; }
+@container sidebar (max-width: 360px) {
+  #tabs { padding: 0 2px 0 6px; }
+  .tab { gap: 4px; padding: 0 2px; }
+}
+#tab-indicator {
+  position: absolute; left: 0; bottom: -1px; height: 2px; width: 1px; background: var(--amber);
+  transform-origin: left center; transform: translateX(var(--x, 0px)) scaleX(var(--w, 0));
+  transition: transform var(--dur-state) var(--ease); pointer-events: none;
+}
+body[data-boot] .tab { animation: fade-in 200ms var(--ease) both; animation-delay: calc(80ms + var(--i, 0) * 40ms); }
+
+/* Panels */
+.panel { display: none; flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 14px 14px 14px 18px; }
+.panel.active { display: block; animation: panel-in var(--dur-state) var(--ease) both; }
+.panel .empty, .panel .idle { color: var(--ink-2); font: 400 13px/1.45 var(--font-body); margin: 8px 0; }
+@container sidebar (max-width: 360px) {
+  .panel { padding: 12px 12px 12px 16px; }
+}
+
+#sidebar-foot {
+  flex: none; height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 14px 0 18px;
+  border-top: 1px solid var(--hairline); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* 12.3 first-open notes */
+.note {
+  position: relative; display: flex; align-items: flex-start; gap: 8px; margin: 0 0 10px; padding: 8px 6px 8px 14px;
+  background: var(--surface-2); border-radius: 3px; --hue: var(--ink-3);
+  font: 400 12px/1.45 var(--font-body); color: var(--ink-2);
+}
+.note-text { flex: 1; min-width: 0; margin: 0; }
+.note-close { flex: none; width: 22px; height: 22px; min-height: 22px; }
+
+/* --------------------------------------------------------------------------
+   5.10 Condition banner, 12.3 objective strip, 12.4 level banner
+   (overlays inside #canvas-wrap; 94% surface, no backdrop-filter)
+   -------------------------------------------------------------------------- */
+#condition {
+  position: absolute; left: 0; right: 0; top: 0; height: 24px; z-index: 4;
+  display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 14px;
+  background: rgba(15,17,25,.94); color: var(--ink-2);
+  font: 600 12px/1 var(--font-cond); letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity var(--dur-state) var(--ease), visibility 0s linear var(--dur-state);
+}
+body[data-condition] #condition { opacity: 1; visibility: visible; transition: opacity var(--dur-state) var(--ease); }
+#condition::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: currentColor; opacity: .7; }
+#condition::after  { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--hazard); }
+body[data-condition="alert"] #condition { color: var(--bad); }
+body[data-condition="alert"] #condition::before { animation: pulse-border 1.4s ease-in-out infinite; }
+body[data-condition="flare"] #condition { color: var(--warn); }
+body[data-condition="festival"] #condition { color: var(--rose); }
+body[data-condition="festival"] #condition::after { display: none; }
+
+#orders {
+  position: absolute; left: 0; right: 0; top: 0; height: 24px; z-index: 3;
+  display: flex; align-items: center; justify-content: center; gap: 28px; padding: 0 14px;
+  background: rgba(15,17,25,.94); white-space: nowrap; overflow: hidden;
+  transition: opacity var(--dur-state) var(--ease);
+}
+body[data-condition] #orders { top: 24px; }
+#orders.out { opacity: 0; pointer-events: none; }
+.order { display: flex; align-items: center; gap: 8px; color: var(--ink-2);
+         font: 600 11px/1 var(--font-cond); letter-spacing: .10em; text-transform: uppercase; cursor: help; }
+.order i { width: 8px; height: 8px; flex: none; transform: rotate(45deg); border: 1px solid var(--ink-2);
+           transition: background-color var(--dur-micro) var(--ease), border-color var(--dur-micro) var(--ease); }
+.order.done { color: var(--ink); }
+.order.done i { background: var(--good); border-color: var(--good); }
+@media (max-height: 759px) {
+  body[data-condition] #orders { display: none; }
+}
+
+#level-banner {
+  position: absolute; left: 0; right: 0; top: 0; height: 36px; z-index: 2;
+  display: flex; align-items: center; padding: 0 18px; --hue: var(--amber);
+  background: rgba(15,17,25,.94); color: var(--ink);
+  font: 600 24px/1 var(--font-cond); letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; overflow: hidden;
+  opacity: 0; pointer-events: none;
+}
+#level-banner.show { animation: level-banner 2000ms linear both; }
+body[data-condition] #level-banner { top: 24px; }
+#orders:not([hidden]) ~ #level-banner { top: 24px; }
+body[data-condition] #orders:not([hidden]) ~ #level-banner { top: 48px; }
+
+/* --------------------------------------------------------------------------
+   6.1 Build card   grid 4px | 40px | 1fr | auto
+   -------------------------------------------------------------------------- */
+.card {
+  position: relative; display: grid; grid-template-columns: 4px 40px 1fr auto; column-gap: 10px; align-items: center;
+  height: 60px; padding: 0 10px 0 0; margin-bottom: 6px;
+  background: var(--surface-2); border-radius: 3px; cursor: pointer;
+  --hue: var(--amber); --hue-dim: var(--amber-dim);
+  transition: background-color var(--dur-micro) var(--ease);
+}
+.card[data-fam="hub"]     { --hue: var(--ivory); --hue-dim: var(--ivory-dim); }
+.card[data-fam="ops"]     { --hue: var(--ice);   --hue-dim: var(--ice-dim); }
+.card[data-fam="power"]   { --hue: var(--gold);  --hue-dim: var(--gold-dim); }
+.card[data-fam="trade"]   { --hue: var(--amber); --hue-dim: var(--amber-dim); }
+.card[data-fam="life"]    { --hue: var(--sage);  --hue-dim: var(--sage-dim); }
+.card[data-fam="culture"] { --hue: var(--rose);  --hue-dim: var(--rose-dim); }
+
+.card .plate {
+  grid-column: 2; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 3px;
+  background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--hue-dim); color: var(--hue);
+}
+.card .plate .ic { width: 20px; height: 20px; vertical-align: 0; }
+.card .card-main { grid-column: 3; min-width: 0; }
+.card .name {
+  display: flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden;
+  font: 600 15px/18px var(--font-cond); letter-spacing: .01em; color: var(--ink);
+}
+.card .name .tag { font: 500 10px/12px var(--font-mono); letter-spacing: .08em; color: var(--ink-3); flex: none; }
+.card .name .chip { align-self: center; }
+.card .desc { font: 400 12px/16px var(--font-body); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .card-side { grid-column: 4; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.card .cost { font: 600 13px/16px var(--font-mono); color: var(--amber-hi); font-variant-numeric: tabular-nums; }
+.card .pips { display: flex; align-items: center; justify-content: flex-end; gap: 2px; height: 8px; }
+.card .pips .pip { width: 5px; height: 8px; background: var(--ice); flex: none; }
+.card .pips .pip.off { background: transparent; box-shadow: inset 0 0 0 1px var(--ice-dim); }
+.card .pips .pnum { font: 500 10px/8px var(--font-mono); color: var(--ink-3); margin-right: 3px; font-variant-numeric: tabular-nums; }
+.card .need { font: 500 10px/12px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--warn); }
+
+.card:hover { background: var(--surface-3); }
+.card.selected { background: var(--surface-3); box-shadow: inset 0 0 0 2px var(--amber); }
+.card.poor .cost { color: var(--ink-3); }
+.card.locked { opacity: .4; cursor: not-allowed; --hue: var(--ink-3); --hue-dim: var(--ink-3-dim); }
+.card.locked:hover { background: var(--surface-2); }
+.card.static { cursor: default; }
+.card.static:hover { background: var(--surface-2); }
+.card.fade-in { animation: fade-in var(--dur-state) var(--ease) both; animation-delay: calc(var(--i, 0) * 120ms); }
+@container sidebar (max-width: 360px) {
+  .card { height: 56px; }
+}
+
+/* --------------------------------------------------------------------------
+   6.3 Station panel: QoL ring, QoL bars, kv telemetry, selected module
+   -------------------------------------------------------------------------- */
+.qol { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
+.qol-ring {
+  position: relative; width: 44px; height: 44px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  background: conic-gradient(var(--c, var(--sage)) calc(var(--p, 0) * 1%), var(--surface-3) 0);
+}
+.qol-ring::before { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: var(--surface-1); }
+.qol-pct { position: relative; font: 500 13px/1 var(--font-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.qol-meta { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.qol-meta .label { color: var(--ink-2); }
+.qol-meta .chip { align-self: flex-start; }
+
+.qol-row { display: grid; grid-template-columns: 1fr 79px 40px auto; align-items: center; gap: 8px; height: 22px; white-space: nowrap; }
+.qol-lbl { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+           font: 500 11px/14px var(--font-cond); letter-spacing: .10em; text-transform: uppercase; color: var(--ink-2); }
+.qol-lbl::before { font-size: 8px; flex: none; }
+.qol-row.good .qol-lbl::before { content: '\25B2'; color: var(--good); }
+.qol-row.warn .qol-lbl::before { content: '\25A0'; color: var(--warn); }
+.qol-row.bad  .qol-lbl::before { content: '\25BC'; color: var(--bad); }
+.qol-row.good { --c: var(--good); } .qol-row.warn { --c: var(--warn); } .qol-row.bad { --c: var(--bad); }
+.qol-bar { position: relative; width: 79px; height: 8px;
+           background: repeating-linear-gradient(90deg, var(--surface-3) 0 3px, transparent 3px 4px); }
+.qol-bar::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: max(0px, calc(var(--n, 0) * 4px - 1px));
+                   background: repeating-linear-gradient(90deg, var(--c, var(--sage)) 0 3px, transparent 3px 4px); }
+.qol-val { font: 500 13px/18px var(--font-mono); text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 6px 0 10px; font: 400 13px/18px var(--font-body); white-space: nowrap; }
+.kv > span:nth-child(odd) { color: var(--ink-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.kv > span:nth-child(even) { font: 500 13px/18px var(--font-mono); text-align: right; color: var(--ice); font-variant-numeric: tabular-nums;
+                             display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.kv > .amber { color: var(--amber-hi); } .kv > .good { color: var(--good); } .kv > .bad { color: var(--bad); } .kv > .ink { color: var(--ink); }
+.ledger-total { font: 500 13px/18px var(--font-mono); font-variant-numeric: tabular-nums; }
+.ledger-total.good { color: var(--good); } .ledger-total.bad { color: var(--bad); }
+
+.sel-status { margin: 6px 0; font: 400 13px/1.45 var(--font-body); color: var(--ink-2); }
+.sel-status.good { color: var(--good); } .sel-status.bad { color: var(--bad); }
+.sel-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; min-width: 0; }
+.sel-actions .why { font: 400 12px/1.45 var(--font-body); color: var(--ink-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --------------------------------------------------------------------------
+   6.4 Market
+   -------------------------------------------------------------------------- */
+.lead { margin: 0 0 10px; font: 400 12px/1.45 var(--font-body); color: var(--ink-2); }
+.lead .mono { font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
+.chips { display: flex; flex-wrap: nowrap; gap: 6px; margin: 0 0 10px; overflow: hidden; }
+.shelf-note { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font: 500 11px/14px var(--font-cond); letter-spacing: .10em; text-transform: uppercase; color: var(--ink-2); }
+.shelf-note.warn { color: var(--warn); }
+
+table.market { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.market th {
+  height: 24px; padding: 0 4px; text-align: left; border-bottom: 1px solid var(--hairline); white-space: nowrap;
+  font: 500 11px/14px var(--font-cond); letter-spacing: .10em; text-transform: uppercase; color: var(--ink-2);
+}
+.market th.r { text-align: right; }
+.market td {
+  height: 30px; padding: 0 4px; border-bottom: 1px solid var(--hairline); vertical-align: middle; white-space: nowrap;
+  font: 400 13px/1 var(--font-body); color: var(--ink);
+  transition: background-color var(--dur-micro) var(--ease);
+}
+.market tbody tr:nth-child(even) td { background: var(--surface-2); }
+.market tbody tr:hover td, .market tbody tr:focus-within td { background: var(--surface-3); }
+.market th.kind, .market td.kind { width: 8px; padding: 0; }
+.market td.kind i { display: block; width: 2px; height: 16px; margin: 0 auto; background: var(--hue, var(--ink-3)); }
+.market tr.boom td.kind i { width: 3px; background: var(--good); }
+.market tr.glut td.kind i { width: 3px; background: var(--warn); }
+.market th.icon, .market td.icon { width: 22px; padding: 0 2px; }
+.market td.icon { color: var(--hue, var(--ink-2)); line-height: 0; }
+.market td.icon .ic { width: 16px; height: 16px; vertical-align: 0; }
+.market td.gname { overflow: hidden; text-overflow: ellipsis; }
+.market td.num { font: 500 13px/1 var(--font-mono); text-align: right; font-variant-numeric: tabular-nums; }
+.market th.stock, .market td.stock { width: 40px; }
+.market th.price, .market td.price { width: 66px; }
+.market td.gname { font-size: 12px; }
+.market td.pol .seg button { min-width: 36px; padding: 0 5px; }
+.market td.price .tri { margin-right: 4px; }
+.market td.price .tri.flat { color: var(--ink-3); }
+.market td.price .mult { font: 500 10px/1 var(--font-mono); letter-spacing: .08em; color: var(--ink-3); margin-left: 4px; }
+.market tr.boom td.price .mult { color: var(--good); }
+.market tr.glut td.price .mult { color: var(--warn); }
+.market .stk-s { display: none; }
+.market th.pol, .market td.pol { width: 82px; padding: 0 3px; }
+.market th.act, .market td.act { width: 26px; padding: 0 2px; text-align: right; }
+.market .dump { opacity: 0; transition: opacity var(--dur-micro) var(--ease); vertical-align: middle; }
+.market tr:hover .dump, .market tr:focus-within .dump, .market .dump:focus-visible { opacity: 1; }
+.market .dump:disabled { opacity: 0; }
+.market tr:hover .dump:disabled, .market tr:focus-within .dump:disabled { opacity: .4; }
+@container sidebar (max-width: 360px) {
+  .market th.stock, .market td.stock { display: none; }
+  .market th.price, .market td.price { width: 70px; }
+  /* stacked stock (12px) over one 14px line of trend triangle + price (+ multiplier): 26px inside the 30px cell,
+     so 12 rows still fit at 1280x720 (Gate 1) */
+  .market td.price { line-height: 14px; }
+  .market .stk-s { display: block; font: 500 10px/12px var(--font-mono); color: var(--ink-2); text-align: right; }
+  .market .prc { display: inline; line-height: 14px; }
+  .market td.price .tri { vertical-align: 0; }
+}
+
+/* --------------------------------------------------------------------------
+   6.5 Company card
+   -------------------------------------------------------------------------- */
+.co {
+  position: relative; --hue: var(--amber); background: var(--surface-2); border-radius: 3px;
+  padding: 10px 12px 10px 16px; margin-bottom: 8px; min-width: 0;
+}
+.co.locked { opacity: .5; }
+.co-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.co-head .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                 font: 600 15px/18px var(--font-cond); letter-spacing: .01em; color: var(--ink); }
+.co-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 0; white-space: nowrap; }
+.co-chips:empty { display: none; }
+.co .blurb { margin: 6px 0 4px; font: 400 12px/1.45 var(--font-body); color: var(--ink-2); }
+.co .home { margin: 6px 0 4px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.goods-row { display: flex; align-items: center; gap: 6px; height: 20px; white-space: nowrap; }
+.goods-row .lbl { width: 46px; flex: none; font: 500 11px/14px var(--font-cond); letter-spacing: .10em; text-transform: uppercase; color: var(--ink-3); }
+.goods-row .ic { width: 14px; height: 14px; vertical-align: 0; }
+.trust { display: flex; align-items: center; gap: 8px; margin: 8px 0 8px; white-space: nowrap; }
+.trust-bar { display: flex; gap: 1px; flex: none; }
+.trust-bar i { width: 6px; height: 10px; background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--hairline); }
+.trust-bar i.on { background: var(--hue); box-shadow: none; }
+.trust-val { margin-left: auto; font: 500 13px/18px var(--font-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.co-foot { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.co-foot .tag { font: 500 10px/12px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.co-foot .btn { margin-left: auto; }
+.co-foot .chip { margin-left: auto; }
+@container sidebar (max-width: 360px) {
+  .co .blurb { display: none; }
+}
+
+/* --------------------------------------------------------------------------
+   6.6 Log lines
+   -------------------------------------------------------------------------- */
+#log-list { font: 500 12px/16px var(--font-mono); font-variant-numeric: tabular-nums; }
+.line { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--hairline); color: var(--ink-2); }
+.line .day { flex: none; width: 4ch; color: var(--amber-dim); }
+.line .cat { flex: none; width: 3ch; color: var(--ink-3); }
+.line .msg { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.line.good .msg, .line.warn .msg, .line.bad .msg { color: var(--ink); }
+.line.good .msg::before { content: '\25B2'; color: var(--good); margin-right: 6px; font-size: 9px; }
+.line.warn .msg::before { content: '\25A0'; color: var(--warn); margin-right: 6px; font-size: 9px; }
+.line.bad  .msg::before { content: '\25BC'; color: var(--bad);  margin-right: 6px; font-size: 9px; }
+.line.newday { border-top: 1px solid var(--hairline-2); }
+.line.new { animation: fade-in var(--dur-micro) var(--ease) both; }
+
+/* --------------------------------------------------------------------------
+   6.7 Tooltip
+   -------------------------------------------------------------------------- */
+#tooltip {
+  position: absolute; left: 0; top: 0; z-index: 6; max-width: 280px; padding: 8px 10px 8px 14px;
+  background: rgba(15,17,25,.94); border: 1px solid var(--hairline); border-radius: 3px;
+  pointer-events: none; opacity: 0; visibility: hidden; --hue: var(--ivory);
+  font: 400 12px/1.45 var(--font-body); color: var(--ink-2);
+}
+#tooltip.show { opacity: 1; visibility: visible; transition: opacity 100ms var(--ease) 80ms; }
+.tt-title { font: 600 13px/16px var(--font-cond); letter-spacing: .01em; color: var(--hue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tt-body { margin: 2px 0 0; color: var(--ink-2); }
+.tt-body.warn { color: var(--warn); }
+.tt-body.good { color: var(--good); }
+.tt-row { display: flex; align-items: center; gap: 6px; margin-top: 3px; white-space: nowrap; }
+.tt-row .lbl { font: 500 10px/12px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); width: 44px; flex: none; }
+.tt-row .ic { width: 14px; height: 14px; vertical-align: 0; }
+.tt-row .num { font: 500 12px/14px var(--font-mono); color: var(--ink); }
+.tt-foot { margin-top: 5px; font: 500 10px/12px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.tt-foot.bad, .tt-foot .bad { color: var(--bad); }
+.tt-more { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--hairline); font: 500 10px/14px var(--font-mono); color: var(--ink-3); opacity: 0; }
+#tooltip.more .tt-more { opacity: 1; transition: opacity var(--dur-micro) var(--ease); }
+
+/* --------------------------------------------------------------------------
+   6.8 Modal (incoming transmission)
+   -------------------------------------------------------------------------- */
+#modal { position: fixed; inset: 0; z-index: 50; display: none; background: rgba(4,5,10,.75); }
+#modal.open { display: block; }
+#modal .box {
+  position: absolute; left: var(--mx, 50%); top: var(--my, 50%); transform: translate(-50%, -50%);
+  width: 460px; max-width: 92vw; background: var(--surface-1); box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  --hue: var(--amber); overflow: hidden;
+}
+#modal.open .box { animation: modal-in var(--dur-state) var(--ease) both; }
+#modal .box[data-kind="confirm"], #modal .box[data-kind="lend"] { --hue: var(--ice); }
+#modal .box[data-kind="alert"] { --hue: var(--bad); }
+#modal .box::after { content: ''; display: none; position: absolute; left: 0; right: 0; top: 28px; height: 3px; background: var(--hazard); }
+#modal .box[data-kind="alert"]::after { display: block; }
+.modal-head { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px 0 16px; background: var(--surface-2); color: var(--hue); }
+.modal-head .ic-slot, .modal-head .ic { color: var(--hue); width: 14px; height: 14px; }
+#modal-tag { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modal-body { padding: 16px 20px 0 20px; }
+#modal-title { margin: 0 0 8px; font: 600 18px/22px var(--font-cond); letter-spacing: .01em; color: var(--ink); }
+#modal-text { margin: 0; font: 400 14px/1.55 var(--font-body); color: var(--ink-2); user-select: text; }
+#modal-text b, #modal-text strong { font-weight: 500; color: var(--ink); }
+#modal-text .num { color: var(--ink); }
+#modal-extra { margin-top: 12px; }
+#modal-extra:empty { display: none; }
+#modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 20px 16px; }
+#modal-actions .btn { font: 500 13px/1 var(--font-body); letter-spacing: 0; text-transform: none; padding: 0 14px; }
+#modal-actions .btn.primary { font-weight: 500; }
+
+/* --------------------------------------------------------------------------
+   6.10 Toasts
+   -------------------------------------------------------------------------- */
+#toasts { position: absolute; left: 14px; bottom: 14px; z-index: 5; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.toast {
+  position: relative; display: flex; align-items: center; gap: 8px; max-width: 320px; padding: 6px 10px 6px 14px;
+  background: rgba(15,17,25,.94); border-radius: 3px; --hue: var(--amber);
+  font: 400 12px/16px var(--font-body); color: var(--ink);
+  animation: toast-life 3980ms linear both;
+}
+.toast.good { --hue: var(--good); }
+.toast.bad  { --hue: var(--bad); }
+.toast.warn { --hue: var(--warn); }
+.toast.gold { --hue: var(--amber-hi); }
+.toast::after { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 4px; background: var(--surface-1); z-index: 2;
+                transform: scaleY(0); transform-origin: top center; animation: toast-drain 3500ms linear 180ms both; }
+.toast .chip { flex: none; }
+.toast-msg { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --------------------------------------------------------------------------
+   6.11 Status bar
+   -------------------------------------------------------------------------- */
+#statusbar { display: flex; align-items: center; gap: 16px; padding: 0 14px; min-width: 0;
+             background: var(--surface-1); border-top: 1px solid var(--hairline); white-space: nowrap; }
+#hint { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 400 12px/1 var(--font-body); color: var(--ink-2); }
+#queue-info { display: flex; align-items: center; gap: 8px; flex: none; font: 500 11px/1 var(--font-mono); color: var(--ink-2);
+              font-variant-numeric: tabular-nums; text-transform: uppercase; letter-spacing: .04em; }
+#perf-tag { color: var(--ink-3); flex: none; }
+
+/* --------------------------------------------------------------------------
+   12.1 Title screen (full-screen over the live #bg canvas)
+   While the title is up the HUD chrome is hidden so only the canvases show.
+   -------------------------------------------------------------------------- */
+body[data-screen="title"] { background: var(--void); }
+body[data-screen="title"] #topbar, body[data-screen="title"] #sidebar, body[data-screen="title"] #statusbar,
+body[data-screen="title"] #condition, body[data-screen="title"] #orders, body[data-screen="title"] #toasts,
+body[data-screen="title"] #tooltip, body[data-screen="title"] #level-banner { visibility: hidden; }
+body[data-screen="title"] #app { background: var(--void); }
+/* while the title is up, the live background canvas fills the whole viewport (Render re-bakes on the resize) */
+body[data-screen="title"] #canvas-wrap { position: fixed; inset: 0; z-index: 1; background: var(--void); }
+
+#title {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  background: transparent; transition: opacity var(--dur-state) var(--ease-exit);
+}
+#title.out { opacity: 0; pointer-events: none; }
+/* NEW from a running game: the live station stays visible but recedes behind the form */
+body[data-title-mode="new"] #title { background: rgba(4, 5, 10, .72); }
+.title-col { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 420px; max-width: 92vw; }
+.wordmark.hero { font-size: 56px; line-height: 1; margin-right: -.30em; }
+.title-sub { color: var(--amber); }
+.commission { position: relative; width: 100%; background: var(--surface-1); padding: 20px 24px 20px 28px; --hue: var(--amber); margin-top: 6px; }
+
+.card-button {
+  position: relative; display: grid; grid-template-columns: 1fr 120px; gap: 12px; align-items: center; width: 100%;
+  padding: 12px 14px; text-align: left; border-radius: 3px;
+  background: var(--surface-2); border: 1px solid var(--hairline); color: var(--ink);
+  transition: background-color var(--dur-micro) var(--ease), border-color var(--dur-micro) var(--ease), color var(--dur-micro) var(--ease);
+}
+.card-button:hover { background: var(--amber); border-color: var(--amber); color: var(--on-accent); }
+.resume-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.resume-head { display: flex; align-items: center; gap: 8px; color: inherit; }
+.resume-head .ic-slot, .resume-head .ic { width: 16px; height: 16px; }
+.resume-meta { font: 500 12px/17px var(--font-mono); font-variant-numeric: tabular-nums; color: inherit; white-space: normal; overflow: hidden; }
+#title-thumb { display: block; width: 120px; height: 72px; background: var(--void); border-radius: 3px; }
+
+.field { display: block; margin-bottom: 6px; color: var(--ink-2); }
+.name-row { display: flex; align-items: center; gap: 8px; }
+.name-row input { flex: 1; min-width: 0; font-size: 16px; }
+#title-registry { margin: 10px 0 14px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.title-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.title-confirm { margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.title-confirm .confirm-text { color: var(--warn); margin: 0 0 8px; }
+.title-confirm .confirm-text::before { content: '\25A0'; font-size: 8px; margin-right: 6px; vertical-align: 1px; }
+
+/* --------------------------------------------------------------------------
+   11.1 Boot (body[data-boot], once per session, 600ms total)
+   -------------------------------------------------------------------------- */
+body[data-boot] .shelf::before { animation: tick-boot 200ms var(--ease) both; animation-delay: calc(120ms + var(--i, 0) * 40ms); }
+body[data-boot] .stat, body[data-boot] .brand { animation: fade-in 200ms var(--ease) both; animation-delay: calc(60ms + var(--i, 0) * 40ms); }
+body[data-boot] .shelf-label, body[data-boot] .shelf-tag { animation: fade-in 200ms var(--ease) both; animation-delay: calc(160ms + var(--i, 0) * 40ms); }
+
+/* --------------------------------------------------------------------------
+   11. Keyframes (only transform, opacity, clip-path, background-color,
+   border-color and color are ever animated)
+   -------------------------------------------------------------------------- */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes panel-in {
+  0%   { clip-path: inset(0 0 0 100%); opacity: 1; }
+  40%  { opacity: .6; }
+  100% { clip-path: inset(0 0 0 0); opacity: 1; }
+}
+@keyframes modal-in {
+  from { opacity: 0; clip-path: inset(0 0 100% 0); }
+  to   { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+@keyframes toast-life {
+  0%     { opacity: 0; transform: translateX(-8px); animation-timing-function: var(--ease); }
+  4.52%  { opacity: 1; transform: translateX(0); }
+  92.46% { opacity: 1; transform: translateX(0); animation-timing-function: var(--ease-exit); }
+  100%   { opacity: 0; transform: translateX(0); }
+}
+@keyframes toast-drain { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes level-banner {
+  0%   { opacity: 1; clip-path: inset(0 100% 0 0); animation-timing-function: var(--ease); }
+  12%  { opacity: 1; clip-path: inset(0 0 0 0); }
+  85%  { opacity: 1; clip-path: inset(0 0 0 0); animation-timing-function: var(--ease-exit); }
+  100% { opacity: 0; clip-path: inset(0 0 0 0); }
+}
+@keyframes pulse-border { 0%, 100% { opacity: .55; } 50% { opacity: .8; } }
+@keyframes keel-boot { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes tick-boot { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes flash-good { 0% { color: var(--good); } 70% { color: var(--good); } 100% { color: inherit; } }
+@keyframes flash-bad  { 0% { color: var(--bad); }  70% { color: var(--bad); }  100% { color: inherit; } }
+
+/* --------------------------------------------------------------------------
+   11.2 Reduced motion: every duration token zeroed; toasts still fade and the
+   level banner still shows (its wipe collapses to a cut).
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-micro: 0ms; --dur-state: 0ms; --dur-number: 0ms; --dur-long: 0ms; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; transition-delay: 0s !important; }
+  .toast { animation-duration: 3980ms !important; }
+  .toast::after { animation-duration: 3500ms !important; }
+  #level-banner.show { animation-duration: 2000ms !important; }
+  #condition::before { animation: none !important; opacity: .7; }
+}
+body[data-motion="reduced"] { --dur-micro: 0ms; --dur-state: 0ms; --dur-number: 0ms; --dur-long: 0ms; }
+body[data-motion="reduced"] *, body[data-motion="reduced"] *::before, body[data-motion="reduced"] *::after {
+  animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; transition-delay: 0s !important;
+}
+body[data-motion="reduced"] .toast { animation-duration: 3980ms !important; }
+body[data-motion="reduced"] .toast::after { animation-duration: 3500ms !important; }
+body[data-motion="reduced"] #level-banner.show { animation-duration: 2000ms !important; }
+body[data-motion="reduced"] #condition::before { animation: none !important; opacity: .7; }

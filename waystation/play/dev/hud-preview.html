@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waystation HUD preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Barlow:wght@400;500&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  /* ---- preview-only chrome: the real page never scrolls; this one shows the frame, then a component sheet ---- */
+  html, body { height: auto; overflow: auto; }
+  body { overflow-x: hidden; }
+  #app { height: 100vh; }
+  .sheet { padding: 28px 24px 60px; background: var(--bg); border-top: 1px solid var(--hairline); }
+  .sheet h2 { font: 600 12px/1 var(--font-cond); letter-spacing: .12em; text-transform: uppercase; color: var(--amber); margin: 0 0 14px; }
+  .sheet-row { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 36px; }
+  .col { position: relative; width: 388px; background: var(--surface-1); container-type: inline-size; container-name: sidebar; --hue: var(--amber); }
+  .col.narrow { width: 346px; }
+  .col::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 4px; background: var(--amber);
+                 clip-path: polygon(0 4px, 100% 0, 100% calc(100% - 4px), 0 100%); pointer-events: none; }
+  .col .panel { display: block; animation: none; max-height: none; overflow: visible; }
+  .col-tag { font: 500 10px/12px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px; }
+  .modal-demo { position: relative; width: 560px; height: 330px; }
+  .modal-demo #modal { position: absolute; display: block; background: rgba(4,5,10,.75); }
+  .tt-demo { position: relative; width: 300px; height: 150px; background: var(--void); }
+  .tt-demo #tooltip { left: 14px; top: 14px; }
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sw { width: 92px; padding: 8px; background: var(--surface-2); border-radius: 3px; font: 500 10px/12px var(--font-mono); color: var(--ink-2); letter-spacing: .04em; }
+  .sw i { display: block; height: 28px; border-radius: 3px; margin-bottom: 6px; }
+  .btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body data-level="2" data-condition="flare" data-placing>
+<div id="app">
+
+  <header id="topbar">
+    <div class="brand">
+      <div class="brand-row">
+        <span class="wordmark">Waystation</span>
+        <span id="station-name" class="label">Lantern Reach</span>
+      </div>
+      <div class="registry-line micro"><span id="registry">WS-1910</span><span class="sep">&middot;</span><span>Day <span id="s-day">041</span></span></div>
+    </div>
+
+    <div class="stat credits"><span class="lbl">Credits</span><span class="val num-hero" id="s-credits">12,450</span></div>
+    <div class="stat income"><span class="lbl">Income</span><span class="val"><i id="s-income-delta" class="tri up c-good"></i><span class="num" id="s-income">+380</span></span></div>
+    <div class="stat power"><span class="lbl">Power</span>
+      <span class="val"><span class="num c-warn" id="s-power">&#9632; 14 / 20</span><span id="power-pips"><i class="pip on"></i><i class="pip on"></i><i class="pip on"></i><i class="pip on"></i><i class="pip spare"></i></span><span id="power-chip" class="chip warn" data-shape="sq">Flare</span></span></div>
+    <div class="stat visitors" title="Visitors / beds"><span class="lbl">Visitors</span><span class="val num c-sage" id="s-visitors">22 / 26</span></div>
+    <div class="stat residents" title="Residents / homes"><span class="lbl">Residents</span><span class="val num c-sage" id="s-residents">15 / 30</span></div>
+    <div class="stat rep" title="Reputation 2.35 / 5"><span class="lbl">Reputation</span>
+      <span class="val" id="stars"><span class="pip full"><i></i></span><span class="pip full"><i></i></span><span class="pip"><i style="height:35%"></i></span><span class="pip"><i></i></span><span class="pip"><i></i></span></span></div>
+    <div class="stat level"><span id="s-level" class="chip amber level">L2 &middot; Trading Hub</span></div>
+
+    <div class="rail-right">
+      <div id="speed" class="seg" role="group" aria-label="Game speed">
+        <button type="button" data-speed="0" title="Pause (Space)" aria-label="Pause"><i class="pause-ic"></i></button>
+        <button type="button" data-speed="1" class="on" title="Normal speed (1)">1&times;</button>
+        <button type="button" data-speed="2" title="Double speed (2)">2&times;</button>
+        <button type="button" data-speed="4" title="Quadruple speed (4)">4&times;</button>
+      </div>
+      <button type="button" class="btn" id="btn-save" title="Save"><span class="ic-slot" data-icon="save"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg></span><span class="btn-label">Save</span></button>
+      <button type="button" class="btn danger" id="btn-new" title="New station"><span class="ic-slot" data-icon="new"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><span class="btn-label">New</span></button>
+    </div>
+  </header>
+
+  <div id="main">
+    <div id="canvas-wrap">
+      <canvas id="bg"></canvas><canvas id="station"></canvas>
+
+      <div id="condition" role="status">Condition &middot; Solar flare &middot; Solar arrays dark 2 days</div>
+
+      <div id="orders">
+        <div class="order done" data-order="dock" title="Ships need a berth. One bay, one ship at a time."><i></i><span>Build a Docking Bay</span></div>
+        <div class="order done" data-order="solar" title="Every module draws power. Arrays are cheap; flares dim them."><i></i><span>Build a Solar Array</span></div>
+        <div class="order" data-order="serve" title="Served ships pay fees and raise company trust."><i></i><span>Serve 3 ships</span></div>
+      </div>
+
+      <div id="level-banner" class="show" style="animation-play-state:paused;animation-delay:-500ms">Threshold &middot; Now a Trading Hub</div>
+
+      <div id="tooltip" class="show more" style="left:420px;top:300px;--hue:var(--ice)">
+        <div class="tt-title">Kestrel Lines &middot; Courier</div>
+        <div class="tt-body">Capt. Okafor &middot; crew 4</div>
+        <div class="tt-body">Docked &middot; leaves in 0.8 d</div>
+        <div class="tt-row"><span class="lbl">Hold</span><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--amber)" stroke-width="1.5"><rect x="4" y="6" width="16" height="12"/></svg><span class="num">30</span><span class="c-ink2">Alloy Plates</span></div>
+        <div class="tt-row"><span class="lbl">Wants</span><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--sage)" stroke-width="1.5"><circle cx="12" cy="12" r="6"/></svg><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#8C949F" stroke-width="1.5"><path d="M4 18 12 6l8 12z"/></svg></div>
+        <div class="tt-foot">Kestrel &middot; Courier &middot; Hold 30/30</div>
+        <div class="tt-more">D041 sold 30 alloy plates for 1,240<br>D041 bought 12 grain for 310</div>
+      </div>
+
+      <div id="toasts">
+        <div class="toast good" style="animation-play-state:paused;animation-delay:-1000ms"><span class="chip good">Trade</span><span class="toast-msg">Kestrel courier paid 280</span></div>
+        <div class="toast warn" style="animation-play-state:paused;animation-delay:-2000ms"><span class="chip warn">Build</span><span class="toast-msg">Need 300 more credits for a Docking Bay</span></div>
+        <div class="toast bad" style="animation-play-state:paused;animation-delay:-400ms"><span class="chip bad">Alert</span><span class="toast-msg">Pirates raided the warehouse: 40 ore lost</span></div>
+        <div class="toast" style="animation-play-state:paused;animation-delay:-3000ms"><span class="chip">Save</span><span class="toast-msg">Game saved</span></div>
+      </div>
+    </div>
+
+    <aside id="sidebar">
+      <nav id="tabs" role="tablist">
+        <button type="button" class="tab active" data-tab="build" role="tab" aria-selected="true"><i class="tab-tick"></i><span class="tab-idx">01</span><span class="tab-label">Build</span><span class="tab-key">B</span></button>
+        <button type="button" class="tab" data-tab="station" role="tab"><i class="tab-tick"></i><span class="tab-idx">02</span><span class="tab-label">Station</span><span class="tab-key"></span></button>
+        <button type="button" class="tab" data-tab="market" role="tab"><i class="tab-tick"></i><span class="tab-idx">03</span><span class="tab-label">Market</span><span class="tab-key">M</span></button>
+        <button type="button" class="tab" data-tab="companies" role="tab"><i class="tab-tick"></i><span class="tab-idx">04</span><span class="tab-label">Companies</span><span class="tab-key"></span></button>
+        <button type="button" class="tab" data-tab="log" role="tab"><i class="tab-tick"></i><span class="tab-idx">05</span><span class="tab-label">Log</span><span class="tab-key"></span></button>
+        <i id="tab-indicator"></i>
+      </nav>
+
+      <section class="panel active" id="panel-build">
+        <h3 class="shelf tier-head placing" style="--i:0"><span class="shelf-label">Tier 1 &middot; Way Station</span><span class="shelf-tag">6/6 built</span></h3>
+
+        <div class="note"><p class="note-text">Tiers unlock with module count and reputation. Costs are in credits; pips are power.</p>
+          <button type="button" class="btn icon ghost note-close" title="Dismiss"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+
+        <!-- normal, affordable, built twice -->
+        <div class="card" data-mod="dock" data-fam="ops" title="One more berth. Ships queue in orbit when every berth is taken.">
+          <div class="plate"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M5 5v14h6M19 5v14h-6"/><circle cx="12" cy="12" r="2"/></svg></div>
+          <div class="card-main"><div class="name">Docking Bay <span class="tag">&times;2</span></div><div class="desc">One more berth. Ships queue in orbit when every berth is taken.</div></div>
+          <div class="card-side"><div class="cost">800</div><div class="pips"><i class="pip off"></i><i class="pip off"></i></div></div>
+        </div>
+
+        <!-- selected / placing -->
+        <div class="card selected" data-mod="warehouse" data-fam="trade">
+          <div class="plate"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg></div>
+          <div class="card-main"><div class="name">Cargo Warehouse <span class="chip ivory">Placing</span></div><div class="desc">Click a bracketed cell. Right-click or Esc to stop.</div></div>
+          <div class="card-side"><div class="cost">600</div><div class="pips"><i class="pip off"></i></div></div>
+        </div>
+
+        <!-- power producer: six filled pips -->
+        <div class="card" data-mod="solar" data-fam="power" title="Cheap power. Goes dark during a solar flare.">
+          <div class="plate"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="7" height="12"/><rect x="14" y="6" width="7" height="12"/><path d="M12 6v12"/></svg></div>
+          <div class="card-main"><div class="name">Solar Array <span class="tag">&times;1</span></div><div class="desc">Cheap power. Goes dark during a solar flare.</div></div>
+          <div class="card-side"><div class="cost">500</div><div class="pips"><i class="pip"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i></div></div>
+        </div>
+
+        <!-- unaffordable -->
+        <div class="card poor" data-mod="fuel" data-fam="trade" title="Sells fuel to every docked ship.">
+          <div class="plate"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="4" width="5" height="16" rx="2"/><rect x="14" y="4" width="5" height="16" rx="2"/></svg></div>
+          <div class="card-main"><div class="name">Fuel Depot</div><div class="desc">Sells fuel to every docked ship. Fees scale with ship size.</div></div>
+          <div class="card-side"><div class="cost">900</div><div class="pips"><i class="pip off"></i></div><div class="need">Need 300</div></div>
+        </div>
+
+        <!-- big consumer: number + capped pips -->
+        <div class="card" data-mod="quarters" data-fam="life" title="Beds for visiting crews.">
+          <div class="plate"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 10h3M13 10h3M8 14h3M13 14h3"/></svg></div>
+          <div class="card-main"><div class="name">Crew Quarters <span class="tag">&times;1</span></div><div class="desc">Beds for visiting crews. Full beds mean happier, longer-staying ships.</div></div>
+          <div class="card-side"><div class="cost">700</div><div class="pips"><span class="pnum">-8</span><i class="pip off"></i><i class="pip off"></i><i class="pip off"></i><i class="pip off"></i><i class="pip off"></i><i class="pip off"></i></div></div>
+        </div>
+
+        <h3 class="shelf tier-head locked" style="--i:1"><span class="shelf-label">Tier 2 &middot; Trading Hub</span><span class="shelf-tag">Locked &middot; 6 modules &middot; 1.0 rep</span></h3>
+
+        <!-- locked -->
+        <div class="card locked" data-mod="comms" data-fam="ops" title="Draws more ships from farther worlds.">
+          <div class="plate"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="10" r="5"/><path d="M12 15v5M8 20h8"/></svg></div>
+          <div class="card-main"><div class="name">Comms Relay</div><div class="desc">Draws more ships from farther worlds.</div></div>
+          <div class="card-side"><div class="cost">2,200</div><div class="pips"><i class="pip off"></i><i class="pip off"></i></div></div>
+        </div>
+        <div class="card locked" data-mod="rec" data-fam="culture" title="Entertainment for crews and residents.">
+          <div class="plate"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1"/></svg></div>
+          <div class="card-main"><div class="name">Rec Deck</div><div class="desc">Entertainment for crews and residents.</div></div>
+          <div class="card-side"><div class="cost">1,200</div><div class="pips"><i class="pip off"></i><i class="pip off"></i><i class="pip off"></i></div></div>
+        </div>
+      </section>
+
+      <footer id="sidebar-foot" class="micro">WS-1910 &middot; Day 041 &middot; Lantern Reach</footer>
+    </aside>
+  </div>
+
+  <footer id="statusbar">
+    <span id="hint">Placing Cargo Warehouse: click a bracketed cell. Right-click or Esc to stop.</span>
+    <span id="queue-info">Ships 3 docked &middot; 1 hold &middot; Berths 4 <span class="chip warn" data-shape="sq">Diverting &middot; Build docks</span></span>
+    <span id="perf-tag" class="micro">4.1 ms &middot; T0</span>
+  </footer>
+</div>
+
+<!-- ======================================================================
+     COMPONENT SHEET (preview only)
+     ====================================================================== -->
+<div class="sheet">
+
+  <h2>Station panel &middot; Market (388px and 346px)</h2>
+  <div class="sheet-row">
+
+    <div class="col">
+      <div class="panel">
+        <h3 class="shelf"><span class="shelf-label">Lantern Reach</span><span class="shelf-tag">L2 &middot; Day 041</span></h3>
+        <div class="note"><p class="note-text">Quality of life above 55% brings residents when homes are free.</p>
+          <button type="button" class="btn icon ghost note-close" title="Dismiss"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+
+        <div class="qol">
+          <div class="qol-ring" style="--p:68;--c:var(--warn)"><span class="qol-pct">68%</span></div>
+          <div class="qol-meta"><span class="label">Quality of life</span><span class="chip warn" data-shape="sq">Low</span></div>
+        </div>
+        <div class="qol-row good"><span class="qol-lbl">Food</span><span class="qol-bar" style="--n:17"></span><span class="qol-val">85%</span><span class="chip good" data-shape="up">OK</span></div>
+        <div class="qol-row warn"><span class="qol-lbl">Beds for crews</span><span class="qol-bar" style="--n:12"></span><span class="qol-val">60%</span><span class="chip warn" data-shape="sq">Low</span></div>
+        <div class="qol-row bad"><span class="qol-lbl">Entertainment</span><span class="qol-bar" style="--n:5"></span><span class="qol-val">25%</span><span class="chip bad" data-shape="down">Bad</span></div>
+        <div class="qol-row good"><span class="qol-lbl">Health care</span><span class="qol-bar" style="--n:20"></span><span class="qol-val">100%</span><span class="chip good" data-shape="up">OK</span></div>
+
+        <h3 class="shelf"><span class="shelf-label">Telemetry</span><span class="shelf-tag">Storage 410 / 650</span></h3>
+        <div class="kv">
+          <span>Modules</span><span class="num">9</span>
+          <span>Berths</span><span class="num">3</span>
+          <span>Cargo storage</span><span class="num">410 / 650</span>
+          <span>Food served / day</span><span class="num">24</span>
+          <span>Visitor beds</span><span class="num">26</span>
+          <span>Homes</span><span class="num">15 / 30</span>
+          <span>Power</span><span class="num">14 used / 20 made <span class="chip warn" data-shape="sq">Flare</span></span>
+          <span>Ships served</span><span class="num">41</span>
+          <span>Cargo traded</span><span class="num">3,120 units</span>
+          <span>Lifetime earnings</span><span class="num amber">48,900</span>
+        </div>
+
+        <h3 class="shelf"><span class="shelf-label">Yesterday's ledger</span><span class="shelf-tag ledger-total good">+380</span></h3>
+        <div class="kv">
+          <span>Docking fees</span><span class="num good">+240</span>
+          <span>Trade margin</span><span class="num good">+310</span>
+          <span>Rent</span><span class="num good">+90</span>
+          <span>Upkeep</span><span class="num bad">-260</span>
+        </div>
+
+        <h3 class="shelf"><span class="shelf-label">Selected module</span><span class="shelf-tag">Grid 4:07</span></h3>
+        <div class="card static" data-mod="dock" data-fam="ops">
+          <div class="plate"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M5 5v14h6M19 5v14h-6"/><circle cx="12" cy="12" r="2"/></svg></div>
+          <div class="card-main"><div class="name">Docking Bay <span class="tag">Berth 03</span></div><div class="desc">One more berth. Ships queue in orbit when every berth is taken.</div></div>
+          <div class="card-side"><div class="cost">800</div><div class="pips"><i class="pip off"></i><i class="pip off"></i></div></div>
+        </div>
+        <p class="sel-status good"><i class="tri up"></i> Berth clear</p>
+        <p class="sel-status">Docked: Capt. Okafor, Kestrel Lines &middot; leaves in 0.8 d</p>
+        <div class="sel-actions"><button type="button" class="btn danger" disabled title="A ship is docked here">Scrap for 400</button><span class="why">A ship is docked here.</span></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="panel">
+        <h3 class="shelf"><span class="shelf-label">Trade exchange</span><span class="shelf-tag">Storage 410 / 650</span></h3>
+        <p class="lead">Ships sell cargo into your warehouses at <span class="mono">62%</span> of market price and buy what their home world needs at <span class="mono">108%</span>.</p>
+        <div class="chips"><span class="chip good" data-shape="up">Boom &middot; Grain &times;3 &rarr; D44</span><span class="chip warn" data-shape="sq">Glut &middot; Ore &times;&frac12; &rarr; D44</span></div>
+        <table class="market">
+          <thead><tr><th class="kind"></th><th class="icon"></th><th>Good</th><th class="r stock">Stock</th><th class="r price">Price</th><th class="pol">Policy</th><th class="act"></th></tr></thead>
+          <tbody>
+            <tr title="From: Veldt Prime&#10;Wanted by: Kessler Belt" style="--hue:#8C949F"><td class="kind"><i></i></td><td class="icon"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 18 12 6l8 12z"/></svg></td><td class="gname">Raw Ore</td><td class="stock num">180</td><td class="price num"><i class="tri down c-bad"></i><span class="prc">6.2</span><span class="stk-s">180</span></td>
+              <td class="pol"><div class="seg small"><button type="button" data-g="ore" data-k="buy" class="on">Buy</button><button type="button" data-g="ore" data-k="sell">Sell</button></div></td>
+              <td class="act"><button type="button" class="btn icon small danger dump" title="Sell all to a passing broker at half price"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/></svg></button></td></tr>
+            <tr class="boom" title="From: Meridian&#10;Wanted by: Halcyon" style="--hue:var(--sage)"><td class="kind"><i></i></td><td class="icon"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="6"/></svg></td><td class="gname">Grain</td><td class="stock num">42</td><td class="price num"><i class="tri up c-good"></i><span class="prc">27.0</span><span class="mult">&times;3</span><span class="stk-s">42</span></td>
+              <td class="pol"><div class="seg small"><button type="button" data-g="grain" data-k="buy" class="on">Buy</button><button type="button" data-g="grain" data-k="sell" class="on">Sell</button></div></td>
+              <td class="act"><button type="button" class="btn icon small danger dump" title="Sell all to a passing broker at half price"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/></svg></button></td></tr>
+            <tr title="From: Thessaly&#10;Wanted by: nobody nearby" style="--hue:var(--rose)"><td class="kind"><i></i></td><td class="icon"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 16c2-6 12-6 14 0"/><circle cx="9" cy="10" r="1"/></svg></td><td class="gname">Xenofauna</td><td class="stock num">0</td><td class="price num"><i class="tri flat"></i><span class="prc">48.0</span><span class="stk-s">0</span></td>
+              <td class="pol"><div class="seg small"><button type="button" data-g="xeno" data-k="buy">Buy</button><button type="button" data-g="xeno" data-k="sell">Sell</button></div></td>
+              <td class="act"><button type="button" class="btn icon small danger dump" disabled title="Sell all to a passing broker at half price"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/></svg></button></td></tr>
+            <tr class="glut" title="From: Kessler Belt&#10;Wanted by: Veldt Prime" style="--hue:var(--amber)"><td class="kind"><i></i></td><td class="icon"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="6" width="16" height="12"/></svg></td><td class="gname">Alloy Plates</td><td class="stock num">188</td><td class="price num"><i class="tri down c-bad"></i><span class="prc">14.5</span><span class="mult">&times;&frac12;</span><span class="stk-s">188</span></td>
+              <td class="pol"><div class="seg small"><button type="button" data-g="alloy" data-k="buy">Buy</button><button type="button" data-g="alloy" data-k="sell" class="on">Sell</button></div></td>
+              <td class="act"><button type="button" class="btn icon small danger dump" title="Sell all to a passing broker at half price"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/></svg></button></td></tr>
+          </tbody>
+        </table>
+        <div class="divider"></div>
+        <div class="note"><p class="note-text">Turn Sell off for Raw Ore if you run a Refinery, and for Xenofauna if you run a Menagerie.</p>
+          <button type="button" class="btn icon ghost note-close" title="Dismiss"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      </div>
+    </div>
+
+    <div class="col narrow">
+      <div class="panel">
+        <h3 class="shelf"><span class="shelf-label">Trade exchange</span><span class="shelf-tag">Storage 410 / 650</span></h3>
+        <div class="shelf-note warn"><i class="sq"></i>Needs exchange &middot; policies locked</div>
+        <table class="market">
+          <thead><tr><th class="kind"></th><th class="icon"></th><th>Good</th><th class="r stock">Stock</th><th class="r price">Price</th><th class="pol">Policy</th><th class="act"></th></tr></thead>
+          <tbody>
+            <tr style="--hue:#8C949F"><td class="kind"><i></i></td><td class="icon"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 18 12 6l8 12z"/></svg></td><td class="gname">Raw Ore</td><td class="stock num">180</td><td class="price num"><i class="tri down c-bad"></i><span class="prc">6.2</span><span class="stk-s">180</span></td>
+              <td class="pol"><div class="seg small"><button type="button" disabled class="on">Buy</button><button type="button" disabled>Sell</button></div></td>
+              <td class="act"><button type="button" class="btn icon small danger dump" title="Sell all to a passing broker at half price"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/></svg></button></td></tr>
+            <tr class="boom" style="--hue:var(--sage)"><td class="kind"><i></i></td><td class="icon"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="6"/></svg></td><td class="gname">Grain</td><td class="stock num">42</td><td class="price num"><i class="tri up c-good"></i><span class="prc">27.0</span><span class="mult">&times;3</span><span class="stk-s">42</span></td>
+              <td class="pol"><div class="seg small"><button type="button" disabled class="on">Buy</button><button type="button" disabled class="on">Sell</button></div></td>
+              <td class="act"><button type="button" class="btn icon small danger dump" title="Sell all to a passing broker at half price"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/></svg></button></td></tr>
+          </tbody>
+        </table>
+        <p class="col-tag" style="margin-top:12px">346px sidebar: stock stacks over price; Dump appears on row hover</p>
+      </div>
+    </div>
+  </div>
+
+  <h2>Companies &middot; Log &middot; Modal &middot; Tooltip</h2>
+  <div class="sheet-row">
+
+    <div class="col">
+      <div class="panel">
+        <h3 class="shelf"><span class="shelf-label">Shipping companies</span><span class="shelf-tag">Trust avg 52</span></h3>
+        <div class="co" style="--hue:#6FB7C9">
+          <div class="co-head"><span class="name">Kestrel Lines</span></div>
+          <div class="co-chips"><span class="chip good" data-shape="up">Office</span><span class="chip ice" data-shape="sq">Contract &rarr; D52</span><span class="chip amber" data-shape="sq">Loan 1,200 left &middot; 140/day</span></div>
+          <p class="blurb">Fast couriers running the inner lanes. Pays well, waits for nobody.</p>
+          <div class="home label">Veldt Prime &middot; Mining world</div>
+          <div class="goods-row"><span class="lbl">Brings</span><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#8C949F" stroke-width="1.5"><path d="M4 18 12 6l8 12z"/></svg><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--amber)" stroke-width="1.5"><rect x="4" y="6" width="16" height="12"/></svg></div>
+          <div class="goods-row"><span class="lbl">Buys</span><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--sage)" stroke-width="1.5"><circle cx="12" cy="12" r="6"/></svg></div>
+          <div class="trust"><div class="trust-bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></div><span class="trust-val">64 / 100</span><span class="chip warn" data-shape="sq">Low</span></div>
+          <div class="co-foot"><span class="tag">Ships served 12</span><button type="button" class="btn primary">Lend</button></div>
+        </div>
+        <div class="co locked" style="--hue:#C98BB0">
+          <div class="co-head"><span class="name">Aurelian Voyages</span></div>
+          <div class="co-chips"><span class="chip ink" data-shape="sq">Needs Jump Gate</span></div>
+          <p class="blurb">Galactic liners. They arrive only where a gate beacon shines.</p>
+          <div class="home label">Halcyon &middot; Garden world</div>
+          <div class="goods-row"><span class="lbl">Brings</span><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--rose)" stroke-width="1.5"><path d="M5 16c2-6 12-6 14 0"/></svg></div>
+          <div class="goods-row"><span class="lbl">Buys</span><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--amber)" stroke-width="1.5"><rect x="4" y="6" width="16" height="12"/></svg></div>
+          <div class="trust"><div class="trust-bar"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span class="trust-val">30 / 100</span><span class="chip bad" data-shape="down">Bad</span></div>
+          <div class="co-foot"><span class="tag">Ships served 0</span></div>
+        </div>
+
+        <h3 class="shelf" style="--hue:var(--ink-3)"><span class="shelf-label">Station log</span><span class="shelf-tag">48 entries</span></h3>
+        <div id="log-list">
+          <div class="line newday good"><span class="day">D041</span><span class="cat">TRD</span><span class="msg">Kestrel courier paid 280 in fees and fuel</span></div>
+          <div class="line"><span class="day">D041</span><span class="cat">BLD</span><span class="msg">Built a Solar Array</span></div>
+          <div class="line warn"><span class="day">D040</span><span class="cat">PWR</span><span class="msg">Solar flare: arrays dark for 2 days</span></div>
+          <div class="line bad"><span class="day">D040</span><span class="cat">SEC</span><span class="msg">Pirates raided the warehouse: 40 ore lost</span></div>
+          <div class="line newday"><span class="day">D039</span><span class="cat">RES</span><span class="msg">Three residents moved into the habitat</span></div>
+          <div class="line"><span class="day">D039</span><span class="cat">EVT</span><span class="msg">A broker offered to buy surplus grain</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <p class="col-tag">Modal (alert kind, hazard strip under the header)</p>
+      <div class="modal-demo">
+        <div id="modal" class="open">
+          <div class="box" data-kind="alert">
+            <div class="modal-head"><span class="ic-slot" data-icon="dish"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 12a8 8 0 0 1 8-8M4 12l8 8M8 12a4 4 0 0 1 4-4"/></svg></span><span id="modal-tag" class="micro">Transmission 02 &middot; Day 041 &middot; Src sector comms</span></div>
+            <div class="modal-body">
+              <h2 id="modal-title">Pirate raid</h2>
+              <p id="modal-text">Raiders slipped past the beacon and emptied a hold. Forty units of ore are gone. A Security Post would have turned them away. <b>Transmissions like this arrive every few days. Most need no reply.</b></p>
+              <div id="modal-extra"></div>
+            </div>
+            <div id="modal-actions"><button type="button" class="btn">Log it</button><button type="button" class="btn primary">Continue</button></div>
+          </div>
+        </div>
+      </div>
+
+      <p class="col-tag" style="margin-top:20px">Tooltip (module, berth blocked)</p>
+      <div class="tt-demo">
+        <div id="tooltip" class="show" style="--hue:var(--ice)">
+          <div class="tt-title">Docking Bay</div>
+          <div class="tt-body">One more berth. Ships queue in orbit when every berth is taken.</div>
+          <div class="tt-foot">Grid 4:07 &middot; Pwr &minus;2 &middot; <span class="bad">&#9660; Berth blocked</span></div>
+        </div>
+      </div>
+
+      <p class="col-tag" style="margin-top:20px">Lozenges, segmented control, chips</p>
+      <div class="btn-row" style="margin-bottom:10px">
+        <button type="button" class="btn">Save</button>
+        <button type="button" class="btn primary">Commission station</button>
+        <button type="button" class="btn danger">Scrap for 400</button>
+        <button type="button" class="btn ghost">Cancel</button>
+        <button type="button" class="btn" disabled>Disabled</button>
+        <button type="button" class="btn icon" title="Icon"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12h14"/></svg></button>
+        <div class="seg"><button type="button" class="on"><i class="pause-ic"></i></button><button type="button">1&times;</button><button type="button">2&times;</button><button type="button">4&times;</button></div>
+      </div>
+      <div class="btn-row">
+        <span class="chip amber">L2 &middot; Trading Hub</span><span class="chip ice" data-shape="sq">Contract &rarr; D52</span><span class="chip sage">Residents</span><span class="chip rose">Liner</span>
+        <span class="chip good" data-shape="up">OK</span><span class="chip warn" data-shape="sq">Low</span><span class="chip bad" data-shape="down">Bad</span><span class="chip ink" data-shape="sq">Needs Jump Gate</span><span class="chip ivory">Placing</span>
+      </div>
+
+      <p class="col-tag" style="margin-top:20px">Palette</p>
+      <div class="swatches">
+        <div class="sw"><i style="background:var(--amber)"></i>amber</div><div class="sw"><i style="background:var(--amber-hi)"></i>amber-hi</div>
+        <div class="sw"><i style="background:var(--ice)"></i>ice</div><div class="sw"><i style="background:var(--sage)"></i>sage</div>
+        <div class="sw"><i style="background:var(--rose)"></i>rose</div><div class="sw"><i style="background:var(--gold)"></i>gold</div>
+        <div class="sw"><i style="background:var(--ivory)"></i>ivory</div><div class="sw"><i style="background:var(--lamp)"></i>lamp</div>
+        <div class="sw"><i style="background:var(--good)"></i>good</div><div class="sw"><i style="background:var(--warn)"></i>warn</div>
+        <div class="sw"><i style="background:var(--bad)"></i>bad</div><div class="sw"><i style="background:var(--hazard)"></i>hazard</div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Title screen card (resume + commissioning form)</h2>
+  <div class="sheet-row">
+    <div class="commission" style="width:420px">
+      <div id="title-resume">
+        <button type="button" id="btn-resume" class="card-button">
+          <span class="resume-main">
+            <span class="resume-head"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 12h14l4-2-4-2H3zM7 8V5h4v3M7 16v3h4v-3"/></svg><span class="label">Resume</span></span>
+            <span class="resume-meta" id="resume-meta">Lantern Reach &middot; Day 41 &middot; L2 Trading Hub &middot; 12,480 CR</span>
+          </span>
+          <canvas id="title-thumb" width="120" height="72"></canvas>
+        </button>
+        <div class="title-actions"><button type="button" id="btn-newstation" class="btn danger">New station</button></div>
+      </div>
+      <div class="divider" style="margin:16px 0"></div>
+      <div id="title-form">
+        <label class="field label" for="title-name">Station name</label>
+        <div class="name-row">
+          <input id="title-name" type="text" value="Lantern Reach" autocomplete="off" spellcheck="false">
+          <button type="button" id="btn-reroll" class="btn icon ghost" title="Another name"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 12a8 8 0 0 1 14-5l2 2M20 4v5h-5M20 12a8 8 0 0 1-14 5l-2-2M4 20v-5h5"/></svg></button>
+        </div>
+        <div id="title-registry" class="micro">Registry WS-1910 will be assigned on commission</div>
+        <div id="title-confirm" class="title-confirm">
+          <p class="confirm-text body">Your current station will be scrapped.</p>
+          <div class="title-actions" style="margin-top:0"><button type="button" class="btn ghost">Back</button></div>
+        </div>
+        <div class="title-actions"><button type="button" id="btn-commission" class="btn primary">Commission station</button></div>
+      </div>
+    </div>
+    <div style="max-width:420px">
+      <h1 class="wordmark hero">Waystation</h1>
+      <div class="title-sub section" style="margin-top:14px">Station commissioning</div>
+      <p class="body c-ink2" style="margin-top:16px">The real title screen sits over the live <span class="mono">#bg</span> canvas with the HUD chrome hidden (<span class="mono">body[data-screen="title"]</span>). The preview shows the card in isolation.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Preview-only: place the tab indicator under the active tab the way ui.js will.
+  (function () {
+    var tab = document.querySelector('#tabs .tab.active'), ind = document.getElementById('tab-indicator');
+    if (!tab || !ind) return;
+    var r = tab.getBoundingClientRect(), p = tab.parentElement.getBoundingClientRect();
+    ind.style.setProperty('--x', (r.left - p.left) + 'px');
+    ind.style.setProperty('--w', String(r.width));
+  })();
+</script>
+</body>
+</html>

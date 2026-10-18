@@ -1,0 +1,12 @@
+{
+  "name": "waystation-tools",
+  "private": true,
+  "description": "Screenshot, icon and icon-sprite generators for the Waystation site. Not published; see scripts/dist.sh.",
+  "scripts": {
+    "shots": "node shots.js http://localhost:8788/waystation/ ../assets",
+    "sprite": "node sprite.js ../play/js/art.js hub,dock,warehouse,solar,fuel,quarters,cantina,comms,market,rec,hydro,clinic,habitat,reactor,customs,security,school,bank,plaza,menagerie,refinery,shipyard,observatory,gate,ship,dish,power,people,credits,rep,save,check"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.0.0"
+  }
+}
