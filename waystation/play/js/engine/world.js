@@ -44,6 +44,8 @@ const EngineWorld = (() => {
     placing: null, selected: null, hover: null,
     floaters: new WeakMap(),
     dotsG: null, stationKey: '',
+    // A5 livery: the active definition (strip / seam / rim / hubCore) and the id pinned by the `livery` bus event when no profile exists (harness)
+    livery: null, liveryPinned: null,
     // plot / territory (A1.2): bounds from Sim.state.plot, ring list, field graphics, debris pool, clearing band
     plot: { key: '', bounds: null, rings: [], clearing: null, fieldG: null, bandG: null, sweep: null, label: null, pill: null, debris: [], debrisRoot: null, reveal: null, pulses: [], lastText: '' },
   };
@@ -55,6 +57,39 @@ const EngineWorld = (() => {
   const metaUpgrade = (r, c) => { if (!hasMeta('upgrade')) return null; try { return Meta.upgrade(r, c); } catch (e) { return null; } };
   const hasArt = id => typeof ART !== 'undefined' && ART && ART[id] && typeof ART[id] === 'object';
   const simState = () => (typeof Sim !== 'undefined' && Sim) ? Sim.state : null;
+
+  // ---------------------------------------------------------------- livery (A5): strips, truss seams, hub rim and core, tinted at bake time
+  // Textures are cached by a key that carries the livery id (plateTexture), so a change rebakes once and switching back is instant;
+  // nothing is tinted per frame. The active id is Meta.livery() (falls back to Meta.profile.settings.livery, then 'default');
+  // without a profile the id pinned by the `livery` event stands in.
+  const LIVERY_DEFAULT = { id: 'default', name: 'Standard', strip: 'family', seam: '#8FD3E8', rim: '#F3E9D6', hubCore: '#F3E9D6' };
+  function liveryDefs() { return (typeof LIVERIES !== 'undefined' && Array.isArray(LIVERIES) && LIVERIES.length) ? LIVERIES : [LIVERY_DEFAULT]; }
+  function liveryById(id) { const L = liveryDefs(); return L.find(l => l.id === id) || L.find(l => l.id === 'default') || LIVERY_DEFAULT; }
+  function livery() { return S.livery || LIVERY_DEFAULT; }
+  function liveryId() { return livery().id; }
+  function wantedLiveryId() {
+    if (typeof Meta !== 'undefined' && Meta && Meta.profile) {
+      if (typeof Meta.livery === 'function') { try { const d = Meta.livery(); if (d && d.id) return d.id; } catch (e) { /* fall through */ } }
+      const st = Meta.profile.settings; if (st && typeof st.livery === 'string' && st.livery) return st.livery;
+      return 'default';
+    }
+    return S.liveryPinned || 'default';
+  }
+  function stripColor(id) { const s = livery().strip; return (!s || s === 'family') ? U.famColor(id) : s; }
+  function seamColor() { return livery().seam || U.pal('ice'); }
+  function rimColor() { return livery().rim || U.pal('ivory'); }
+  function hubCoreColor() { return livery().hubCore || U.pal('ivory'); }
+  function heroColor(id) { const hero = HERO[id]; if (!hero) return null; if (id === 'hub') return hubCoreColor(); return hero.color[0] === '#' ? hero.color : U.pal(hero.color); }
+  function applyLivery(def) {
+    if (!def || (S.livery && S.livery.id === def.id)) return false;
+    S.livery = def;
+    for (const rec of S.cells) { rec.bakeKey = ''; rec.liveKey = ''; if (rec.glow) rec.glow.texture = ST.glowTexture(heroColor(rec.id), 32); }
+    S.trussDirty = true;
+    return true;
+  }
+  function syncLivery() { return applyLivery(liveryById(wantedLiveryId())); }
+  // the `livery {id}` bus event (Meta.setLivery) or the harness: pin the id, rebake
+  function setLivery(id) { S.liveryPinned = id || null; return applyLivery(liveryById(wantedLiveryId())); }
 
   // ---------------------------------------------------------------- geometry
   const wx = c => c * CELL, wy = r => r * CELL;
@@ -92,18 +127,19 @@ const EngineWorld = (() => {
   function tagsOK() { return ST.fontsReady && CELL * S.band >= 48; }
 
   function plateTexture(id, variant, open, tag, lvl) {
-    const key = `plate|${id}|${S.cellDev}|${variant}|${open}|${tag}|${lvl}`;
+    const key = `plate|${id}|${S.cellDev}|${variant}|${open}|${tag}|${lvl}|${liveryId()}`;
     const size = S.cellDev + S.pad * 2;
     return ST.bake(key, size, size, g => bakePlate(g, id, variant, open, tag, lvl));
   }
   function bakePlate(g, id, variant, open, tagStr, lvl) {
     const pad = S.pad, cd = S.cellDev, k = cd / 100, dpu = 100 / cd;
     const isHub = id === 'hub', off = variant === 'offline';
-    const fam = U.famColor(id);
+    const fam = U.famColor(id), custom = liveryId() !== 'default';
     const plateCol = off ? OFFLINE.plate : U.pal('hull');
-    const rimCol = off ? OFFLINE.rim : U.pal('hull-rim');
-    const stripCol = off ? OFFLINE.strip : fam;
-    const silCol = off ? OFFLINE.sil : fam;
+    // A5: the strip takes the livery colour (the family hue stays on the silhouette); the hub's rim, rings and seams take the livery rim
+    const rimCol = off ? OFFLINE.rim : (isHub && custom ? U.rgba(rimColor(), 0.3) : U.pal('hull-rim'));
+    const stripCol = off ? OFFLINE.strip : stripColor(id);
+    const silCol = off ? OFFLINE.sil : (isHub ? rimColor() : fam);
     g.translate(pad, pad); g.scale(k, k);
     g.lineJoin = 'round'; g.lineCap = 'round';
     const shape = inset => { const p = new Path2D(); if (isHub) hexPath(p, 50, 50, 48 + inset); else roundRectPath(p, 6 - inset, 6 - inset, 88 + 2 * inset, 88 + 2 * inset, 10 + inset); return p; };
@@ -215,6 +251,7 @@ const EngineWorld = (() => {
       return;
     }
     S.rows = s.grid.length; S.cols = s.grid[0] ? s.grid[0].length : 0;
+    syncLivery();
     const cells = [];
     for (let r = 0; r < S.rows; r++) for (let c = 0; c < S.cols; c++) if (s.grid[r][c]) cells.push({ r, c, m: s.grid[r][c] });
     const occ = new Set(cells.map(x => keyOf(x.r, x.c)));
@@ -316,8 +353,7 @@ const EngineWorld = (() => {
     rec.shadow.alpha = 0.35;
     const hero = HERO[id];
     if (hero) {
-      const color = hero.color[0] === '#' ? hero.color : U.pal(hero.color);
-      rec.glow = ST.sprite(ST.glowTexture(color, 32), { blend: 'add', alpha: hero.a });
+      rec.glow = ST.sprite(ST.glowTexture(heroColor(id), 32), { blend: 'add', alpha: hero.a });
       rec.glow.position.set(wx(c) + CELL / 2, wy(r) + CELL / 2);
       ST.layers.world.emissive.addChild(rec.glow);
     }
@@ -440,7 +476,7 @@ const EngineWorld = (() => {
     let shipAdjacent = false;
     for (const [nr, nc] of neighbors(r, c)) { const sh = S.shipsByDock.get(keyOf(nr, nc)); if (sh && sh.state === 'docked') { shipAdjacent = true; break; } }
     return {
-      color: U.famColor(id), lamp: U.pal('lamp'),
+      color: U.famColor(id), lamp: (id === 'hub' && liveryId() !== 'default') ? hubCoreColor() : U.pal('lamp'),
       T, efficiency: T.efficiency, powered,
       hover: !!(S.hover && S.hover.r === r && S.hover.c === c), selected: !!(S.selected && S.selected.r === r && S.selected.c === c), reduced: ST.reduced,
       cellPx: S.cellDev / ST.dpr, dpr: ST.dpr, dock, ratio, crowd, load, day: s.day + s.t,
@@ -628,7 +664,7 @@ const EngineWorld = (() => {
     const g = S.trussG, sg = S.seamG;
     g.clear(); sg.clear();
     const w = 0.16 * CELL, hw = w / 2, inset = 0.44 * CELL;
-    const truss = U.int(U.pal('truss')), edge = U.int(U.pal('hull-edge')), ice = U.int(U.pal('ice'));
+    const truss = U.int(U.pal('truss')), edge = U.int(U.pal('hull-edge')), ice = U.int(seamColor());   // A5: the seam and its end caps take the livery seam colour
     let growing = false;
     for (const sp of S.spars) {
       const e = sparEnds(sp);
@@ -1235,10 +1271,13 @@ const EngineWorld = (() => {
     }
     g.stroke();
     const size = Math.max(2, cell - 2), rad = Math.max(1, size / 4);
+    const lv = liveryById(wantedLiveryId()), custom = lv.id !== 'default', bar = Math.max(1, Math.round(size / 6));
     for (let r = 0; r < rows; r++) for (let cc = 0; cc < cols; cc++) {
       const m = grid[r][cc]; if (!m) continue;
-      g.fillStyle = U.rgba(m.id === 'hub' ? U.pal('ivory') : U.famColor(m.id), 0.8);
-      const p = new Path2D(); roundRectPath(p, ox + cc * cell + 1, oy + r * cell + 1, size, size, rad); g.fill(p);
+      const x = ox + cc * cell + 1, y = oy + r * cell + 1;
+      g.fillStyle = U.rgba(m.id === 'hub' ? (lv.rim || U.pal('ivory')) : U.famColor(m.id), 0.8);
+      const p = new Path2D(); roundRectPath(p, x, y, size, size, rad); g.fill(p);
+      if (custom && m.id !== 'hub' && size >= 6) { g.fillStyle = lv.strip === 'family' ? U.famColor(m.id) : lv.strip; g.fillRect(x + 2, y + 1, size - 4, bar); }   // A5 livery strip
     }
     return c;
   }
@@ -1253,6 +1292,7 @@ const EngineWorld = (() => {
     init, update, rebuild, thumbnail,
     cellAt, cellCentre, occupied, bankAt, readyBanksNear, isScaffold, pathToStorage, inPlot, ringOf,
     onBuilt, onDemolished, onBuildDone, onUpgrade, onHopper, onPlot,
+    setLivery, get livery() { return livery(); },                      // A5
     setPointer(p) { S.pointer = p; },
     get placing() { return S.placing; }, set placing(v) { S.placing = v || null; },
     get selected() { return S.selected; }, set selected(v) { S.selected = v || null; },

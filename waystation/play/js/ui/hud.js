@@ -68,6 +68,16 @@ const MetaAdapter = {
   achievements() { return call(Meta, 'achievements', [], []) || []; },
   claimAchievement(id) { return call(Meta, 'claimAchievement', [id], null); },
   achievementBadge() { if (has(Meta, 'achievementBadge')) return Number(Meta.achievementBadge()) || 0; return this.achievements().filter(a => a.claimable).length; },
+  // A5 liveries: Meta.liveries() -> [{ id, name, desc, sector, strip, seam, rim, hubCore, owned, active, source }], Meta.livery() -> the active definition
+  liveries() {
+    const l = call(Meta, 'liveries', [], null); if (Array.isArray(l) && l.length) return l;
+    const L = (typeof LIVERIES !== 'undefined' && Array.isArray(LIVERIES) && LIVERIES.length) ? LIVERIES : [{ id: 'default', name: 'Standard', strip: 'family', seam: '#8FD3E8', rim: '#F3E9D6', hubCore: '#F3E9D6' }];
+    return L.map(d => Object.assign({}, d, { owned: d.id === 'default', active: d.id === 'default', source: d.id === 'default' ? 'default' : d.sector ? 'sector' : 'store' }));
+  },
+  livery() { const d = call(Meta, 'livery', [], null); if (d && d.id) return d; const L = this.liveries(); return L.find(x => x.active) || L[0]; },
+  liveryTokens() { if (has(Meta, 'liveryTokens')) return Number(Meta.liveryTokens()) || 0; const p = this.profile(); return p && p.entitlements && p.entitlements.tokens ? Number(p.entitlements.tokens.livery) || 0 : 0; },
+  setLivery(id) { return call(Meta, 'setLivery', [id], { ok: false, why: 'Liveries need the station link (Meta)' }); },
+  redeemLiveryToken(id) { return call(Meta, 'redeemLiveryToken', [id], { ok: false, why: 'Liveries need the station link (Meta)' }); },
   // mutators
   collect(r, c) { return call(Meta, 'collect', [r, c], 0); },
   collectAll() { return call(Meta, 'collectAll', [], 0); },
@@ -287,6 +297,7 @@ const UI = {
       Sim.on('plot', d => this.onPlot(d));
       Sim.on('achievement', d => this.onAchievement(d));
       Sim.on('account', d => this.onAccount(d));
+      Sim.on('livery', () => this.refresh());                 // A5: the Settings shelf, the Station overview and the store rows follow
     }
     // Engine events (0.3)
     EngineAdapter.on('cell-click', d => this.onCellClick(d));
@@ -1061,6 +1072,10 @@ const UI = {
     if (d.restored) { this.toast(`Restored: ${item.title || d.sku}`, 'good', { chip: 'Store' }); this.refresh(); return; }
     const reward = {}; if (am) reward.am = am; if (credits) reward.credits = credits; if (grant.unlockAll) reward.label = 'Every sector unlocked'; if (grant.payload && grant.payload.title) reward.title = grant.payload.title;
     this.celebrate('purchase', { sku: d.sku, title: am && !grant.entitlement ? `+${Fmt.n(am)} Antimatter` : item.title, reward });
+    if (grant.payload && (grant.payload.livery || grant.payload.liveries) && Date.now() - (this._liveryToastAt || 0) > 10000) {   // A5: one pointer per burst of cosmetic purchases
+      this._liveryToastAt = Date.now();
+      setTimeout(() => this.toast('Choose your livery in Settings', 'good', { chip: 'Livery', icon: 'ship', ms: 9000, action: { label: 'Choose', fn: () => this.openLiveries() } }), 1800);
+    }
     const from = $('#panel') || $('#rail');
     if (am) Overlays.fly(from, this.anchor('am'), { n: Math.min(14, Math.max(6, Math.round(am / 40))), icon: 'am', hue: 'am', onHit: () => this.anchorHit('am') });
     if (credits || (grant.credits && grant.credits.hours)) Overlays.fly(from, this.anchor('credits'), { n: 10, icon: 'credits', onHit: () => this.anchorHit('credits') });
@@ -1372,6 +1387,31 @@ const UI = {
       this.refresh();
     });
   },
+  // A5 liveries: a swatch card click applies an owned livery, spends a livery token on a sector livery, or points at the Store
+  chooseLivery(id) {
+    const L = MetaAdapter.liveries().find(l => l.id === id); if (!L) return;
+    if (L.owned) {
+      const r = MetaAdapter.setLivery(id);
+      if (r && r.ok) { if (r.changed) this.toast(`${L.name} livery applied`, 'good', { chip: 'Livery', icon: 'ship' }); }
+      else { this.toast((r && r.why) || 'That livery is not yours yet', 'warn', { chip: 'Livery' }); Sound.error(); }
+      this.refresh(); return;
+    }
+    const tokens = MetaAdapter.liveryTokens();
+    if (L.id !== 'founder' && tokens > 0) {
+      this.confirm(`Spend a livery token on ${L.name}?`, `You hold ${Fmt.plural(tokens, 'livery token')}. ${esc(L.name)} becomes yours for good and goes on the station now.`, () => {
+        const r = MetaAdapter.redeemLiveryToken(id);
+        if (r && r.ok) { MetaAdapter.setLivery(id); this.toast(`${L.name} livery is yours${r.left ? ` ${MID2} ${Fmt.plural(r.left, 'token')} left` : ''}`, 'good', { chip: 'Livery', icon: 'ship' }); }
+        else { this.toast((r && r.why) || 'The token could not be spent', 'warn', { chip: 'Livery' }); Sound.error(); }
+        this.refresh();
+      }, { yes: 'Spend the token' });
+      return;
+    }
+    this.toast(L.id === 'founder' ? "The Founder's Charter is sold in the Store" : 'The six sector liveries are a set in the Store, or one for a livery token on day 7 of your streak', 'info', { chip: 'Livery', icon: 'ship', ms: 7000, action: { label: 'Store', fn: () => this.openPanel('store') } });
+  },
+  openLiveries() {
+    this.openPanel('settings');
+    requestAnimationFrame(() => { const el = $('#livery-shelf'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start', behavior: document.body.getAttribute('data-motion') === 'reduced' ? 'auto' : 'smooth' }); });
+  },
   setSetting(key, value) {
     const st = MetaAdapter.settings();
     if (key === 'perf') value = value === 'auto' ? 'auto' : Number(value);
@@ -1403,12 +1443,13 @@ const UI = {
   },
 
   // ---------------------------------------------------------- title screen helpers (5.4; main.js owns the flow)
-  // data = { name, day, level, credits, am, banked, rank: { level, title }, sector, thumb: HTMLCanvasElement|null }
+  // data = { name, day, level, credits, am, banked, rank: { level, title }, sector, thumb: HTMLCanvasElement|null, livery?: name }
   setTitleResume(data) {
     const meta = $('#resume-meta'), rank = $('#resume-rank'), name = $('#resume-name'), thumb = $('#title-thumb');
+    const livery = data.livery || (MetaAdapter.livery() || {}).name || '';                       // A5: the active livery name
     if (rank) rank.textContent = data.rank ? `Commander ${MID2} Rank ${data.rank.level} ${data.rank.title}` : 'Commander';
     if (name) name.textContent = data.name || '';
-    if (meta) meta.innerHTML = `<span>${esc(MetaAdapter.sectorDef(data.sector || 'home').name || 'Home')}</span><span>${Fmt.day(data.day || 1)}</span><span>L${data.level || 1} ${esc(TIER_NAMES[data.level || 1] || '')}</span><span class="c-amber-hi">${Fmt.n(data.credits || 0)} cr</span><span class="c-am">${Fmt.n(data.am || 0)} AM</span>${data.banked ? `<span class="c-good">${Fmt.n(data.banked)} cr waiting</span>` : ''}`;
+    if (meta) meta.innerHTML = `<span>${esc(MetaAdapter.sectorDef(data.sector || 'home').name || 'Home')}</span><span>${Fmt.day(data.day || 1)}</span><span>L${data.level || 1} ${esc(TIER_NAMES[data.level || 1] || '')}</span><span class="c-amber-hi">${Fmt.n(data.credits || 0)} cr</span><span class="c-am">${Fmt.n(data.am || 0)} AM</span>${data.banked ? `<span class="c-good">${Fmt.n(data.banked)} cr waiting</span>` : ''}${livery ? `<span class="c-rose resume-livery">${esc(livery)} livery</span>` : ''}`;
     if (thumb && data.thumb) { thumb.width = data.thumb.width; thumb.height = data.thumb.height; thumb.getContext('2d').drawImage(data.thumb, 0, 0); }
   },
 };

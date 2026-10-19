@@ -896,10 +896,58 @@ function pacingBot(days, tuning, label) {
   return { firstUnlockable, firstUnlocked };
 }
 
+function testLiveries() {
+  sec('17. Liveries (A5): definitions, ownership, selection, tokens, persistence');
+  const W = makeWorld({ seed: 24 });
+  W.record('livery', 'change');
+  const M = W.Meta, S = W.Sim; M.init();
+  const L = W.G('LIVERIES'), SIX = ['sable', 'kessler', 'thessaly', 'marrow', 'oros', 'keth'], HEX = /^#[0-9A-F]{6}$/i;
+  check('eight liveries: default, the six sectors, founder, each with id, name, strip, seam, rim, hubCore', L.length === 8 && L.map(l => l.id).join(',') === ['default', ...SIX, 'founder'].join(',') && L.every(l => l.name && l.strip && HEX.test(l.seam) && HEX.test(l.rim) && HEX.test(l.hubCore)));
+  check('default strip is the family hue; sector liveries carry their sector id and a hex strip', L[0].strip === 'family' && SIX.every(id => W.G('liveryDef')(id).sector === id && HEX.test(W.G('liveryDef')(id).strip)));
+  check('the liveries sku grants exactly the six sector ids', JSON.stringify(W.STORE_CATALOG.find(i => i.sku === 'liveries').grant.liveries) === JSON.stringify(SIX));
+  check('new profile: setting default, Meta.livery() default', M.profile.settings.livery === 'default' && M.livery().id === 'default');
+  let list = M.liveries();
+  check('liveries(): default owned+active, the rest locked, sources default / sector / store', list.length === 8 && list[0].owned && list[0].active && list[0].source === 'default' && list.slice(1).every(l => !l.owned && !l.active) && SIX.every(id => list.find(l => l.id === id).source === 'sector') && list.find(l => l.id === 'founder').source === 'store');
+  const refused = M.setLivery('sable');
+  check('setLivery refuses an unowned livery: no event, setting unchanged', !refused.ok && M.profile.settings.livery === 'default' && W.count('livery') === 0, refused);
+  check('setLivery refuses an unknown id', !M.setLivery('nope').ok);
+  check('redeem refused without a token', !M.redeemLiveryToken('keth').ok && M.liveryTokens() === 0);
+  M.profile.daily = { streak: 6, lastClaimAt: W.clock.now - DAY, lastClaimKey: null };
+  const r7 = M.claimDaily();
+  check('day 7 of the streak grants one livery token', r7 && r7.token === 'livery' && M.liveryTokens() === 1, r7);
+  check('a token buys neither founder nor default', !M.redeemLiveryToken('founder').ok && !M.redeemLiveryToken('default').ok && M.liveryTokens() === 1);
+  const red = M.redeemLiveryToken('keth');
+  check('redeemLiveryToken(keth): token spent, keth owned, source token', red.ok && red.left === 0 && M.liveryTokens() === 0 && M.ownsLivery('keth') && M.liveries().find(l => l.id === 'keth').source === 'token' && M.profile.entitlements.redeemed.includes('keth'), red);
+  check('history records the token grant', M.profile.entitlements.history.some(h => h.sku === 'livery_token' && h.livery === 'keth'));
+  check('redeem refused for an owned livery', !M.redeemLiveryToken('keth').ok);
+  const set = M.setLivery('keth');
+  check('setLivery(keth): ok, changed, saved, livery event {id, was}', set.ok && set.changed && M.profile.settings.livery === 'keth' && M.livery().id === 'keth' && W.count('livery') === 1 && W.last('livery').id === 'keth' && W.last('livery').was === 'default' && JSON.parse(W.storage.getItem('waystation.profile.v2')).settings.livery === 'keth', set);
+  check('setting the same livery again is ok but unchanged', M.setLivery('keth').ok && !M.setLivery('keth').changed);
+  check('the other sector liveries stay locked (source sector)', !M.ownsLivery('sable') && M.liveries().find(l => l.id === 'sable').source === 'sector');
+  M.grantSku('liveries', { grantId: 'cs_liv_1' });
+  list = M.liveries();
+  check('liveries sku: all six owned, source store (keth keeps token)', SIX.every(id => list.find(l => l.id === id).owned) && list.find(l => l.id === 'sable').source === 'store' && list.find(l => l.id === 'keth').source === 'token');
+  check('founder stays locked until its sku', !M.ownsLivery('founder') && !M.setLivery('founder').ok);
+  const am0 = M.am;
+  M.grantSku('founder', { grantId: 'cs_liv_2' });
+  check('founder sku: livery owned, title Founder, +100 AM', M.ownsLivery('founder') && M.profile.entitlements.titles.includes('Founder') && M.am === am0 + 100);
+  check('setLivery(founder) ok, exactly one active', M.setLivery('founder').ok && M.livery().id === 'founder' && M.liveries().filter(l => l.active).length === 1);
+  M.save();
+  check('the choice survives save/load', M.load() && M.livery().id === 'founder' && M.liveryTokens() === 0);
+  const json = M.export();
+  M.resetProfile();
+  check('reset: back to default, nothing owned', M.livery().id === 'default' && !M.ownsLivery('founder') && !M.ownsLivery('keth'));
+  check('import restores the founder livery', M.import(json).ok && M.livery().id === 'founder');
+  const p = JSON.parse(json); p.entitlements = { owned: {}, history: [], liveries: [], titles: [], tokens: { livery: 0 } };
+  check('an unowned saved choice falls back to default; fixup adds redeemed', M.import(JSON.stringify(p)).ok && M.profile.settings.livery === 'founder' && M.livery().id === 'default' && Array.isArray(M.profile.entitlements.redeemed));
+  check('hasEntitlement(liveries) alone owns the six (a server grant without the id list)', (() => { M.profile.entitlements.owned.liveries = true; return SIX.every(id => M.ownsLivery(id)) && !M.ownsLivery('founder'); })());
+  check('every v1 Sim method still runs after the livery section', typeof S.totals === 'function' && !!S.totals());
+}
+
 // ============================================================ run
 (function main() {
   console.log(`Waystation v2 sim-test  (${FILES.join(', ')})`);
-  const tests = [testNewProfileAndTutorial, testHoppers, testOffline, testExpeditions, testMissions, testDaily, testRanks, testSectors, testExportImportAndReset, testMigration, testV1Sim, testStore, testConvoyAndMisc, testShippedPreset, testPlots, testAchievements];
+  const tests = [testNewProfileAndTutorial, testHoppers, testOffline, testExpeditions, testMissions, testDaily, testRanks, testSectors, testExportImportAndReset, testMigration, testV1Sim, testStore, testConvoyAndMisc, testShippedPreset, testPlots, testAchievements, testLiveries];
   for (const t of tests) {
     try { t(); } catch (e) { results.fail++; results.failures.push(`${t.name}: threw ${e && e.stack}`); console.log(`  THREW ${e && e.stack}`); }
   }

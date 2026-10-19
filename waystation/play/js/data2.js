@@ -343,6 +343,24 @@ const STORE_CATALOG = [
   { sku: 'liveries', kind: 'cosmetic', name: 'Sector Liveries', desc: 'The six sector liveries for your station strip.', grant: { liveries: ['sable', 'kessler', 'thessaly', 'marrow', 'oros', 'keth'] }, priceCents: 299, priceLabel: '$2.99', badge: null },
 ];
 
+// ------------------------------------------------------------ A5 station liveries (the engine re-tints the signal strips, truss seams and hub rim)
+// strip: the plates' signal strip ('family' = each module's family hue, the standard look) · seam: the emissive truss seam ·
+// rim: the hub's rim and rings · hubCore: the hub's core glow and lamps. Sector liveries take their sector theme's hues
+// (SECTORS[id].theme), the Founder's livery is ivory and amber. 'default' is always owned; sector liveries come with the
+// 'liveries' sku or a livery token (day 7 of the daily streak); 'founder' comes with the 'founder' sku.
+const LIVERIES = [
+  { id: 'default', name: 'Standard', desc: 'Family-coloured strips, an ice seam and the ivory hub.', strip: 'family', seam: '#8FD3E8', rim: '#F3E9D6', hubCore: '#F3E9D6' },
+  { id: 'sable', sector: 'sable', name: 'Sable Drift', desc: 'Ochre dust and storm light.', strip: '#F2B27A', seam: '#FFD9A8', rim: '#D98F4C', hubCore: '#FFD9A8' },
+  { id: 'kessler', sector: 'kessler', name: 'Kessler Belt', desc: 'Belt steel under a cold white star.', strip: '#9AA1B0', seam: '#DDE6FF', rim: '#BFC6D0', hubCore: '#E6ECFF' },
+  { id: 'thessaly', sector: 'thessaly', name: 'Thessaly Deep', desc: 'Open sea and white swirls.', strip: '#5FB0F0', seam: '#9FDAFF', rim: '#BFE8F4', hubCore: '#E8F6FF' },
+  { id: 'marrow', sector: 'marrow', name: 'Marrow Verge', desc: 'Ember seams in black glass.', strip: '#FF6A3A', seam: '#FFB08A', rim: '#FFD6C8', hubCore: '#FFB08A' },
+  { id: 'oros', sector: 'oros', name: 'Oros Halo', desc: 'Banded gold and ring ice.', strip: '#C9A06A', seam: '#FFE8C0', rim: '#FFF4E0', hubCore: '#FFE8C0' },
+  { id: 'keth', sector: 'keth', name: 'Keth Meridian', desc: 'Garden green from pole to pole.', strip: '#6FC97F', seam: '#BFF0C8', rim: '#CBE2C4', hubCore: '#EAFFEF' },
+  { id: 'founder', name: "Founder's Ivory", desc: 'Ivory strips, an amber seam and a gold-rimmed hub.', strip: '#F3E9D6', seam: '#E9A23B', rim: '#FFC46A', hubCore: '#FFE9B8' },
+];
+const LIVERY_IDS = LIVERIES.map(l => l.id);
+function liveryDef(id) { return LIVERIES.find(l => l.id === id) || null; }
+
 // ------------------------------------------------------------ 4.10 collection ("Registry")
 // source: { serve: { company, cls?, count } } found by serving ships  |  { expedition: [sectorIds] } found by expedition discovery
 const COLLECTION = {

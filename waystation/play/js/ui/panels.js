@@ -143,6 +143,20 @@ function sectorList() {
 }
 const sectorIndex = id => Math.max(0, sectorList().findIndex(s => s.id === id));
 
+// A5 livery preview: the hub, three trusses and three plates in the livery's strip / seam / rim / hubCore; family hues stay on the silhouettes
+function liveryPreviewSvg(l) {
+  const fam = ['var(--ice)', 'var(--amber)', 'var(--sage)'], hull = 'var(--hull)', edge = 'var(--hull-edge)';
+  const strip = i => (!l.strip || l.strip === 'family') ? fam[i] : esc(l.strip);
+  const plate = (x, i) => `<g transform="translate(${x} 8)"><rect x="0" y="0" width="48" height="48" rx="6" fill="${hull}" stroke="var(--hull-rim)"/><rect x="8" y="4" width="32" height="3" rx="1" fill="${strip(i)}"/><rect x="12" y="14" width="24" height="24" rx="4" fill="${fam[i]}" fill-opacity=".55" stroke="${fam[i]}" stroke-width="1.5"/></g>`;
+  const truss = x => `<rect x="${x}" y="28" width="26" height="8" fill="var(--truss)" stroke="${edge}"/><line x1="${x + 4}" y1="32" x2="${x + 22}" y2="32" stroke="${esc(l.seam || '#8FD3E8')}" stroke-width="1.5" stroke-opacity=".9"/>`;
+  const rim = esc(l.rim || '#F3E9D6'), core = esc(l.hubCore || '#F3E9D6');
+  const hex = Array.from({ length: 6 }, (_, k) => { const a = -Math.PI / 2 + k * Math.PI / 3; return `${(34 + Math.cos(a) * 26).toFixed(1)},${(32 + Math.sin(a) * 26).toFixed(1)}`; }).join(' ');
+  return `<svg class="livery-svg" viewBox="0 0 300 64" preserveAspectRatio="xMidYMid meet" aria-hidden="true">` +
+    `<polygon points="${hex}" fill="${hull}" stroke="${rim}" stroke-width="2"/><circle cx="34" cy="32" r="21" fill="none" stroke="var(--ice)" stroke-opacity=".6"/><circle cx="34" cy="32" r="13" fill="none" stroke="${rim}" stroke-width="1.5"/>` +
+    `<circle cx="34" cy="32" r="9" fill="${core}" fill-opacity=".25"/><circle cx="34" cy="32" r="3.5" fill="${core}"/>` +
+    truss(62) + plate(90, 0) + truss(140) + plate(168, 1) + truss(218) + plate(246, 2) + '</svg>';
+}
+
 // 5.4 / 2.5 shelf: label on the rule, mono tag right; `tag` is HTML, `label` escaped
 function shelf(label, tag, o = {}) {
   const cls = ['shelf', o.first ? 'first' : '', o.cls || ''].filter(Boolean).join(' ');
@@ -417,6 +431,7 @@ const Panels = {
       h += `</div>`;
       h += shelf('Telemetry', esc(`Storage ${Fmt.n(T.stockTotal)} / ${Fmt.n(T.storage)}`));
       h += `<div class="kv"><span>Modules</span><span class="num">${T.modules}</span><span>Berths</span><span class="num">${T.docks}</span>` +
+        `<span>Livery</span><span class="ink"><button type="button" class="linkish" data-act="liveries" title="Choose a livery in Settings">${esc(ctx.meta.livery().name)}</button></span>` +   // A5
         `<span>Food served / day</span><span class="num">${T.food}</span><span>Visitor beds</span><span class="num">${T.beds}</span>` +
         `<span>Power</span><span class="num">${T.used} / ${T.produced}${T.flare ? ' <span class="chip warn" data-shape="sq">Flare</span>' : ''}</span>` +
         `<span>Ships served</span><span class="num">${Fmt.n(s.stats.shipsServed)}</span><span>Cargo traded</span><span class="num">${Fmt.n(s.stats.cargoTraded)} units</span>` +
@@ -855,7 +870,7 @@ const Panels = {
       const relief = (typeof TIMERS !== 'undefined' && TIMERS.RELIEF_CONVOY) || { am: 10, minutes: 30 };
       const reliefRow = `<div class="sku" style="--hue:var(--am)"><i class="spine"></i><span class="sku-ic">${icon('credits', 20)}</span><div class="sku-main"><span class="sku-name">Relief convoy</span><span class="sku-desc">${relief.minutes} minutes of your whole station's rate, delivered now, paid with Antimatter you already hold.</span></div><button type="button" class="btn am" data-act="relief">${icon('am', 14)}<span>${relief.am} AM</span></button></div>`;
       h += shelf('Boosts', 'credits now', { hue: 'var(--amber)' }); h += `<div class="sku-list">${boosts.map(i => row(i, 'amber')).join('')}${reliefRow}</div>`;
-      if (passes.length || cosm.length) { h += shelf('Passes and cosmetics', null, { hue: 'var(--rose)' }); h += `<div class="sku-list">${[...passes, ...cosm].map(i => row(i, i.kind === 'pass' ? 'am' : 'rose', i.kind === 'cosmetic')).join('')}</div>`; }
+      if (passes.length || cosm.length) { h += shelf('Passes and cosmetics', 'liveries show on your station', { hue: 'var(--rose)' }); h += `<div class="sku-list">${[...passes, ...cosm].map(i => row(i, i.kind === 'pass' ? 'am' : 'rose')).join('')}</div>`; }
       h += shelf('Restore purchases', null, { hue: 'var(--ice)' });
       h += `<div class="restore"><input type="email" class="input" id="restore-email" placeholder="email used at checkout" aria-label="Email used at checkout" autocomplete="email"><button type="button" class="btn" data-act="restore">${icon('reroll', 14)}<span>Restore</span></button></div>`;
       h += `<p class="legal micro">Prices in USD. Antimatter is a game currency with no cash value and cannot be refunded or transferred. Sandbox grants are local to this browser.</p>`;
@@ -869,11 +884,13 @@ const Panels = {
       return `<button type="button" class="am-tile${i.badge ? ' lifted' : ''}${i.owned ? ' owned' : ''}" data-sku="${esc(i.sku)}"${i.owned ? ' disabled' : ''} aria-label="${esc(i.title)} for ${esc(i.priceLabel)}"><i class="spine"></i>${i.badge ? `<span class="am-badge">${esc(i.badge)}</span>` : ''}` +
         `<span class="am-ic">${icon('am', 22)}</span><span class="am-amount num">${Fmt.n(amOf(i))}</span><span class="am-lbl">AM${bonus ? ` <span class="c-good">+${bonus}%</span>` : ''}</span><span class="am-price num">${esc(i.priceLabel || '')}</span></button>`;
     };
-    const row = (i, hue, soon) => `<div class="sku${i.owned ? ' owned' : ''}${soon ? ' soon' : ''}" style="--hue:var(--${hue})"><i class="spine"></i><span class="sku-ic">${icon(i.kind === 'pass' ? 'map' : i.kind === 'cosmetic' ? 'ship' : 'credits', 20)}</span>` +
+    // A5: cosmetics are live (the engine renders liveries); an owned cosmetic row links to the Livery shelf in Settings
+    const row = (i, hue) => `<div class="sku${i.owned ? ' owned' : ''}" style="--hue:var(--${hue})"><i class="spine"></i><span class="sku-ic">${icon(i.kind === 'pass' ? 'map' : i.kind === 'cosmetic' ? 'ship' : 'credits', 20)}</span>` +
       `<div class="sku-main"><span class="sku-name">${esc(i.title || i.sku)}</span><span class="sku-desc">${esc(i.desc || '')}</span></div>` +
-      (i.owned ? `<span class="chip good" data-shape="up">Owned</span>` : soon ? `<span class="chip ivory" title="Liveries arrive in a coming update; nothing is sold until they show on your station">Coming soon</span>` : `<button type="button" class="btn${hue === 'am' ? ' am' : ' primary'}" data-sku="${esc(i.sku)}">${esc(i.priceLabel || 'Buy')}</button>`) + `</div>`;
+      (i.owned ? `<span class="chip good" data-shape="up">Owned</span>${i.kind === 'cosmetic' ? `<button type="button" class="btn ghost" data-act="liveries" title="Choose a livery in Settings">${icon('settings', 14)}<span>Choose</span></button>` : ''}` : `<button type="button" class="btn${hue === 'am' ? ' am' : ' primary'}" data-sku="${esc(i.sku)}">${esc(i.priceLabel || 'Buy')}</button>`) + `</div>`;
     F.body.addEventListener('click', e => {
       const b = e.target.closest('[data-sku]'); if (b && !b.disabled) { ctx.ui.purchase(b.dataset.sku, b); return; }
+      const lv = e.target.closest('[data-act="liveries"]'); if (lv) { ctx.ui.openLiveries(); return; }
       const rl = e.target.closest('[data-act="relief"]');
       if (rl) {
         const res = (typeof Meta !== 'undefined' && typeof Meta.reliefConvoy === 'function') ? Meta.reliefConvoy() : null;
@@ -889,7 +906,7 @@ const Panels = {
 
   // ---------------------------------------------------------- Settings (5.2)
   settings(host, ctx) {
-    const F = frame(host, { id: 'settings', title: 'Settings', sub: 'Sound, motion, notifications, save data' }, ctx), sig = {};
+    const F = frame(host, { id: 'settings', title: 'Settings', sub: 'Livery, sound, motion, notifications, save data' }, ctx), sig = {};
     // A3 push notifications: js/notify.js loads after this file and may be absent in previews, so every call is guarded
     const notifyApi = () => (typeof Notify !== 'undefined' && Notify && typeof Notify.state === 'function') ? Notify : null;
     const NOTIFY_CHIP = { on: ['good', 'On'], off: ['ink', 'Off'], pending: ['ice', 'Connecting'], blocked: ['warn', 'Blocked'], error: ['warn', 'Offline'], unsupported: ['ink', 'Unavailable'], unconfigured: ['ink', 'Not connected'] };
@@ -916,6 +933,19 @@ const Panels = {
         return h2;
       };
       const slider = (id, v, label) => `<div class="setting"><div class="setting-main"><span class="setting-lbl">${esc(label)}</span></div><input type="range" class="slider" min="0" max="100" value="${Math.round(v * 100)}" data-slider="${id}" aria-label="${esc(label)}"><span class="num slider-val">${Math.round(v * 100)}</span></div>`;
+      const liveryRows = () => {
+        const list = ctx.meta.liveries(), tokens = ctx.meta.liveryTokens(), active = list.find(l => l.active) || list[0];
+        const cat = ctx.store.catalog(), priceOf = sku => { const i = cat.find(x => x.sku === sku); return i && i.priceLabel ? i.priceLabel : 'Store'; };
+        const FAMILY_DOT = 'conic-gradient(var(--ice), var(--gold), var(--amber), var(--sage), var(--rose), var(--ice))';
+        let h2 = `<div class="livery-preview">${liveryPreviewSvg(active)}<span class="livery-preview-lbl">${esc(active.name)}${active.desc ? ` ${MID} ${esc(active.desc)}` : ''}</span></div>`;
+        h2 += `<div class="livery-grid">` + list.map(l => {
+          const state = l.active ? `<span class="chip good" data-shape="up">Active</span>` : l.owned ? `<span class="chip ink">Owned</span>` : l.id === 'founder' ? `<span class="chip rose">${esc(priceOf('founder'))}</span>` : tokens > 0 ? `<span class="chip ivory">Token</span>` : `<span class="chip rose">${esc(priceOf('liveries'))}</span>`;
+          const hint = l.active ? `${l.name}: on your station now` : l.owned ? `Apply ${l.name}` : l.id === 'founder' ? `${l.name} comes with the Founder's Charter in the Store` : tokens > 0 ? `Spend a livery token on ${l.name}` : `${l.name}: in the Sector Liveries set (Store), or for a livery token`;
+          return `<button type="button" class="livery-card${l.active ? ' active' : ''}${l.owned ? ' owned' : ' locked'}" data-livery="${esc(l.id)}" style="--c1:${esc((!l.strip || l.strip === 'family') ? FAMILY_DOT : l.strip)};--c2:${esc(l.seam || '#8FD3E8')};--c3:${esc(l.rim || '#F3E9D6')}" title="${esc(hint)}" aria-label="${esc(hint)}" aria-pressed="${l.active}"><i class="spine"></i><span class="livery-dots"><i class="d1"></i><i class="d2"></i><i class="d3"></i></span><span class="livery-main"><span class="livery-name">${esc(l.name)}</span>${state}</span></button>`;
+        }).join('') + '</div>';
+        h2 += `<p class="fine">${icon('ship', 12)} ${tokens ? `${tokens} livery token${tokens === 1 ? '' : 's'} to spend: pick any sector livery.` : "Day 7 of the daily streak grants a livery token. The Store sells the six sector liveries as a set, and the Founder's Charter."}</p>`;
+        return h2;
+      };
       const seg = (id, val, opts, label) => `<div class="setting"><div class="setting-main"><span class="setting-lbl">${esc(label)}</span></div><div class="seg">${opts.map(([v, l]) => `<button type="button" data-seg="${id}" data-v="${v}" class="${String(val) === String(v) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div></div>`;
       // A2.1 account shelf: not connected / signed out / signed in
       const acct = ctx.account, ast = acct ? acct.state() : null;
@@ -927,6 +957,9 @@ const Panels = {
         h += `<div class="acct signed"><div class="acct-main"><span class="setting-lbl">${icon('user', 14)} ${esc(ast.user ? ast.user.email : '')}</span><span class="setting-sub">${esc(line)} ${MID} last synced ${esc(when)}</span></div></div>` +
           `<div class="actions"><button type="button" class="btn" data-act="sync">${icon('reroll', 14)}<span>Sync now</span></button><button type="button" class="btn ghost" data-act="signout">${icon('cloud', 14)}<span>Sign out</span></button><button type="button" class="btn ghost danger" data-act="delete-account">${icon('scrap', 14)}<span>Delete account</span></button></div>`;
       }
+      // A5 livery shelf: the preview strip, swatch cards (click applies, spends a token, or points at the Store) and the token hint
+      h += shelf('Livery', esc(ctx.meta.livery().name), { hue: 'var(--rose)', attrs: ' id="livery-shelf"' });
+      h += liveryRows();
       h += shelf('Sound', null, { hue: 'var(--ice)' });
       h += sw('sfx', snd.sfx, 'Interface sounds', 'Clicks, collects, chimes') + slider('sfxVol', snd.sfxVol, 'Effects volume');
       h += sw('music', snd.music, 'Bridge ambience', 'A low hum and a slow pad') + slider('musicVol', snd.musicVol, 'Ambience volume');
@@ -967,6 +1000,8 @@ const Panels = {
       }
       const seg = e.target.closest('[data-seg]');
       if (seg) { ctx.ui.setSetting(seg.dataset.seg, seg.dataset.v); ctx.sound.click(); sig.st = ''; render(); return; }
+      const lc = e.target.closest('[data-livery]');
+      if (lc) { ctx.ui.chooseLivery(lc.dataset.livery); sig.st = ''; render(); return; }
       const b = e.target.closest('button[data-act]'); if (!b) return;
       const io = host.querySelector('#save-io'), act = b.dataset.act;
       if (act === 'export') { const txt = ctx.meta.exportSave(); if (io) { io.value = txt || ''; io.focus(); io.select(); } ctx.ui.toast(txt ? 'Profile exported. Copy the text to keep it safe.' : 'Nothing to export yet', txt ? 'good' : 'warn'); }

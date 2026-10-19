@@ -617,3 +617,34 @@ Phones (portrait, 360 to 430 px wide, Safari and Chrome) get the same bridge fol
 - **Title**: the wordmark at `clamp(30px, 9.4vw, 44px)`, the account lozenge under the subtitle, the resume card in one column with a full-width thumbnail, Commission full width. Fields are 16 px so iOS does not zoom.
 - **World**: `touch-action: none` on the canvas, `manipulation` on the glass. Pointer-event pinch, drag and tap are unchanged; a touch tap (3.8, `input.js` only) probes a 16 px ring around the point for a bank chip and, on an empty cell, snaps to a scaffold whose centre is within 22 px, so chips and scaffolds are 32 px targets at any zoom.
 - **Gates**: `tools/hud2-shots.js` shoots every panel, the sheets, the overlays, the title and the tour at 390x844 and a subset at 430x932, then checks nothing is wider than the viewport, no panel body scrolls sideways and lists controls under 32 px; `tools/phone-touch.js` drives the real game with puppeteer touch emulation (commission, the tour's first steps, placing from a peeking sheet, drag and pinch, a chip tap 14 px off centre, the menu and the daily claim). Zero console errors in both.
+
+---
+
+## Addendum A5 — station liveries (2026-10-19)
+
+The two cosmetic skus render. A livery re-tints the plates' signal strips, the truss seams and the hub's rim, rings and core; the plate silhouettes keep their family hue (DESIGN.md 2.2), so a dressed station still reads module by module. Catalogue prices and pacing are unchanged. Where this addendum and the sections above disagree, this addendum wins.
+
+### A5.1 Contract changes
+
+- 0.2 globals from `data2.js`: `LIVERIES` (array), `LIVERY_IDS`, `liveryDef(id)`. 0.6 bus: `livery {id, name, was}`, emitted by `Meta.setLivery`; the engine rebakes on it. 0.3 addition: `Engine.livery` (the active definition, read-only).
+- `Meta.profile.settings.livery` (an id, default `'default'`); `profile.entitlements.redeemed` (sector liveries bought with a token); a `{ sku: 'livery_token', livery }` record in `entitlements.history` per redemption.
+
+### A5.2 Data (`data2.js`)
+
+`LIVERIES = [{ id, name, desc, sector?, strip, seam, rim, hubCore }]` in this order: `default` (strip `'family'`: each module's family hue; ice seam; ivory rim and core), the six sector liveries (`sable kessler thessaly marrow oros keth`, hues from their `SECTORS[id].theme`), `founder` (ivory strip, amber seam, amber-hi rim, lamp core). Every colour but `'family'` is a hex from the palette or the sector themes.
+
+### A5.3 Meta
+
+`Meta.liveries() -> [{ id, name, desc, sector, strip, seam, rim, hubCore, owned, active, source }]` where `source` is `'default' | 'sector' | 'store' | 'token'` (a sector livery is `'sector'` while unowned, `'store'` through the `liveries` sku, `'token'` through a token; founder is always `'store'`). `Meta.livery()` is the active definition (an unowned saved choice, say an imported profile, falls back to default). `Meta.ownsLivery(id)`: `default` always; a sector livery with the `liveries` entitlement, when listed in `entitlements.liveries`, or when redeemed; `founder` with the `founder` entitlement. `Meta.liveryTokens()`. `Meta.setLivery(id) -> { ok, why?, changed }` validates ownership, saves and emits `livery`. `Meta.redeemLiveryToken(id) -> { ok, why?, left }` spends one day-7 token on an unowned sector livery (never founder or default), records it and emits `change`.
+
+### A5.4 Engine (`world.js`)
+
+Strip, seam, rim and core colours are read from the active livery at bake time: the plate texture key carries the livery id, so a change rebakes each plate once and switching back hits the cache; the truss graphics redraw once (seam and end caps in the seam colour); the hub's hero glow and lamps take `hubCore`; nothing is tinted per frame. The id is `Meta.livery().id` when a profile exists, otherwise the id pinned by the last `livery` event (the harness). `Engine.thumbnail` draws the hub in the livery rim and, for a custom livery, a strip bar on each plate.
+
+### A5.5 HUD
+
+Settings gets a **Livery** shelf (rose, after Account, `#livery-shelf`): a preview strip (hub, trusses, three plates in the livery's colours, family hues on the silhouettes) and eight swatch cards, each with three dots (strip, seam, hub rim), the name and a state chip (Active `.good` · Owned `.ink` · Token `.ivory` · the price `.rose`). A click applies an owned livery (`setLivery`), asks to spend a token on an unowned sector livery when one is held (`redeemLiveryToken` then `setLivery`), or toasts the way to the Store. The Store rows for `liveries` and `founder` are purchasable again; an owned cosmetic row carries a **Choose** link to the shelf; a cosmetic purchase toasts "Choose your livery in Settings" with a Choose action. The title's resume card and the Station overview's Telemetry show the active livery's name.
+
+### A5.6 Gates
+
+`node play/dev/sim-test.js` section 17 (definitions, ownership, selection, tokens, persistence); `node tools/engine-shots.js <base> <out> liveries` (one shot per livery on the staged station at zoom 1.6, plus the bus-event route); `node tools/hud2-shots.js <base> <out> liver` (the shelf, the token hint, the store rows, the title card); `node tools/journey.js <base> <out>` (the integrated journey in the real game: a fresh profile to a dressed station through the token, the sandbox store, Settings and a reload, with zero console errors).

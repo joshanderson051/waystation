@@ -7,8 +7,10 @@
 //
 // Additions beyond 0.3 (marked): Engine.emit (used by fx for
 // 'fx-arrive'), Engine.perf.setTier(t|null) (harness / settings
-// override), Engine.ready, the 'fx-arrive' event, and the A1.2
-// 'plot-click' {r, c, ring} event for unclaimed cells.
+// override), Engine.ready, the 'fx-arrive' event, the A1.2
+// 'plot-click' {r, c, ring} event for unclaimed cells, and Engine.livery
+// (A5: the active livery definition; the engine rebakes on the Sim bus
+// event `livery {id}`).
 // Classic script: exports the global `Engine`.
 // ============================================================
 'use strict';
@@ -70,6 +72,7 @@ const Engine = (() => {
     Sim.on('hopper', d => EngineWorld.onHopper(d));
     Sim.on('plot', d => EngineWorld.onPlot(d));            // A1.2: {state:'start'|'done'|'skip', ring, bounds}
     Sim.on('sector', d => { if (d && d.state === 'switched') { const s = Sim.state; setSector((s && s.sector) || d.id || 'home', s); } });
+    Sim.on('livery', d => EngineWorld.setLivery(d && d.id));   // A5: Meta.setLivery (or the harness) changed the livery: rebake strips, seams, hub
   }
 
   // ---------------------------------------------------------------- facade
@@ -112,5 +115,6 @@ const Engine = (() => {
     perf,
     get ready() { return S.ready; },                      // addition
     get sector() { return S.sector; },                    // addition
+    get livery() { return EngineWorld.livery; },          // addition (A5): the active livery definition
   };
 })();

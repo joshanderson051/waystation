@@ -70,6 +70,11 @@ const SHOTS = [
   ['tour-fresh', [1440, 900], async () => {}, 2200, 'fresh=1'],
   ['tour-fresh-dock', [1440, 900], click('[data-h="tour:4"]'), 700, 'fresh=1'],
   ...Array.from({ length: 13 }, (_, i) => [`tour-${i + 1}`, [1440, 900], click(`[data-h="tour:${i + 1}"]`), 700]),
+  // A5 liveries: the Settings shelf (owned set, sable active), the token hint, the store rows and the title card
+  ['settings-livery', [1440, 900], async p => { await click('[data-h="livery:own"]')(p); await click('[data-h="livery:sable"]')(p); await click('[data-h="panel:settings"]')(p); }, 700],
+  ['settings-livery-token', [1440, 900], async p => { await click('[data-h="livery:token"]')(p); await click('[data-h="panel:settings"]')(p); }, 700],
+  ['store-liveries', [1440, 900], async p => { await click('[data-h="panel:store"]')(p); await frames(p, 300); await p.$eval('#panel .panel-body', el => { el.scrollTop = el.scrollHeight; }); }, 700],
+  ['title-livery', [1440, 900], async p => { await click('[data-h="livery:own"]')(p); await click('[data-h="livery:founder"]')(p); await click('[data-h="title"]')(p); }, 1800],
   ['reduced-build', [1440, 900], async p => { await click('[data-h="motion"]')(p); await click('[data-h="panel:build"]')(p); }, 400],
   ['1180-bridge', [1180, 700], async () => {}, 800],
   ['1180-build', [1180, 700], click('[data-h="panel:build"]'), 700],

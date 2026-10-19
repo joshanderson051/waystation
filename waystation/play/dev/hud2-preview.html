@@ -113,6 +113,8 @@
   <div class="row"><button data-h="panel:achievements">Achievements tab</button><button data-h="ev:achievement">complete event</button><button data-h="cele:achievement">cele achievement</button></div>
   <h4>Account</h4>
   <div class="row"><button data-h="acct:portal-login">portal sign in</button><button data-h="acct:portal-signup">create account</button><button data-h="acct:portal-recover">recover</button><button data-h="acct:portal-error">inline error</button><button data-h="acct:portal-busy">spinner</button><button data-h="acct:recovery">recovery sheet</button><button data-h="acct:chooser">chooser</button><button data-h="acct:signed-in">signed in</button><button data-h="acct:syncing">syncing</button><button data-h="acct:offline">offline</button><button data-h="acct:error">error</button><button data-h="acct:signed-out">signed out</button><button data-h="acct:unavailable">toggle unavailable</button></div>
+  <h4>Livery</h4>
+  <div class="row"><button data-h="livery:own">own them all</button><button data-h="livery:token">+1 token</button><button data-h="livery:sable">apply sable</button><button data-h="livery:founder">apply founder</button><button data-h="livery:default">apply default</button></div>
   <h4>Tour</h4>
   <div class="row" id="h-tour"><button data-h="tour:start">start</button><button data-h="tour:next">next</button><button data-h="tour:skip">skip</button></div>
   <h4>State</h4>
@@ -249,7 +251,7 @@ const Meta = {
     this.profile = {
       v: 2, playerId: 'harness-player', createdAt: NOW0 - 9 * 86400e3, lastSeenAt: NOW0 - 3.2 * 3600e3, am: 42, rank: { xp: 1240 }, activeSector: 'home',
       unlocked: ['home', 'sable'], sectors: {}, collection: { found: {} }, missions: { progress: {}, claimed: {} }, daily: { streak: 4, dayIndex: 3, claimedAt: 0 },
-      expeditions: { list: [], charts: { home: 3, sable: 1, kessler: 0, thessaly: 2 } }, entitlements: { history: [] }, settings: { sfx: true, music: true, sfxVol: .8, musicVol: .6, motion: 'auto', perf: 'auto' },
+      expeditions: { list: [], charts: { home: 3, sable: 1, kessler: 0, thessaly: 2 } }, entitlements: { history: [], liveries: [], tokens: { livery: 0 }, redeemed: [] }, settings: { sfx: true, music: true, sfxVol: .8, musicVol: .6, motion: 'auto', perf: 'auto', livery: 'default' },
       stats: { collects: 14, transmissions: 3 },
     };
     this._claimable = new Set(['c_collect', 't_fuel']); this._done = new Set(['c_dock', 'c_warehouse', 'c_solar']);
@@ -291,6 +293,14 @@ const Meta = {
   daily() { const d = this.profile.daily; return { streak: d.streak, dayIndex: d.dayIndex, claimable: !d.claimedAt, rewards: DAILY_REWARDS, repairable: false, repairAM: 5 }; },
   collection() { const f = this.profile.collection.found; const map = it => Object.assign({}, it, { found: !!f[it.id], count: f[it.id] || 0 }); return { ships: COLLECTION.ships.map(map), species: COLLECTION.species.map(map), artifacts: COLLECTION.artifacts.map(map) }; },
   canCollectAll() { return this.rank.level >= 3; },
+  // ---- A5 liveries (ownership is toggled by the harness buttons; the real Meta reads entitlements)
+  _liveryOwned: new Set(),
+  ownsLivery(id) { return id === 'default' || this._liveryOwned.has(id); },
+  liveryTokens() { return this.profile.entitlements.tokens.livery || 0; },
+  livery() { const id = this.profile.settings.livery; return LIVERIES.find(l => l.id === (this.ownsLivery(id) ? id : 'default')); },
+  liveries() { const a = this.livery().id, E = this.profile.entitlements; return LIVERIES.map(d => Object.assign({}, d, { owned: this.ownsLivery(d.id), active: d.id === a, source: d.id === 'default' ? 'default' : d.id === 'founder' ? 'store' : E.redeemed.includes(d.id) ? 'token' : this.ownsLivery(d.id) ? 'store' : 'sector' })); },
+  setLivery(id) { if (!this.ownsLivery(id)) return { ok: false, why: 'Not owned' }; const was = this.profile.settings.livery; this.profile.settings.livery = id; hlog('Meta.setLivery', id); Sim.emit('livery', { id, was }); return { ok: true, id, changed: was !== id }; },
+  redeemLiveryToken(id) { const E = this.profile.entitlements; if (!E.tokens.livery) return { ok: false, why: 'No livery token' }; if (this.ownsLivery(id)) return { ok: false, why: 'Already owned' }; E.tokens.livery--; this._liveryOwned.add(id); E.redeemed.push(id); hlog('Meta.redeemLiveryToken', id); Sim.emit('change'); return { ok: true, id, left: E.tokens.livery }; },
   // ---- A1.2 territory (rings for the 15x9 home grid around the hub at 4,7)
   _plot: { ring: 1, clearing: null, tight: false, rings: [{ r0: 2, c0: 4, r1: 6, c1: 10 }, { r0: 1, c0: 3, r1: 7, c1: 11 }, { r0: 1, c0: 2, r1: 7, c1: 12 }, { r0: 0, c0: 1, r1: 8, c1: 13 }, { r0: 0, c0: 0, r1: 8, c1: 14 }] },
   _plotBounds() { return this._plot.rings[this._plot.ring]; },
@@ -602,6 +612,12 @@ const Account = {
     'acct:signed-out': () => { Object.assign(Account.state, { signedIn: false, user: null, cloud: null, syncing: false, lastError: null }); UI._acctOffline = false; UI.refresh(); },
     'acct:unavailable': () => { Account.available = !Account.available; Account.state.available = Account.available; UI.refresh(); },
     'tour:start': () => Tutorial.start({ replay: true }), 'tour:next': () => Tutorial.next(), 'tour:skip': () => Tutorial.skip(),
+    'livery:own': () => { for (const l of LIVERIES) if (l.id !== 'default') Meta._liveryOwned.add(l.id); UI.refresh(); },
+    'livery:token': () => { Meta.profile.entitlements.tokens.livery++; UI.refresh(); },
+    'livery:sable': () => { Meta._liveryOwned.add('sable'); Meta.setLivery('sable'); UI.refresh(); },
+    'livery:founder': () => { Meta._liveryOwned.add('founder'); Meta.setLivery('founder'); UI.refresh(); },
+    'livery:default': () => { Meta.setLivery('default'); UI.refresh(); },
+    'phone:more': () => UI.openMore(), 'phone:menu': () => UI.openMenu(), 'phone:peek': () => UI.setPeek(true), 'phone:lift': () => UI.setPeek(false),
   };
   bar.addEventListener('click', e => {
     const b = e.target.closest('button[data-h]'); if (!b) return;

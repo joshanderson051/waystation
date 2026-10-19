@@ -64,6 +64,7 @@
 <div id="panel" class="glass">
   <h1>Engine preview</h1>
   <div class="sec">Sector</div><div class="row" id="sectors"></div>
+  <div class="sec">Livery</div><div class="row" id="liveries"></div>
   <div class="sec">Effects</div><div class="row" id="fx"></div>
   <div class="sec">Perf tier</div><div class="row" id="tiers"></div>
   <div class="sec">Placing</div><div class="row" id="placing"></div>
@@ -216,6 +217,23 @@ function mark(host, el) { for (const b of host.children) b.classList.toggle('on'
 const sectorHost = $('#sectors');
 for (const id of SECTOR_IDS) btn(sectorHost, id, b => { Sim.state.sector = id; Engine.setSector(id, Sim.state); mark(sectorHost, b); log('sector ' + id); });
 
+// A5 liveries: pick one or cycle; the engine rebakes on the `livery` bus event (Meta.setLivery emits it in the game)
+const liveryHost = $('#liveries');
+const LIVERY_LIST = (typeof LIVERIES !== 'undefined' && LIVERIES.length) ? LIVERIES : [{ id: 'default', name: 'Standard' }];
+function setLivery(id) {
+  if (!LIVERY_LIST.some(l => l.id === id)) { log('unknown livery ' + id); return; }
+  // stage ownership the way the store would (Sim.newGame created a real profile), then choose it; Meta.livery() validates ownership
+  if (Meta.profile && Meta.profile.settings) {
+    const E = Meta.profile.entitlements; if (E && id !== 'default' && !E.liveries.includes(id)) E.liveries.push(id);
+    Meta.profile.settings.livery = id;
+  }
+  Sim.emit('livery', { id });
+  mark(liveryHost, [...liveryHost.children].find(b => b.dataset.id === id) || null);
+  log('livery ' + id + (Engine.livery ? ' (' + Engine.livery.name + ')' : ''));
+}
+for (const l of LIVERY_LIST) { const b = btn(liveryHost, l.id, () => setLivery(l.id)); b.dataset.id = l.id; }
+btn(liveryHost, 'cycle', () => { const ids = LIVERY_LIST.map(l => l.id), cur = ids.indexOf(Engine.livery ? Engine.livery.id : 'default'); setLivery(ids[(cur + 1) % ids.length]); });
+
 const credits = $('#credits'), anchor = $('#anchor-credits');
 function fmtC(n) { return Math.round(n).toLocaleString('en-US'); }
 function readyCell() {
@@ -304,7 +322,8 @@ Sim.on('toast', d => log('toast: ' + d.msg));
   if (q.get('drift') === '1') { drifting = true; Engine.camera.drift(true); }
   if (q.get('select')) { const [r, c] = q.get('select').split(',').map(Number); Engine.selected = { r, c }; }
   if (q.get('placing')) Engine.placing = q.get('placing');
-  window.harness = { fire: k => FXB[k] && FXB[k](), Meta, Stage, Plot, PLAN };
+  if (q.get('livery')) setLivery(q.get('livery')); else mark(liveryHost, liveryHost.firstChild);
+  window.harness = { fire: k => FXB[k] && FXB[k](), Meta, Stage, Plot, PLAN, livery: setLivery };
   // loop: Sim.tick each frame so ships fly and dock
   let last = performance.now();
   const readout = $('#readout');

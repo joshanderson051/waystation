@@ -49,6 +49,25 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       await shot('theme-' + id);
     }
   }
+  if (want('liveries')) {
+    // A5: every livery on the staged home station at zoom 1.6 around the hub; the strips, truss seams and hub rim change, the plate silhouettes keep their family hue
+    await open('panel=0');
+    const ids = await page.evaluate(() => (typeof LIVERIES !== 'undefined' ? LIVERIES : [{ id: 'default' }]).map(l => l.id));
+    for (const id of ids) {
+      await open('sector=home&panel=0&livery=' + id);
+      await page.evaluate(() => Engine.camera.focusCell(Sim.state.hub.r, Sim.state.hub.c, { zoom: 1.6, ms: 0 }));
+      await sleep(2500);
+      const got = await page.evaluate(() => ({ id: Engine.livery && Engine.livery.id, bakes: EngineStage.app ? 1 : 0 }));
+      if (got.id !== id) errs.push('LIVERY ' + id + ' not applied (engine says ' + got.id + ')');
+      await shot('livery-' + id);
+    }
+    // the bus event route (what Meta.setLivery emits) and the cost of switching back to a cached bake
+    await open('sector=home&panel=0');
+    await sleep(1500);
+    const sw = await page.evaluate(() => { const t0 = performance.now(); harness.livery('marrow'); const a = Engine.livery.id; harness.livery('default'); return { a, b: Engine.livery.id, ms: +(performance.now() - t0).toFixed(2) }; });
+    console.log('livery event route', JSON.stringify(sw));
+    if (sw.a !== 'marrow' || sw.b !== 'default') errs.push('LIVERY bus event did not switch the engine livery');
+  }
   if (want('zoom')) {
     await open('sector=home&zoom=2&select=4,10&panel=0');
     await sleep(2500);

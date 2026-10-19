@@ -60,6 +60,8 @@ node serve.js --port 8788 --base waystation
 - **Missions** (J), **achievements** (bronze, silver, gold), **daily rewards**, **Commander rank** and the **Registry** (R) give you reasons to come back. There is no free speed-up: the game runs at one pace and Antimatter is the only accelerator.
 - **Antimatter** is the premium currency (violet). Earned by missions, dailies and expeditions; sold in the
   **Store**, which runs in sandbox (free, local) until Stripe is connected.
+- **Liveries**: Settings > Livery dresses the station (signal strips, truss seams, the hub) in one of eight liveries: Standard,
+  the six sector liveries (the Store set, or one at a time for the day-7 livery token) and the Founder's Ivory.
 
 Keys: Space pause, B Build, S Station, M Market, F Fleet, E Expeditions, G Map, J Missions,
 R Registry, Esc close or cancel, arrows and +/- camera, 0 fit, F focus, ? keys.

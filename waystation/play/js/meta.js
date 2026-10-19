@@ -34,8 +34,8 @@ const Meta = {
       daily: { streak: 0, lastClaimAt: 0, lastClaimKey: null },
       expeditions: { list: [], nextId: 1, charts: {}, runs: {} },
       achievements: { completed: {}, claimed: {} },           // A1.3: id -> tiers reached / tiers claimed (0..3)
-      entitlements: { owned: {}, history: [], liveries: [], titles: [], tokens: { livery: 0 }, sectorPass: false },
-      settings: { sound: true, music: true, sfxVolume: 0.8, musicVolume: 0.5, reducedMotion: null, perf: null },
+      entitlements: { owned: {}, history: [], liveries: [], titles: [], tokens: { livery: 0 }, sectorPass: false, redeemed: [] },   // redeemed: sector liveries bought with a livery token (A5)
+      settings: { sound: true, music: true, sfxVolume: 0.8, musicVolume: 0.5, reducedMotion: null, perf: null, livery: 'default' },
       stats: { collects: 0, collectedCredits: 0, transmissions: 0, expeditionsLaunched: 0, expeditionsClaimed: 0, discoveries: 0,
         buildsPlaced: 0, buildsDone: 0, upgrades: 0, skips: 0, amEarned: 0, amSpent: 0, amBought: 0, convoyServed: 0, servedTotal: 0,
         instantBuilds: 0, sectorsUnlocked: 0, dailyClaims: 0, missionsClaimed: 0,
@@ -62,6 +62,8 @@ const Meta = {
     p.collection.found ||= {}; p.collection.sets ||= {};
     p.expeditions.list ||= []; p.expeditions.charts ||= {}; p.expeditions.runs ||= {};
     p.entitlements.history ||= []; p.entitlements.owned ||= {}; p.entitlements.liveries ||= []; p.entitlements.titles ||= []; p.entitlements.tokens ||= { livery: 0 };
+    p.entitlements.redeemed ||= [];
+    if (typeof p.settings.livery !== 'string' || !p.settings.livery) p.settings.livery = 'default';
     for (const id in p.sectors) { const st = Sim.sanitize(p.sectors[id]); if (!st) delete p.sectors[id]; else st.sector = SECTORS[id] ? id : st.sector; }
     if (!p.sectors[p.activeSector]) p.activeSector = p.sectors.home ? 'home' : Object.keys(p.sectors)[0];
     if (!p.activeSector) { p.sectors.home = Sim.makeState('home'); p.activeSector = 'home'; }
@@ -1068,6 +1070,65 @@ const Meta = {
     if (v.unlockAll) this.unlockAllSectors('sector pass');
     this.grantEntitlement(sku, Object.assign({ kind: v.kind, granted: v }, v.cosmetic || {}, payload || {}));
     return v;
+  },
+
+  // ---------------------------------------------------------- A5 station liveries: ownership, the active choice, token redemption
+  _liveryDefs() { return (typeof LIVERIES !== 'undefined' && Array.isArray(LIVERIES) && LIVERIES.length) ? LIVERIES : [{ id: 'default', name: 'Standard', strip: 'family', seam: '#8FD3E8', rim: '#F3E9D6', hubCore: '#F3E9D6' }]; },
+  liveryDef(id) { return this._liveryDefs().find(l => l.id === id) || null; },
+  // 'default' is everyone's; sector liveries come with the 'liveries' sku or a redeemed token; founder with the 'founder' sku
+  ownsLivery(id) {
+    if (id === 'default') return true;
+    const p = this.profile, d = this.liveryDef(id); if (!p || !d) return false;
+    const E = p.entitlements;
+    if (E.liveries.includes(id)) return true;
+    if (id === 'founder') return this.hasEntitlement('founder');
+    if (d.sector) return this.hasEntitlement('liveries');
+    return false;
+  },
+  liveryTokens() { const p = this.profile; return p ? Math.max(0, (p.entitlements.tokens && p.entitlements.tokens.livery) | 0) : 0; },
+  // the active livery definition; an unowned choice (an imported profile, a refunded sku) falls back to 'default'
+  livery() {
+    const p = this.profile, id = p && p.settings ? p.settings.livery : 'default';
+    return (id && this.ownsLivery(id) && this.liveryDef(id)) || this.liveryDef('default') || this._liveryDefs()[0];
+  },
+  // -> [{ id, name, desc, sector, strip, seam, rim, hubCore, owned, active, source: 'default'|'sector'|'store'|'token' }]
+  // source says how the livery is (or would be) obtained: a sector livery owned through the sku is 'store', through a token 'token', unowned 'sector'
+  liveries() {
+    const p = this.profile, active = this.livery().id, E = p ? p.entitlements : null;
+    return this._liveryDefs().map(d => {
+      const owned = this.ownsLivery(d.id);
+      let source = 'default';
+      if (d.id === 'founder') source = 'store';
+      else if (d.sector) source = E && E.redeemed.includes(d.id) ? 'token' : owned ? 'store' : 'sector';
+      return { id: d.id, name: d.name, desc: d.desc || '', sector: d.sector || null, strip: d.strip, seam: d.seam, rim: d.rim, hubCore: d.hubCore, owned, active: d.id === active, source };
+    });
+  },
+  // validates ownership, saves the setting, emits `livery {id, name, was}` (the engine rebakes on it)
+  setLivery(id) {
+    const p = this.profile; if (!p) return { ok: false, why: 'No profile' };
+    const d = this.liveryDef(id); if (!d) return { ok: false, why: 'Unknown livery' };
+    if (!this.ownsLivery(id)) return { ok: false, why: d.sector ? 'Needs the Sector Liveries or a livery token' : "Needs the Founder's Charter" };
+    const was = p.settings.livery || 'default';
+    p.settings.livery = id;
+    this.save();
+    Sim.emit('livery', { id, name: d.name, was });
+    return { ok: true, id, changed: was !== id };
+  },
+  // spends one livery token (day 7 of the daily streak) on a sector livery the player does not own yet
+  redeemLiveryToken(id) {
+    const p = this.profile; if (!p) return { ok: false, why: 'No profile' };
+    const d = this.liveryDef(id);
+    if (!d || !d.sector) return { ok: false, why: 'A livery token buys one of the six sector liveries' };
+    if (this.ownsLivery(id)) return { ok: false, why: `${d.name} is already yours` };
+    const E = p.entitlements, have = this.liveryTokens();
+    if (have < 1) return { ok: false, why: 'No livery token. Day 7 of the daily streak grants one.' };
+    E.tokens.livery = have - 1;
+    E.liveries.push(id); E.redeemed.push(id);
+    E.history.push({ sku: 'livery_token', kind: 'token', livery: id, at: this.now() });
+    this._dirty();
+    Sim.emit('change');
+    this.save();
+    return { ok: true, id, name: d.name, left: E.tokens.livery };
   },
 
   // ---------------------------------------------------------- read model helpers
