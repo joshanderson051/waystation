@@ -12,6 +12,13 @@ Until this backend exists, the game runs in **sandbox mode**: the Store panel wo
 and purchases are stored in the player's browser only. The game decides which mode it is in from one line
 in `waystation/play/index.html` (step 9).
 
+> **Status (19 October 2026): connected, running in Stripe test mode.** Steps 0 to 9 are done. The worker is
+> deployed at <https://waystation-store.waystation-store-worker.workers.dev> (KV namespace
+> `d3f64a0e3dda4eaa83808326a71471f2`), the nine test-mode products and prices exist in Stripe, the webhook
+> destination `we_1USIelFL8R957E3xfYBBXiGp` is registered, and the game's `<meta>` tag points at the worker.
+> A $1.99 test purchase with the 4242 card was claimed by the game, recorded in KV and delivered by the
+> webhook. Until step 10 (go live) is done, the Store only accepts Stripe's test cards and charges nothing.
+
 ---
 
 ## What you get
@@ -60,31 +67,34 @@ npm test
 
 ## 1. Create the nine products in Stripe (test mode)
 
-1. Open <https://dashboard.stripe.com> and make sure the **Test mode** switch at the top right is **on**
-   (the page shows an orange "TEST MODE" banner).
-2. Go to **Product catalog** (left menu) and click **+ Add product**. For each row below:
-   - **Name**: as in the table (the player sees this on the Stripe page).
-   - **Pricing model**: One-off (single payment). **Price**: as in the table, currency USD.
-   - Click **Save product**. On the product page copy the **Price ID** (looks like `price_1Pxxxxxxxxxxxxxx`)
-     and write it next to the sku in the table.
+1. Open <https://dashboard.stripe.com> and make sure you are in test mode. Stripe now calls this a
+   **Sandbox**: the top-left corner says "Sandbox" and a banner says "You're testing in a sandbox". If you
+   see your real business name there instead, use the switch at the top right to go back to the sandbox.
+2. Go to **Product catalog** (left menu) and click **Create product**. For each row below:
+   - **Name** and **Description**: as in the table (the player sees them on the Stripe page).
+   - **Pricing**: click **One-off** (not Recurring). **Amount**: as in the table, currency USD.
+   - Click **Add product**. Then open the product from the list: the **Price ID** (`price_1…`) is shown in
+     the price row and in the Events list at the bottom of the product page. Write it next to the sku.
 
-| sku | Product name | Price | Price ID (write it here) |
-|---|---|---|---|
-| `am_50` | 50 Antimatter | $1.99 | |
-| `am_140` | 140 Antimatter | $4.99 | |
-| `am_320` | 320 Antimatter | $9.99 | |
-| `am_900` | 900 Antimatter | $24.99 | |
-| `credits_s` | Relief Convoy (2 hours of station income) | $1.99 | |
-| `credits_l` | Trade Fleet (8 hours of station income) | $5.99 | |
-| `sector_pass` | Sector Pass | $9.99 | |
-| `founder` | Founder's Charter | $4.99 | |
-| `liveries` | Sector Liveries | $2.99 | |
+| sku | Product name | Description | Price | Test-mode Price ID (done 19 Oct 2026) |
+|---|---|---|---|---|
+| `am_50` | Antimatter · 50 | A vial of violet light. | $1.99 | `price_1USIUoFL8R957E3xoCDdGRhG` |
+| `am_140` | Antimatter · 140 | 125 plus 15 bonus. | $4.99 | `price_1USIVmFL8R957E3xY727d9Tq` |
+| `am_320` | Antimatter · 320 | 250 plus 70 bonus. | $9.99 | `price_1USIWiFL8R957E3xHHfCmtXA` |
+| `am_900` | Antimatter · 900 | 500 plus 400 bonus. | $24.99 | `price_1USIYfFL8R957E3xPbSgJbd4` |
+| `credits_s` | Supply Run | Two hours of your total station rate, at least 10,000 credits. | $1.99 | `price_1USIYuFL8R957E3xAkDJSeI7` |
+| `credits_l` | Trade Fleet | Eight hours of your total station rate, at least 40,000 credits. | $5.99 | `price_1USIZ9FL8R957E3x6XXal2Iw` |
+| `sector_pass` | Sector Pass | Every sector unlocked for this profile. No charts needed. | $9.99 | `price_1USIZNFL8R957E3xOORrW8Kr` |
+| `founder` | Founder's Livery | Ivory-amber station strip, the title Founder, and 100 Antimatter. | $4.99 | `price_1USIZcFL8R957E3xlP8au1s6` |
+| `liveries` | Sector Liveries | The six sector liveries for your station strip. | $2.99 | `price_1USIZsFL8R957E3xfXhXhx1o` |
 
-The sku on the left is fixed: it is how the game names each item. The product names and prices are yours to
-change later in Stripe; the game shows its own catalog text and prices, so keep them matching.
+The sku on the left is fixed: it is how the game names each item. Names, descriptions and prices match
+`STORE_CATALOG` in `waystation/play/js/data2.js`; if you change them in Stripe, change them there too.
+The Price IDs above are **test-mode** ids; live mode gets its own set (step 10).
 
-3. Get your **test secret key**: **Developers → API keys** → under *Standard keys* click **Reveal test key**
-   next to **Secret key**. It starts with `sk_test_`. Keep it private; you will paste it in step 5.
+3. Get your **test secret key**: **Developers → API keys** (or open
+   <https://dashboard.stripe.com/test/apikeys>). In the **Secret key** row click the small copy icon after
+   the token; it copies the `sk_test_…` key. Keep it private; you will paste it in step 5.
 
 ---
 
@@ -108,8 +118,13 @@ In the terminal (still in `workers/store`):
 npx wrangler login
 ```
 
-A browser window asks you to allow Wrangler; click **Allow**. Then create the key-value namespace that stores
-the grants:
+A browser window asks you to allow Wrangler; click **Allow** straight away (the request expires after a
+couple of minutes; if the terminal says "Timed out waiting for authorization code", run the command again).
+
+On Windows PowerShell `npx` may be refused with "running scripts is disabled on this system". Type `npx.cmd`
+instead of `npx` in every command in this guide; nothing else changes.
+
+Then create the key-value namespace that stores the grants:
 
 ```sh
 npx wrangler kv namespace create STORE
@@ -156,14 +171,18 @@ Secrets live only in Cloudflare, never in this folder or in git. Reload `/health
 
 ## 6. Tell Stripe where the webhook is
 
-1. Stripe dashboard (test mode) → **Developers → Webhooks → + Add endpoint**.
-2. **Endpoint URL**: `https://waystation-store.<your-subdomain>.workers.dev/webhook`
-3. **Select events**: search for and tick
+1. Stripe dashboard (sandbox) → **Developers → Webhooks** (or open
+   <https://dashboard.stripe.com/test/workbench/webhooks>) → **Add destination**.
+2. Leave **Your account** and **Snapshot** selected. In the event search box type `checkout.session` and tick
    - `checkout.session.completed`
    - `checkout.session.async_payment_succeeded`
-4. Click **Add endpoint**. On the endpoint page click **Reveal** under **Signing secret**; it starts with
-   `whsec_`.
-5. Back in the terminal:
+
+   then click **Continue**.
+3. Destination type **Webhook endpoint** → **Continue**.
+4. **Endpoint URL**: `https://waystation-store.<your-subdomain>.workers.dev/webhook`. Give it a name such as
+   `waystation-store` and click **Create destination**.
+5. On the destination page, under **Signing secret**, click the eye icon to reveal the `whsec_…` value and
+   copy it. Back in the terminal:
 
    ```sh
    npx wrangler secret put STRIPE_WEBHOOK_SECRET
@@ -227,6 +246,9 @@ Change it to (keep the single quotes around the JSON and the double quotes insid
 <meta name="waystation-store" content='{"mode":"stripe","apiBase":"https://waystation-store.<your-subdomain>.workers.dev"}'>
 ```
 
+Also update the sentence under **Antimatter** on the landing page (`waystation/index.html`, the
+`<p class="fine">` line) so it describes the real state of the store.
+
 Commit and push to `main`. GitHub Pages redeploys within a minute or two. The "Test mode" ribbon in the
 Store panel disappears and purchases go through Stripe. While your Stripe key is a **test** key, players
 can only pay with test cards, which is exactly what you want for a final check.
@@ -254,8 +276,11 @@ Only when you are happy with the test run:
 
 6. Deploy again: `npm run deploy`. `/health` should now say `"stripe": "live"`.
 7. Make one small real purchase yourself and refund it from the Stripe dashboard to confirm the loop.
+8. On the landing page (`waystation/index.html`) replace the "still runs in Stripe's test mode" sentence
+   under **Antimatter** with one that says purchases are real, and push.
 
 The game's `<meta>` tag does not change between test and live; only the worker's secrets and price ids do.
+Keep the test-mode products and the test webhook destination: they are what you use to try changes later.
 
 ---
 

@@ -25,8 +25,8 @@
 <meta name="twitter:title" content="Waystation">
 <meta name="twitter:description" content="A space station builder for the browser. Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate.">
 <meta name="twitter:image" content="https://joshanderson051.github.io/waystation/assets/og.jpg">
-<!-- 7.2 store configuration: sandbox until Stripe is connected -->
-<meta name="waystation-store" content='{"mode":"sandbox"}'>
+<!-- 7.2 store configuration: Stripe Checkout through the store worker (workers/store/README.md) -->
+<meta name="waystation-store" content='{"mode":"stripe","apiBase":"https://waystation-store.waystation-store-worker.workers.dev"}'>
 <meta name="waystation-admin" content="sha256:a90260040f7b17a25dc353b624dad5bddfce4b386356c92f43f3754e254014f0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

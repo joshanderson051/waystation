@@ -17,7 +17,7 @@ enabled = true                # request logs in the Cloudflare dashboard (free t
 # Create the namespace once with `npx wrangler kv namespace create STORE` and paste the id it prints.
 [[kv_namespaces]]
 binding = "STORE"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "d3f64a0e3dda4eaa83808326a71471f2"
 # For `npx wrangler dev` (local testing) create a second one with `--preview` and paste it here:
 # preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
 
@@ -30,13 +30,13 @@ ALLOWED_ORIGIN = "https://joshanderson051.github.io"
 # sku -> Stripe price id. One line per catalog item (DESIGN2.md 7.1). Test-mode prices first;
 # replace with live-mode price ids when you go live (they are different ids).
 PRICES = '''{
-  "am_50":       "price_REPLACE_am_50",
-  "am_140":      "price_REPLACE_am_140",
-  "am_320":      "price_REPLACE_am_320",
-  "am_900":      "price_REPLACE_am_900",
-  "credits_s":   "price_REPLACE_credits_s",
-  "credits_l":   "price_REPLACE_credits_l",
-  "sector_pass": "price_REPLACE_sector_pass",
-  "founder":     "price_REPLACE_founder",
-  "liveries":    "price_REPLACE_liveries"
+  "am_50":       "price_1USIUoFL8R957E3xoCDdGRhG",
+  "am_140":      "price_1USIVmFL8R957E3xY727d9Tq",
+  "am_320":      "price_1USIWiFL8R957E3xHHfCmtXA",
+  "am_900":      "price_1USIYfFL8R957E3xPbSgJbd4",
+  "credits_s":   "price_1USIYuFL8R957E3xAkDJSeI7",
+  "credits_l":   "price_1USIZ9FL8R957E3x6XXal2Iw",
+  "sector_pass": "price_1USIZNFL8R957E3xOORrW8Kr",
+  "founder":     "price_1USIZcFL8R957E3xlP8au1s6",
+  "liveries":    "price_1USIZsFL8R957E3xfXhXhx1o"
 }'''
