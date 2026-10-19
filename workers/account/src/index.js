@@ -9,6 +9,8 @@
 //   POST   /login     {email, password}                   -> {token, user}
 //   POST   /logout    (Bearer)                            -> {ok}
 //   POST   /recover   {email, recovery, newPassword}      -> {token, user, recovery}   (new phrase; older tokens revoked)
+//   POST   /forgot    {email}                             -> {ok} always (emails a reset link when the account exists)
+//   POST   /reset     {token, newPassword}                -> {token, user, recovery}   (new phrase; older tokens revoked)
 //   GET    /me        (Bearer)                            -> {user, save:{version, updatedAt, size, summary}|null}
 //   GET    /save      (Bearer)                            -> {version, updatedAt, size, summary, profile}
 //   PUT    /save      (Bearer) {profile, baseVersion}     -> {version, updatedAt, size, summary}
@@ -18,23 +20,31 @@
 //
 // Passwords and recovery phrases: PBKDF2-SHA256, 210,000 iterations, 16-byte salt, PEPPER appended to the
 // secret. Tokens: 32 random bytes base64url, stored by their SHA-256 with a sliding 30-day TTL and the
-// user's tokenGen (bumped by /recover to revoke every older token).
+// user's tokenGen (bumped by /recover and /reset to revoke every older token).
+//
+// Password reset by email: /forgot stores a single-use 32-byte token by its SHA-256 for 30 minutes and emails
+// PLAY_URL?reset=<token> through the provider in email.js; /reset trades it for a new password. The reset
+// record carries the user's tokenGen, so a reset (or a recovery) kills every older reset link as well.
 //
 // KV (binding ACCOUNTS)
-//   user:{email}        -> {id, email, pw:{salt,hash,iter}, rec:{salt,hash,iter}, tokenGen, createdAt}
-//   tok:{sha256(token)} -> {userId, email, gen, createdAt, refreshedAt}     (expirationTtl 30 days, slid on use)
-//   save:{userId}       -> {version, updatedAt, size, summary:{name, day, level, credits, am, sectors, rank}, profile}
-//   rl:{bucket}:{ip}    -> {count, resetAt}                                 (expires with the window)
+//   user:{email}          -> {id, email, pw:{salt,hash,iter}, rec:{salt,hash,iter}, tokenGen, createdAt}
+//   tok:{sha256(token)}   -> {userId, email, gen, createdAt, refreshedAt}     (expirationTtl 30 days, slid on use)
+//   reset:{sha256(token)} -> {userId, email, gen, createdAt}                  (expirationTtl 30 minutes, deleted on use)
+//   save:{userId}         -> {version, updatedAt, size, summary:{name, day, level, credits, am, sectors, rank}, profile}
+//   rl:{bucket}:{ip}      -> {count, resetAt}                                 (expires with the window)
+//   rl:forgotEmail:{email}-> {count, resetAt}                                 (the per-address limit on /forgot)
 //
 // Environment (wrangler.toml [vars] / `wrangler secret put`)
 //   ALLOWED_ORIGIN   comma-separated list of site origins allowed to call this worker
 //   PEPPER           secret; a long random string appended to every password and phrase before hashing
+//   EMAIL_PROVIDER, EMAIL_FROM, PLAY_URL and the secret EMAIL_API_KEY: see email.js
 // ============================================================
 import {
-  HttpError, LIMITS, WORDS, PBKDF2_ITER, TOKEN_BYTES, TOKEN_TTL_S, TOKEN_REFRESH_MS, SAVE_MAX_BYTES, BODY_MAX_BYTES, PASSWORD_MAX, PHRASE_WORDS, TOKEN_RE,
+  HttpError, LIMITS, WORDS, PBKDF2_ITER, TOKEN_BYTES, TOKEN_TTL_S, TOKEN_REFRESH_MS, RESET_TOKEN_TTL_S, SAVE_MAX_BYTES, BODY_MAX_BYTES, PASSWORD_MAX, PHRASE_WORDS, TOKEN_RE,
   b64u, randomBytes, decodeUtf8, utf8Length, sha256Hex, hashSecret, verifySecret, makePhrase, normalisePhrase, newId,
   readBodyBytes, requireEmail, requirePassword, summarise,
 } from './lib.js';
+import { emailConfig, resetEmail, resetLink, sendEmail, RESET_MINUTES } from './email.js';
 
 const ROUTES = {
   '/health':  { GET: health },
@@ -42,22 +52,31 @@ const ROUTES = {
   '/login':   { POST: login },
   '/logout':  { POST: logout },
   '/recover': { POST: recover },
+  '/forgot':  { POST: forgot },
+  '/reset':   { POST: reset },
   '/me':      { GET: me },
   '/save':    { GET: getSave, PUT: putSave },
   '/account': { DELETE: deleteAccount },
 };
 
 export default {
-  fetch(request, env) { return handle(request, env); },
+  fetch(request, env, ectx) {
+    return handle(request, env, { waitUntil: ectx && typeof ectx.waitUntil === 'function' ? p => ectx.waitUntil(p) : null });
+  },
 };
 
 // ---------------------------------------------------------- dispatch
-// opts.now (ms clock) is injectable for the tests; everything else comes from the request.
+// opts.now (ms clock), opts.fetch (the provider call) and opts.waitUntil (background work after the response;
+// without it the work is awaited inline) are injectable for the tests; everything else comes from the request.
 export async function handle(request, env, opts = {}) {
   const url = new URL(request.url);
   const cors = corsHeaders(request.headers.get('Origin'), env);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
-  const ctx = { now: typeof opts.now === 'function' ? opts.now : Date.now, ip: clientIp(request) };
+  const ctx = {
+    now: typeof opts.now === 'function' ? opts.now : Date.now, ip: clientIp(request),
+    fetch: typeof opts.fetch === 'function' ? opts.fetch : undefined,
+    waitUntil: typeof opts.waitUntil === 'function' ? opts.waitUntil : null,
+  };
   try {
     const path = url.pathname.replace(/\/+$/, '') || '/';
     const route = ROUTES[path];
@@ -120,9 +139,9 @@ async function readJsonBody(request) {
   return body;
 }
 
-// ---------------------------------------------------------- rate limits (A2.1): per IP, in KV
-async function rateLimit(env, ctx, bucket) {
-  const L = LIMITS[bucket], key = `rl:${bucket}:${ctx.ip}`, now = ctx.now();
+// ---------------------------------------------------------- rate limits (A2.1): per IP (or per `who`), in KV
+async function rateLimit(env, ctx, bucket, who = ctx.ip) {
+  const L = LIMITS[bucket], key = `rl:${bucket}:${who}`, now = ctx.now();
   const rec = await kv(env).get(key, 'json');
   const live = rec && rec.resetAt > now ? rec : { count: 0, resetAt: now + L.windowS * 1000 };
   live.count++;
@@ -138,6 +157,7 @@ const describeWait = s => (s >= 120 ? `${Math.ceil(s / 60)} minutes` : s >= 60 ?
 const userKey = email => `user:${email}`;
 const saveKey = userId => `save:${userId}`;
 const tokenKey = async token => `tok:${await sha256Hex(token)}`;
+const resetKey = async token => `reset:${await sha256Hex(token)}`;
 const publicUser = u => ({ id: u.id, email: u.email });
 
 async function issueToken(env, user, now) {
@@ -171,12 +191,14 @@ const saveMeta = rec => (rec ? { version: rec.version, updatedAt: rec.updatedAt,
 
 // ---------------------------------------------------------- GET /health
 async function health(request, url, env) {
+  const mail = emailConfig(env);
   return {
     data: {
       ok: true,
       service: 'waystation-account',
       kv: Boolean(env.ACCOUNTS && typeof env.ACCOUNTS.get === 'function'),
       pepper: Boolean(env.PEPPER && String(env.PEPPER).length >= 16),
+      email: { provider: mail.provider, from: mail.from, playUrl: mail.playUrl, configured: mail.configured, missing: mail.missing, resetMinutes: RESET_MINUTES },
       allowedOrigins: allowedOrigins(env),
       limits: LIMITS,
       tokenTtlDays: TOKEN_TTL_S / 86400,
@@ -243,6 +265,54 @@ async function recover(request, url, env, ctx) {
   user.tokenGen = (user.tokenGen || 1) + 1;
   user.recoveredAt = now;
   await kv(env).put(userKey(email), JSON.stringify(user));
+  const token = await issueToken(env, user, now);
+  return { data: { token, user: publicUser(user), recovery: fresh } };
+}
+
+// ---------------------------------------------------------- POST /forgot (always {ok:true}: never says whether the address has an account)
+async function forgot(request, url, env, ctx) {
+  const body = await readJsonBody(request);
+  const email = requireEmail(body.email);
+  const mail = emailConfig(env);
+  if (!mail.configured) throw new HttpError(503, 'email-not-configured', 'Password reset by email is not set up on this build yet. Use your recovery phrase instead.', { missing: mail.missing });
+  await rateLimit(env, ctx, 'forgot');
+  await rateLimit(env, ctx, 'forgotEmail', email);
+  const user = await kv(env).get(userKey(email), 'json');
+  if (user) {
+    const now = ctx.now();
+    const token = b64u(randomBytes(TOKEN_BYTES));
+    await kv(env).put(await resetKey(token), JSON.stringify({ userId: user.id, email, gen: user.tokenGen || 1, createdAt: now }), { expirationTtl: RESET_TOKEN_TTL_S });
+    const link = resetLink(mail.playUrl, token);
+    const message = resetEmail({ email, link, playUrl: mail.playUrl, minutes: RESET_MINUTES });
+    // the send runs after the response when the runtime allows it, so the answer takes the same time either way
+    const job = sendEmail(env, { to: email, ...message }, ctx.fetch).then(r => { if (!r.ok) console.error('account: reset email not sent', r.error); return r; });
+    if (ctx.waitUntil) ctx.waitUntil(job); else await job;
+  }
+  return { data: { ok: true } };
+}
+
+// ---------------------------------------------------------- POST /reset (a link from /forgot -> new password + new phrase; revokes every token)
+async function reset(request, url, env, ctx) {
+  const body = await readJsonBody(request);
+  if (typeof body.token !== 'string' || !TOKEN_RE.test(body.token)) throw new HttpError(400, 'bad-token', 'This reset link is not valid. Ask for a new one.');
+  const newPassword = requirePassword(body.newPassword, 'new password');
+  const pep = pepper(env);
+  await rateLimit(env, ctx, 'reset');
+  const key = await resetKey(body.token);
+  const store = kv(env);
+  const rec = await store.get(key, 'json');
+  const dead = new HttpError(401, 'bad-token', 'This reset link has expired or was already used. Ask for a new one.');
+  if (!rec) throw dead;
+  const user = await store.get(userKey(rec.email), 'json');
+  if (!user || user.id !== rec.userId || (user.tokenGen || 1) !== rec.gen) { await store.delete(key); throw dead; }
+  await store.delete(key);                                   // single use
+  const now = ctx.now();
+  const fresh = makePhrase();
+  user.pw = await hashSecret(newPassword, pep);
+  user.rec = await hashSecret(normalisePhrase(fresh), pep);
+  user.tokenGen = (user.tokenGen || 1) + 1;
+  user.resetAt = now;
+  await store.put(userKey(rec.email), JSON.stringify(user));
   const token = await issueToken(env, user, now);
   return { data: { token, user: publicUser(user), recovery: fresh } };
 }

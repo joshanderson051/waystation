@@ -80,7 +80,8 @@ function fakeFetch(handlers = {}) {
   return fn;
 }
 
-function load({ meta = META, storage = fakeStorage(), fetch, profile, Meta: metaOverride, gzip = false, UI, config } = {}) {
+// location: an href string gives the vm a window.location (with .search) and a recording window.history.replaceState
+function load({ meta = META, storage = fakeStorage(), fetch, profile, Meta: metaOverride, gzip = false, UI, config, location } = {}) {
   const simEvents = [];
   const Sim = { listeners: {}, on(e, f) { (this.listeners[e] ||= []).push(f); }, emit(e, d) { simEvents.push([e, d]); (this.listeners[e] || []).forEach(f => f(d)); } };
   const Meta = metaOverride === null ? undefined : metaOverride || fakeMeta(profile || makeProfile(), Sim);
@@ -102,12 +103,18 @@ function load({ meta = META, storage = fakeStorage(), fetch, profile, Meta: meta
   if (gzip) { ctx.CompressionStream = CompressionStream; ctx.Blob = Blob; }
   ctx.window = ctx;
   ctx.addEventListener = (evt, fn) => { if (evt === 'pagehide') pagehide.push(fn); };
+  const replaced = [];
+  if (location) {
+    const u = new URL(location);
+    ctx.location = { href: u.href, search: u.search, pathname: u.pathname, hash: u.hash };
+    ctx.history = { state: null, replaceState(state, title, url) { replaced.push(url); ctx.location.href = new URL(url, u.href).href; ctx.location.search = new URL(url, u.href).search; } };
+  }
   vm.createContext(ctx);
   vm.runInContext(SRC, ctx, { filename: 'account.js' });
   const Account = vm.runInContext('Account', ctx);
   if (config) Account.configure(config);
   const accountEvents = simEvents.filter(e => e[0] === 'account').map(e => e[1]);
-  return { Account, ctx, Sim, Meta, storage, simEvents, pagehide, visibility, fetch, events: () => simEvents.filter(e => e[0] === 'account').map(e => e[1]), accountEvents };
+  return { Account, ctx, Sim, Meta, storage, simEvents, pagehide, visibility, fetch, replaced, events: () => simEvents.filter(e => e[0] === 'account').map(e => e[1]), accountEvents };
 }
 const FAST = { debounceMs: 30, intervalMs: 0, graceMs: 5000 };
 
@@ -269,6 +276,76 @@ describe('client: signup and login', () => {
     same(fetch.of('DELETE /account').at(-1).body, { password: 'orbital-mechanics-42' });
     assert.equal(Account.state.signedIn, false); assert.equal(Meta.profile.cloud, null); assert.equal(storage.getItem('waystation.account'), null);
     assert.equal(events().at(-1).reason, 'deleted');
+  });
+});
+
+// ============================================================ password reset by email
+describe('client: forgot and reset', () => {
+  const RESET_TOKEN = 'r'.repeat(43);
+  const PLAY = 'https://joshanderson051.github.io/waystation/play/';
+
+  test('forgot validates the address, posts it lower-cased without auth and reports the backend plainly', async () => {
+    const answers = [{ ok: true }];
+    const fetch = fakeFetch({ 'POST /forgot': () => answers.shift() || { ok: true } });
+    const { Account, storage } = load({ fetch, storage: fakeStorage({ 'waystation.account': { token: TOKEN, email: 'x@example.com' } }), config: FAST });
+    same(await Account.forgot('nope'), { ok: false, why: 'Enter a valid email address', code: 'bad-email' });
+    same(await Account.forgot(' Commander@Example.com '), { ok: true });
+    const c = fetch.of('POST /forgot')[0];
+    same(c.body, { email: 'commander@example.com' });
+    assert.equal(c.headers.authorization, undefined, 'no bearer on a public call');
+    answers.push({ status: 429, data: { error: 'rate-limited', message: 'Too many attempts. Try again in 59 minutes.', retryAfter: 3540 } });
+    const limited = await Account.forgot('commander@example.com');
+    assert.equal(limited.ok, false); assert.equal(limited.code, 'rate-limited'); assert.equal(limited.retryAfter, 3540); assert.match(limited.why, /Too many attempts/);
+    answers.push({ status: 503, data: { error: 'email-not-configured', message: 'Password reset by email is not set up on this build yet. Use your recovery phrase instead.' } });
+    const off = await Account.forgot('commander@example.com');
+    assert.equal(off.ok, false); assert.equal(off.code, 'email-not-configured'); assert.match(off.why, /recovery phrase/);
+    assert.equal(JSON.parse(storage.getItem('waystation.account')).token, TOKEN, 'asking for a link touches no session');
+    const none = load({ meta: null }).Account;
+    same(await none.forgot('commander@example.com'), { ok: false, why: NOT, code: 'unavailable' });
+  });
+
+  test('?reset=<token> is captured at load and taken out of the address bar; other queries and hashes survive', () => {
+    const t = load({ location: `${PLAY}?lang=en&reset=${RESET_TOKEN}#top` });
+    assert.equal(t.Account.resetToken, RESET_TOKEN);
+    assert.deepEqual(t.replaced, ['/waystation/play/?lang=en#top']);
+    assert.equal(t.ctx.location.search, '?lang=en');
+    const plain = load({ location: PLAY });
+    assert.equal(plain.Account.resetToken, null); assert.deepEqual(plain.replaced, []);
+    const junk = load({ location: `${PLAY}?reset=not%20a%20token` });
+    assert.equal(junk.Account.resetToken, null, 'a malformed token is dropped');
+    assert.deepEqual(junk.replaced, ['/waystation/play/'], 'but still removed from the URL');
+    const noLoc = load();
+    assert.equal(noLoc.Account.resetToken, null);
+    t.Account.clearResetToken();
+    assert.equal(t.Account.resetToken, null);
+  });
+
+  test('reset validates, posts {token, newPassword}, signs in with the fresh token, reconciles and returns the new phrase', async () => {
+    const fetch = backend();
+    fetch.handlers['POST /reset'] = c => (c.body.token === RESET_TOKEN
+      ? { token: TOKEN + 'r', user: USER, recovery: 'anchor harbor beacon bridge cargo deck dock engine flight gate' }
+      : { status: 401, data: { error: 'bad-token', message: 'This reset link has expired or was already used. Ask for a new one.' } });
+    const t = load({ fetch, config: FAST, location: `${PLAY}?reset=${RESET_TOKEN}` });
+    const { Account, storage, events } = t;
+    same(await Account.reset('bad token', 'a-new-long-password'), { ok: false, why: 'This reset link is not valid. Ask for a new one.', code: 'bad-token' });
+    same(await Account.reset(RESET_TOKEN, 'short'), { ok: false, why: 'Use a new password of at least 10 characters', code: 'weak-password' });
+    assert.equal(fetch.of('POST /reset').length, 0, 'nothing sent until the input is right');
+    const dead = await Account.reset('x'.repeat(43), 'a-new-long-password');
+    assert.equal(dead.ok, false); assert.equal(dead.code, 'bad-token'); assert.equal(dead.status, 401);
+    assert.equal(Account.state.signedIn, false); assert.equal(Account.resetToken, RESET_TOKEN, 'a failed attempt keeps the pending token');
+    const r = await Account.reset(Account.resetToken, 'a-new-long-password');
+    assert.equal(r.ok, true); assert.equal(r.recovery.split(' ').length, 10); assert.equal(r.status, 'local'); same(r.user, USER);
+    same(fetch.of('POST /reset').at(-1).body, { token: RESET_TOKEN, newPassword: 'a-new-long-password' });
+    assert.equal(fetch.of('POST /reset').at(-1).headers.authorization, undefined);
+    assert.equal(Account.resetToken, null, 'used');
+    assert.equal(JSON.parse(storage.getItem('waystation.account')).token, TOKEN + 'r');
+    assert.equal(Account.state.signedIn, true);
+    assert.equal(fetch.of('GET /me').length, 1, 'reconciled after signing in');
+    assert.equal(fetch.of('GET /me')[0].headers.authorization, `Bearer ${TOKEN}r`);
+    assert.equal(fetch.of('PUT /save').length, 1, 'the local profile became the first cloud save');
+    assert.equal(events()[0].state, 'signed-in');
+    const none = load({ meta: null }).Account;
+    same(await none.reset(RESET_TOKEN, 'a-new-long-password'), { ok: false, why: NOT, code: 'unavailable' });
   });
 });
 

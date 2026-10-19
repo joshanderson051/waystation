@@ -1,8 +1,9 @@
 # Waystation account backend — Cloudflare Worker configuration (DESIGN2.md Addendum A2.1).
 # Follow README.md in this folder step by step; every REPLACE_… below is filled in there.
 #
-# Secrets are NEVER written in this file. Set the one secret with:
-#   npx wrangler secret put PEPPER      (a long random string; `npm run pepper` prints one)
+# Secrets are NEVER written in this file. Set the two secrets with:
+#   npx wrangler secret put PEPPER          (a long random string; `npm run pepper` prints one)
+#   npx wrangler secret put EMAIL_API_KEY   (the email provider's API key, for "Forgot your password?"; README step 2b)
 
 name = "waystation-account"
 main = "src/index.js"
@@ -25,3 +26,10 @@ id = "49c534db58b94e3190a36443908faca5"
 # The site origins allowed to call this worker, comma-separated, no trailing slash.
 # Add "http://localhost:8794" (or whatever port you serve the game on) while testing locally.
 ALLOWED_ORIGIN = "https://joshanderson051.github.io"
+# Password reset by email (README step 2b). The reset link is PLAY_URL?reset=<token>.
+# EMAIL_PROVIDER is "resend" or "brevo"; EMAIL_FROM is the sender address that provider has approved for you
+# (Resend's test sender below delivers only to the address that owns the Resend account; verify a domain there
+# and put an address on it here to reach players). The display name is always "Waystation".
+EMAIL_PROVIDER = "resend"
+EMAIL_FROM = "onboarding@resend.dev"
+PLAY_URL = "https://joshanderson051.github.io/waystation/play/"

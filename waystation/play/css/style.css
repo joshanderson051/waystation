@@ -91,7 +91,7 @@
    Title (#title)
      .title-band.glass > .sweep + .wordmark.hero + .title-sub + #title-account(.title-account > .btn[data-account=signin] | .title-signed(.title-signed-main .micro .linkish[data-account=notyou]))
    Tour (#tour, A2.2): .tour-dim .tour-ring .tour-callout.glass.cut[data-step][data-side] > .spine .tour-kicker .tour-title .tour-text .tour-wait(.pulse-dot) .tour-actions(#tour-manual .btn[data-tour=skip|next])
-   Account (A2.1): #btn-cloud.sb-btn.cloud[data-state=off|signed-out|synced|dirty|syncing|offline|error]  modal .portal[data-tab] > .portal-tabs(.ptab[data-portal=tab:*]) .pform(.pfield .pinput(.peek) .phint .psubmit .perr)
+   Account (A2.1): #btn-cloud.sb-btn.cloud[data-state=off|signed-out|synced|dirty|syncing|offline|error]  modal .portal[data-tab=login|signup|recover|forgot|sent|reset] > .portal-tabs(.ptab[data-portal=tab:*]) .pform(.pfield .pinput(.peek) .phint .portal-note .pfoot(.linkish .psubmit) .perr(.linkish))
                    sheets: recovery (.phrase-box .phrase .gate) · chooser (.save-cards > .save-card[data-save] .save-head .save-name .kv .save-when .save-pick)   Settings: #acct-shelf .acct(.signed) .acct-main .acct-off
      .commission.glass.cut > .spine #title-resume(#btn-resume.resume-card > #title-thumb .resume-main(.resume-rank #resume-name .resume-meta .resume-cta)) .title-actions(#btn-newstation)
                             #title-form(.field .name-row(#title-name #btn-reroll) #title-registry #title-confirm(.confirm-text #btn-title-back) .title-actions(#btn-commission))
@@ -1265,6 +1265,13 @@ body[data-motion="reduced"] .tour-dim, body[data-motion="reduced"] .tour-ring, b
 .save-when { color: var(--ink-2); }
 .save-pick { align-self: flex-end; margin-top: 4px; }
 .acct { display: flex; align-items: center; gap: 12px; padding: 8px 0 4px; }
+.pfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pfoot .linkish { font: 400 13px/1.4 var(--font-body); color: var(--ink-2); }
+.pfoot .linkish:hover { color: var(--ice-hi); }
+.pfoot .psubmit { margin-left: auto; }
+.portal-note { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0; font: 400 var(--fs-body-lg)/1.45 var(--font-body); color: var(--ink); }
+.portal-note .ic { color: var(--ice); flex: none; margin-top: 3px; }
+.perr .linkish { color: var(--ice); font: inherit; margin-left: 4px; }
 .acct-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .acct .setting-lbl { display: inline-flex; align-items: center; gap: 6px; }
 .acct-off .ic { color: var(--ink-3); }

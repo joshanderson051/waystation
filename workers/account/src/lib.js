@@ -14,10 +14,14 @@ export const BODY_MAX_BYTES = SAVE_MAX_BYTES + 64 * 1024;   // wrapper + slack; 
 export const PASSWORD_MIN = 10;
 export const PASSWORD_MAX = 256;
 export const PHRASE_WORDS = 10;
-export const LIMITS = {                               // A2.1: per-IP rate limits
-  signup:  { max: 10, windowS: 3600 },
-  login:   { max: 20, windowS: 600 },
-  recover: { max: 5,  windowS: 3600 },
+export const RESET_TOKEN_TTL_S = 30 * 60;             // a password-reset link is good for 30 minutes
+export const LIMITS = {                               // A2.1: per-IP rate limits (forgotEmail is per address)
+  signup:      { max: 10, windowS: 3600 },
+  login:       { max: 20, windowS: 600 },
+  recover:     { max: 5,  windowS: 3600 },
+  forgot:      { max: 3,  windowS: 3600 },
+  forgotEmail: { max: 3,  windowS: 3600 },
+  reset:       { max: 10, windowS: 3600 },
 };
 export const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,189}\.[^\s@]{2,}$/;
 export const TOKEN_RE = /^[A-Za-z0-9_-]{32,128}$/;

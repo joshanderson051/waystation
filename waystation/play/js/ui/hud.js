@@ -147,6 +147,10 @@ const AccountAdapter = {
 // 1. Constants
 // ------------------------------------------------------------
 const MID2 = GLYPH.mid;
+  forgot(email) { return this._p('forgot', [email]); },
+  reset(token, newPassword) { return this._p('reset', [token, newPassword]); },
+  resetToken() { const t = this.present() && Account.resetToken; return typeof t === 'string' && t ? t : null; },   // from ?reset=<token> in the email link
+  clearResetToken() { call(Account, 'clearResetToken', [], undefined); },
 const KEY_PANEL = { b: 'build', s: 'station', m: 'market', f: 'fleet', e: 'expeditions', g: 'map', j: 'missions', r: 'registry' };
 const regOf = name => (typeof registryOf === 'function') ? registryOf(name) : 'WS-0000';
 // achievement tiers arrive as 1..3 or as a word (TIER_WORDS comes from panels.js)
@@ -259,6 +263,8 @@ const UI = {
       Sim.on('offline', d => { if (this.started) this.showAway(d); else this._pendingOffline = d; });
       Sim.on('plot', d => this.onPlot(d));
       Sim.on('achievement', d => this.onAchievement(d));
+    // arrived through the link in a "Forgot your password?" email: the portal opens on "Set a new password" over the title
+    if (AccountAdapter.resetToken()) requestAnimationFrame(() => this.openPortal('reset'));
       Sim.on('account', d => this.onAccount(d));
     }
     // Engine events (0.3)
@@ -923,28 +929,40 @@ const UI = {
   // ---------------------------------------------------------- A2.1 accounts: portal, recovery phrase, chooser, settings verbs
   openPortal(tab) {
     this._portalTab = tab || 'login'; this._portalBusy = false;
-    Overlays.modal({ kind: 'confirm', icon: 'cloud', tag: `Cloud save ${MID2} ${AccountAdapter.available() ? 'account' : 'not connected'}`, title: 'Your account', html: '', extra: this.portalHtml(), actions: [], dismissible: true });
+    if (this._portalTab === 'reset') this._resetToken = AccountAdapter.resetToken();
+    Overlays.modal({ kind: 'confirm', icon: 'cloud', tag: `Cloud save ${MID2} ${AccountAdapter.available() ? 'account' : 'not connected'}`, title: this.portalTitle(), html: '', extra: this.portalHtml(), actions: [], dismissible: true });
     const first = $('#modal .portal input'); if (first) first.focus();
   },
   portalHtml() {
-    const tab = this._portalTab, avail = AccountAdapter.available();
-    const tabs = [['login', 'Sign in'], ['signup', 'Create account'], ['recover', 'Recover']].map(([id, l]) => `<button type="button" class="ptab${id === tab ? ' active' : ''}" data-portal="tab:${id}" role="tab" aria-selected="${id === tab}">${l}</button>`).join('');
-    if (!avail) return `<div class="portal" data-tab="${tab}"><div class="panel-tabs portal-tabs" role="tablist">${tabs}</div><p class="portal-off">${icon('cloud', 16)}<span>Cloud saves are not connected on this build yet. Your profile is saved in this browser; export it from Settings ${GLYPH.arrow} Save data to move it.</span></p></div>`;
+    const tab = this._portalTab, avail = AccountAdapter.available(), active = tab === 'forgot' || tab === 'sent' ? 'login' : tab;
+    const tabs = tab === 'reset' ? '' : `<div class="panel-tabs portal-tabs" role="tablist">${[['login', 'Sign in'], ['signup', 'Create account'], ['recover', 'Recover']].map(([id, l]) => `<button type="button" class="ptab${id === active ? ' active' : ''}" data-portal="tab:${id}" role="tab" aria-selected="${id === active}">${l}</button>`).join('')}</div>`;
+    if (!avail) return `<div class="portal" data-tab="${tab}">${tabs}<p class="portal-off">${icon('cloud', 16)}<span>Cloud saves are not connected on this build yet. Your profile is saved in this browser; export it from Settings ${GLYPH.arrow} Save data to move it.</span></p></div>`;
     const pw = (label, hint) => `<label class="pfield"><span class="label">${label}</span><span class="pinput"><input type="password" id="pf-pass" class="input" minlength="10" autocomplete="${tab === 'login' ? 'current-password' : 'new-password'}" spellcheck="false"><button type="button" class="btn icon ghost peek" data-portal="peek" title="Show password" aria-label="Show password">${icon('eye', 16)}</button></span>${hint ? `<span class="phint">${hint}</span>` : ''}</label>`;
     const email = `<label class="pfield"><span class="label">Email</span><input type="email" id="pf-email" class="input" autocomplete="email" spellcheck="false" placeholder="you@example.com"></label>`;
     let form;
-    if (tab === 'login') form = email + pw('Password') + `<button type="button" class="btn big primary psubmit" data-portal="submit">${icon('cloud', 16)}<span>Sign in</span></button>`;
-    else if (tab === 'signup') form = email + pw('Password', 'At least 10 characters. You will get a recovery phrase: it is the only way back in without the password.') + `<button type="button" class="btn big primary psubmit" data-portal="submit">${icon('cloud', 16)}<span>Create account</span></button>`;
-    else form = email + `<label class="pfield"><span class="label">Recovery phrase</span><textarea id="pf-phrase" class="input io phrase-in" rows="2" autocomplete="off" spellcheck="false" placeholder="the ten words you were given at sign-up"></textarea></label>` + pw('New password', 'At least 10 characters. A new recovery phrase replaces the old one.') + `<button type="button" class="btn big primary psubmit" data-portal="submit">${icon('reroll', 16)}<span>Recover</span></button>`;
-    return `<div class="portal" data-tab="${tab}"><div class="panel-tabs portal-tabs" role="tablist">${tabs}</div><div class="pform">${form}<div class="perr" id="pf-err" role="alert" hidden></div></div></div>`;
+    if (tab === 'login') form = email + pw('Password') + `<div class="pfoot"><button type="button" class="linkish" data-portal="tab:forgot">Forgot your password?</button>${submit('cloud', 'Sign in')}</div>`;
+    else if (tab === 'signup') form = email + pw('Password', 'At least 10 characters. You will get a recovery phrase: it is the only way back in without the password.') + submit('cloud', 'Create account');
+    else if (tab === 'forgot') form = `<p class="phint">Enter the email address of your account and we send a link to choose a new password. It is good for 30 minutes. The recovery phrase from sign-up is the other way back in.</p>` + email + `<div class="pfoot">${back}${submit('cloud', 'Send reset link')}</div>`;
+    else if (tab === 'sent') form = `<p class="portal-note">${icon('cloud', 16)}<span>If that address has an account, a link is on its way. Open it within 30 minutes; check the spam folder if nothing arrives.</span></p><div class="pfoot">${back}</div>`;
+    else if (tab === 'reset') form = `<p class="phint">Choose a new password for your account. Every other signed-in device is signed out, and you get a new recovery phrase.</p>` + pw('New password', 'At least 10 characters.') + `<div class="pfoot">${back}${submit('reroll', 'Set password')}</div>`;
+    else form = email + `<label class="pfield"><span class="label">Recovery phrase</span><textarea id="pf-phrase" class="input io phrase-in" rows="2" autocomplete="off" spellcheck="false" placeholder="the ten words you were given at sign-up"></textarea></label>` + pw('New password', 'At least 10 characters. A new recovery phrase replaces the old one.') + submit('reroll', 'Recover');
+    return `<div class="portal" data-tab="${tab}">${tabs}<div class="pform">${form}<div class="perr" id="pf-err" role="alert" hidden></div></div></div>`;
   },
   portalAction(act, btn) {
-    if (act.startsWith('tab:')) { if (this._portalBusy) return; this._portalTab = act.slice(4); const x = $('#modal-extra'); if (x) { x.innerHTML = this.portalHtml(); const f = x.querySelector('input'); if (f) f.focus(); } return; }
+    if (act.startsWith('tab:')) {
+      if (this._portalBusy) return;
+      this._portalTab = act.slice(4);
+      const t = $('#modal-title'); if (t) t.textContent = this.portalTitle();
+      const x = $('#modal-extra'); if (x) { x.innerHTML = this.portalHtml(); const f = x.querySelector('input'); if (f) f.focus(); }
+      return;
+    }
     if (act === 'peek') { const inp = btn.closest('.pinput').querySelector('input'); const show = inp.type === 'password'; inp.type = show ? 'text' : 'password'; btn.innerHTML = icon(show ? 'eye-off' : 'eye', 16); btn.title = show ? 'Hide password' : 'Show password'; inp.focus(); return; }
     if (act === 'submit') this.portalSubmit();
   },
-  portalError(msg, fieldId) {
-    const err = $('#pf-err'); if (err) { err.textContent = msg || ''; err.hidden = !msg; }
+  // next = { act, label }: an optional way forward rendered after the message (a data-portal action)
+  portalError(msg, fieldId, next) {
+    const err = $('#pf-err');
+    if (err) { err.innerHTML = msg ? esc(msg) + (next ? ` <button type="button" class="linkish" data-portal="${esc(next.act)}">${esc(next.label)}</button>` : '') : ''; err.hidden = !msg; }
     for (const el of $$('#modal .portal .input')) el.removeAttribute('aria-invalid');
     const f = fieldId && $('#' + fieldId); if (f) { f.setAttribute('aria-invalid', 'true'); f.focus(); }
   },
@@ -957,17 +975,29 @@ const UI = {
     if (this._portalBusy || !AccountAdapter.available()) return;
     const tab = this._portalTab, email = (($('#pf-email') || {}).value || '').trim(), pass = ($('#pf-pass') || {}).value || '', phrase = (($('#pf-phrase') || {}).value || '').trim();
     this.portalError('');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this.portalError('Enter the email address for your account.', 'pf-email');
+    if (tab !== 'reset' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this.portalError('Enter the email address for your account.', 'pf-email');
     if (tab === 'recover' && phrase.split(/\s+/).length < 10) return this.portalError('The recovery phrase is ten words.', 'pf-phrase');
-    if (pass.length < 10) return this.portalError(tab === 'login' ? 'Passwords are at least 10 characters.' : 'Choose a password of at least 10 characters.', 'pf-pass');
+    if (tab !== 'forgot' && pass.length < 10) return this.portalError(tab === 'login' ? 'Passwords are at least 10 characters.' : 'Choose a password of at least 10 characters.', 'pf-pass');
     this.portalBusy(true);
-    const res = tab === 'login' ? await AccountAdapter.login(email, pass) : tab === 'signup' ? await AccountAdapter.signup(email, pass) : await AccountAdapter.recover(email, phrase, pass);
+    const res = tab === 'login' ? await AccountAdapter.login(email, pass)
+      : tab === 'signup' ? await AccountAdapter.signup(email, pass)
+      : tab === 'forgot' ? await AccountAdapter.forgot(email)
+      : tab === 'reset' ? await AccountAdapter.reset(this._resetToken, pass)
+      : await AccountAdapter.recover(email, phrase, pass);
     if (!$('#modal .portal')) return;   // the player closed the portal while the request ran
     this.portalBusy(false);
-    if (!res || !res.ok) { this.portalError((res && res.why) || 'That did not work. Try again.', tab === 'login' ? 'pf-pass' : null); Sound.error(); return; }
+    if (!res || !res.ok) {
+      const why = (res && res.why) || 'That did not work. Try again.';
+      // a dead reset link (expired, used, or revoked by a newer one) offers a fresh email right there
+      if (tab === 'reset' && res && res.code === 'bad-token') { AccountAdapter.clearResetToken(); this.portalError(why, null, { act: 'tab:forgot', label: 'Send a new link' }); }
+      else this.portalError(why, tab === 'login' ? 'pf-pass' : tab === 'forgot' ? 'pf-email' : null);
+      Sound.error(); return;
+    }
+    if (tab === 'forgot') { this.portalAction('tab:sent'); return; }   // the same confirmation whether or not the address has an account
     Overlays.closeModal();
     Sound.built();
-    if (res.recovery) this.showRecovery(res.recovery, tab === 'recover');
+    if (tab === 'reset') this.toast('Password changed. Other devices are signed out.', 'good', { icon: 'cloud', chip: 'Account' });
+    if (res.recovery) this.showRecovery(res.recovery, tab === 'recover' || tab === 'reset');
     this.refresh();
   },
   // the recovery phrase is shown once; the sheet closes only after the player confirms they saved it
@@ -1087,17 +1117,22 @@ const UI = {
     Overlays.modal({
       kind: 'lend', tag: `Loan desk ${MID2} ${Fmt.day(s.day)} ${MID2} ${c.name}`, title: `Lend to ${c.name}`,
       html: `Trust <span class="num">${co.trust}/100</span> sets the rate at <b>${rate}%</b>, repaid over 10 days. Lower trust means a higher rate but a real chance of default. You have <span class="num">${Fmt.n(max)}</span> credits.`,
+  // tabs: login | signup | recover; views without a tab of their own: forgot (ask for a reset email), sent (its
+  // confirmation) and reset (the ?reset= link from that email: choose a new password)
       extra: `<input type="number" id="lend-amt" class="input" min="500" step="100" max="${max}" value="${Math.min(max, 2000)}" aria-label="Loan amount">`,
       actions: [{ label: 'Lend', primary: true, fn: () => { const inp = $('#lend-amt'); Sim.lend(companyId, inp ? +inp.value : 0); } }, { label: 'Cancel', ghost: true }],
     });
   },
   travel(id) {
+  portalTitle() { return this._portalTab === 'reset' ? 'Set a new password' : this._portalTab === 'forgot' || this._portalTab === 'sent' ? 'Forgot your password?' : 'Your account'; },
     const def = MetaAdapter.sectorDef(id);
     Sound.warp();
     const p = EngineAdapter.fx('warp');
     document.body.setAttribute('data-warp', '');
     const go = () => {
       // Meta refuses locked or unknown sectors; a success emits sector 'switched', which the engine
+    const submit = (icn, label) => `<button type="button" class="btn big primary psubmit" data-portal="submit">${icon(icn, 16)}<span>${label}</span></button>`;
+    const back = `<button type="button" class="linkish" data-portal="tab:login">Back to sign in</button>`;
       // follows with its own setSector (no second rebuild here)
       const res = MetaAdapter.switchSector(id);
       const ok = res === true || (res && typeof res === 'object' && res.ok !== false && !res.why);
@@ -1122,6 +1157,7 @@ const UI = {
     else this.confirm(`Unlock ${def.name}?`, `${esc(def.flavour || def.flavor || 'A new station, a new world, the same wallet.')}${def.unlock && def.unlock.credits ? `<br><br>Costs <b>${Fmt.n(def.unlock.credits)}</b> credits.` : ''}`, doIt, { yes: 'Unlock', tag: 'Galaxy' });
   },
   launch(sectorId) {
+    if (tab === 'sent') return this.portalAction('tab:login');
     const res = MetaAdapter.launchExpedition(sectorId);
     const ok = res === true || (res && res.ok !== false);
     if (ok) { Sound.open(); this.toast(`Expedition launched to ${MetaAdapter.sectorDef(sectorId).name || sectorId}`, 'info', { icon: 'expeditions', chip: 'Expedition' }); }

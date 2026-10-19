@@ -9,7 +9,8 @@
 //   main.js  awaits Account.boot() after Meta.init() and before the title (status 'cloud' means the
 //            local profile was replaced; main re-reads it with Meta.load()).
 //   H        sets Account.ui.choose({local:{summary, savedAt}, cloud:{summary, updatedAt}}) -> Promise<'local'|'cloud'>
-//            and renders Account.state (listen to Account.on('state') or the Sim 'account' event).
+//            and renders Account.state (listen to Account.on('state') or the Sim 'account' event); opens the portal's
+//            "Set a new password" view when Account.resetToken is set (the ?reset= link from a "Forgot your password?" email).
 //   Meta     export() / import(json) / save(now) / profile.savedAt; this file writes profile.cloud =
 //            {version, syncedAt, userId} after every successful sync.
 // ============================================================
@@ -438,6 +439,51 @@ const Account = (() => {
     return { ok: true, recovery: data.recovery, user: { ...state.user }, status: r.status, choice: r.choice || null };
   }
 
+  // ---------------------------------------------------------- password reset by email: "Forgot your password?" and the ?reset= link
+  // The backend always answers /forgot with {ok:true}; it never says whether the address has an account.
+  async function forgot(email) {
+    if (!state.available) return unavailable();
+    if (!validEmail(email)) return fail('Enter a valid email address', { code: 'bad-email' });
+    try { await call('/forgot', { method: 'POST', auth: false, body: { email: cleanEmail(email) } }); }
+    catch (err) { return netFail(err); }
+    return { ok: true };
+  }
+
+  // The link in the email opens PLAY_URL?reset=<token>; the token is captured once at load and taken out of the
+  // address bar so a reload or a shared screenshot does not carry it. The HUD reads Account.resetToken.
+  const RESET_RE = /^[A-Za-z0-9_-]{32,128}$/;
+  let resetToken = null;
+  function captureResetToken() {
+    if (!hasWin() || !window.location || typeof window.location.search !== 'string' || !window.location.search) return null;
+    let tok = null;
+    try { tok = new URLSearchParams(window.location.search).get('reset'); } catch (e) { return null; }
+    if (tok == null) return null;
+    resetToken = RESET_RE.test(tok) ? tok : null;
+    try {
+      const h = window.history;
+      if (h && typeof h.replaceState === 'function') {
+        const u = new URL(window.location.href);
+        u.searchParams.delete('reset');
+        h.replaceState(h.state == null ? null : h.state, '', u.pathname + u.search + u.hash);
+      }
+    } catch (e) { /* a malformed location: leave the address bar alone */ }
+    return resetToken;
+  }
+
+  async function reset(token, newPassword) {
+    bindOnce();
+    if (!state.available) return unavailable();
+    if (typeof token !== 'string' || !RESET_RE.test(token)) return fail('This reset link is not valid. Ask for a new one.', { code: 'bad-token' });
+    if (typeof newPassword !== 'string' || newPassword.length < 10) return fail('Use a new password of at least 10 characters', { code: 'weak-password' });
+    let data;
+    try { data = await call('/reset', { method: 'POST', auth: false, body: { token, newPassword } }); }
+    catch (err) { return netFail(err); }
+    if (resetToken === token) resetToken = null;
+    setSignedIn(data.user, data.token);
+    const r = await reconcile({ afterSignIn: true });
+    return { ok: true, recovery: data.recovery, user: { ...state.user }, status: r.status, choice: r.choice || null };
+  }
+
   async function logout() {
     if (!state.available) return unavailable();
     if (!state.signedIn && !session) return { ok: true };
@@ -469,6 +515,9 @@ const Account = (() => {
     configure,
     boot,
     signup, login, logout, recover, deleteAccount,
+    forgot, reset,
+    get resetToken() { return resetToken; },                 // the token from ?reset=<token>, until it is used or cleared
+    clearResetToken() { resetToken = null; return api; },
     syncNow,
     pull: () => runPull(),
     // "Keep this browser's": overwrite the newest cloud version we know of (state.cloud is never behind the marker)
@@ -483,6 +532,7 @@ const Account = (() => {
   };
 
   configure(readTagConfig());
+  captureResetToken();
   if (hasDoc() && document.readyState === 'loading' && typeof document.addEventListener === 'function') {
     document.addEventListener('DOMContentLoaded', () => configure(readTagConfig()), { once: true });
   }
