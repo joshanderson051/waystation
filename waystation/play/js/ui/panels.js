@@ -899,6 +899,11 @@ const Panels = {
       h += shelf('Danger', null, { hue: 'var(--bad)' });
       h += `<div class="actions"><button type="button" class="btn danger" data-act="scrap-station">${icon('scrap', 14)}<span>Scrap this station</span></button><button type="button" class="btn danger" data-act="reset-profile">${icon('bad', 14)}<span>Reset profile</span></button></div>` +
         `<p class="fine">Scrapping starts a new station in this sector; your rank, Antimatter and other sectors stay. Resetting the profile erases everything.</p>`;
+      if (typeof Admin !== 'undefined' && Admin.configured()) {
+        h += shelf('Admin', null, { hue: 'var(--am)' });
+        h += `<div class="actions"><button type="button" class="btn am" data-act="admin">${icon('lock', 14)}<span>${Admin.unlocked() ? 'Bridge admin console' : 'Bridge admin…'}</span></button></div>` +
+          `<p class="fine">Passphrase-protected testing console (also Ctrl+Shift+A). Grants made there are tagged admin in the profile history.</p>`;
+      }
       h += shelf('About', null, { hue: 'var(--ink-3)' });
       h += `<p class="fine">Waystation v2 ${MID} a browser space-station builder. Hand-written HTML, CSS and JavaScript with PixiJS for the world. Procedural audio, no trackers, saves on your device. ${MID} Licence: all original work; PixiJS under MIT.</p>`;
       paint(F.body, h, sig, 'st');
@@ -919,6 +924,7 @@ const Panels = {
       else if (act === 'restore') ctx.ui.openPanel('store');
       else if (act === 'scrap-station') ctx.ui.scrapStation();
       else if (act === 'reset-profile') ctx.ui.resetProfile();
+      else if (act === 'admin') { if (typeof Admin !== 'undefined') Admin.open(); }
     });
     host.addEventListener('input', e => {
       const sl = e.target.closest('[data-slider]'); if (!sl) return;
