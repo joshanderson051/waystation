@@ -121,6 +121,28 @@ const StoreAdapter = {
   offer() { return this.catalog().some(i => i.offer || i.featured); },
 };
 
+// Account (A2.1): email and password cloud saves. Absent client -> every call resolves { ok:false, why }.
+const AccountAdapter = {
+  OFF: 'Cloud saves are not connected yet',
+  present() { return typeof Account !== 'undefined' && !!Account; },
+  available() { return this.present() && Account.available !== false && this.state().available !== false; },
+  state() { const s = this.present() && Account.state; return s || { available: false, signedIn: false, user: null, syncing: false, dirty: false, lastSyncAt: 0, lastError: null, cloud: null }; },
+  on(evt, fn) { call(Account, 'on', [evt, fn], undefined); },
+  _p(fn, args) {
+    if (!this.present() || typeof Account[fn] !== 'function') return Promise.resolve({ ok: false, why: this.OFF });
+    let r; try { r = Account[fn].apply(Account, args); } catch (e) { return Promise.resolve({ ok: false, why: (e && e.message) || 'Something went wrong' }); }
+    return r && typeof r.then === 'function' ? r.catch(e => ({ ok: false, why: (e && e.message) || 'Something went wrong' })) : Promise.resolve(r || { ok: false, why: this.OFF });
+  },
+  signup(email, password) { return this._p('signup', [email, password]); },
+  login(email, password) { return this._p('login', [email, password]); },
+  logout() { return this._p('logout', []); },
+  recover(email, phrase, newPassword) { return this._p('recover', [email, phrase, newPassword]); },
+  deleteAccount(password) { return this._p('deleteAccount', [password]); },
+  syncNow() { return this._p('syncNow', []); },
+  // Account.ui.choose({ local, cloud }) -> Promise<'local'|'cloud'> is the HUD's chooser sheet
+  setChooser(fn) { if (!this.present()) return; Account.ui = Account.ui || {}; Account.ui.choose = fn; },
+};
+
 // ------------------------------------------------------------
 // 1. Constants
 // ------------------------------------------------------------
@@ -171,7 +193,7 @@ const UI = {
     // title screen and any static markup: <span class="ic-slot" data-icon="..."> gets its SVG
     for (const el of $$('.ic-slot[data-icon]')) if (!el.firstChild) el.innerHTML = icon(el.dataset.icon, 14);
     this.ctx = {
-      ui: this, meta: MetaAdapter, engine: EngineAdapter, store: StoreAdapter, sound: Sound, state: S,
+      ui: this, meta: MetaAdapter, engine: EngineAdapter, store: StoreAdapter, account: AccountAdapter, sound: Sound, state: S,
     };
 
     // first gesture starts audio (section 9)
@@ -196,6 +218,17 @@ const UI = {
     $('#sb-sector').addEventListener('click', () => this.openPanel('map'));
     $('#btn-am-plus').addEventListener('click', e => { e.stopPropagation(); this.openPanel('store'); });
     $('#btn-daily').addEventListener('click', () => this.openDaily());
+    // A2.1: cloud glyph, the title band's account lozenge, the portal's own buttons (its modal has no action row)
+    const cloudBtn = $('#btn-cloud'); if (cloudBtn) cloudBtn.addEventListener('click', () => this.openAccountSettings());
+    document.addEventListener('click', e => {
+      const t = e.target.closest && e.target.closest('[data-account]'); if (!t) return;
+      const act = t.dataset.account;
+      if (act === 'signin') this.openPortal('login'); else if (act === 'notyou') this.accountSignOut(); else if (act === 'settings') this.openAccountSettings();
+    });
+    $('#modal').addEventListener('click', e => { const b = e.target.closest('[data-portal]'); if (b) { e.preventDefault(); this.portalAction(b.dataset.portal, b); } });
+    $('#modal').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest && e.target.closest('.portal') && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); this.portalAction('submit'); } });
+    AccountAdapter.setChooser(req => this.chooseSave(req));
+    if (typeof Tutorial !== 'undefined' && Tutorial) Tutorial.onEnd = () => this.onTourEnd();
     $('#speed').addEventListener('click', e => { const b = e.target.closest('button[data-speed]'); if (b) this.setSpeed(+b.dataset.speed); });
     const bell = $('#btn-notices'); if (bell) bell.addEventListener('click', () => { body.toggleAttribute('data-notices'); });
     $('#btn-keys').addEventListener('click', () => Overlays.keys());
@@ -226,6 +259,7 @@ const UI = {
       Sim.on('offline', d => { if (this.started) this.showAway(d); else this._pendingOffline = d; });
       Sim.on('plot', d => this.onPlot(d));
       Sim.on('achievement', d => this.onAchievement(d));
+      Sim.on('account', d => this.onAccount(d));
     }
     // Engine events (0.3)
     EngineAdapter.on('cell-click', d => this.onCellClick(d));
@@ -240,6 +274,7 @@ const UI = {
     EngineAdapter.on('camera', () => { if (this._hoverTip) this.onCellHover(this._hoverTip); });
 
     this.refreshTop();
+    this.refreshAccount();
   },
 
   // ---------------------------------------------------------- DOM builders (2.4)
@@ -257,6 +292,7 @@ const UI = {
       `</div>` +
       `<div class="sb-right">` +
       `<div class="rank" id="ro-rank" data-tip="Commander rank · XP from banks, ships, missions and expeditions"><span class="rank-ring">${'<svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true"><circle class="ring-track" cx="20" cy="20" r="17"/><circle class="ring-arc" id="rank-arc" cx="20" cy="20" r="17" stroke-dasharray="106.81" stroke-dashoffset="106.81"/></svg>'}<span class="rank-level num" id="v-rank-level">1</span></span><div class="rank-main"><span class="ro-lbl" id="v-rank-lbl">Rank 1</span><span class="rank-title" id="v-rank-title">Ensign</span></div></div>` +
+      `<button type="button" class="sb-btn cloud" id="btn-cloud" data-state="off" hidden title="Cloud save" aria-label="Cloud save">${icon('cloud', 20)}<i class="dot" hidden></i></button>` +
       `<button type="button" class="sb-btn" id="btn-daily" title="Daily reward" aria-label="Daily reward">${icon('calendar', 20)}<i class="dot" hidden></i></button>` +
       `<div id="speed" class="seg" role="group" aria-label="Game speed"><button type="button" data-speed="0" title="Pause (Space)" aria-label="Pause">${icon('pause', 14)}</button><button type="button" data-speed="1" class="on" title="Run (1)">1${GLYPH.times}</button></div>` +
       `<button type="button" class="sb-btn narrow-only" id="btn-notices" title="Notices" aria-label="Toggle notices">${icon('bell', 20)}<i class="dot" hidden></i></button>` +
@@ -303,8 +339,19 @@ const UI = {
     const rb = $('.rail-btn[data-panel="build"]'); if (rb) rb.classList.toggle('pulse', !!fresh);
     if (s && s.pending) this.showEvent();
     if (this._pendingOffline) { const d = this._pendingOffline; this._pendingOffline = null; setTimeout(() => this.showAway(d), 500); }
-    else { const d = MetaAdapter.daily(); if (d && d.claimable) setTimeout(() => { if (!Overlays.anyOpen()) this.openDaily(); }, 900); }
+    // A2.2: a fresh station (no dock, no ships served) that never finished or skipped the tour gets it first;
+    // the daily sheet and any celebration wait until the tour ends
+    const tour = !!fresh && typeof Tutorial !== 'undefined' && Tutorial && !Tutorial.done;
+    if (tour) this.startTour(); else this.scheduleDaily(900);
   },
+  startTour() {
+    let tries = 0;
+    const go = () => { if (Overlays.anyOpen() && tries++ < 60) { setTimeout(go, 500); return; } if (!Tutorial.start()) this.scheduleDaily(300); };
+    setTimeout(go, 1000);
+  },
+  scheduleDaily(ms) { const d = MetaAdapter.daily(); if (d && d.claimable) setTimeout(() => { if (!Overlays.anyOpen() && !(typeof Tutorial !== 'undefined' && Tutorial && Tutorial.active)) this.openDaily(); }, ms); },
+  onTourEnd() { Overlays.flushCelebrations(); this.scheduleDaily(600); this.refresh(); },
+  replayTour() { if (typeof Tutorial === 'undefined' || !Tutorial) return; this.closePanel(); setTimeout(() => Tutorial.start({ replay: true }), 220); },
   tick() {
     if (!S()) return;
     this.refreshTop();
@@ -357,6 +404,39 @@ const UI = {
     const daily = MetaAdapter.daily(); const dot = $('#btn-daily .dot'); if (dot) dot.hidden = !(daily && daily.claimable);
     const lvl = String(s.level); if (document.body.getAttribute('data-level') !== lvl) document.body.setAttribute('data-level', lvl);
     this.refreshCondition(s, T);
+    this.refreshAccount();
+  },
+  // A2.1: the cloud glyph after the rank ring and the title band's account lozenge
+  refreshAccount() {
+    const st = AccountAdapter.state(), avail = AccountAdapter.available(), offline = !!(st.offline || this._acctOffline);
+    const btn = $('#btn-cloud');
+    if (btn) {
+      let state = 'off', tip = '';
+      const last = st.lastSyncAt ? ` ${MID2} last synced ${Fmt.ago(Date.now() - st.lastSyncAt)} ago` : '';
+      if (!avail) state = 'off';
+      else if (!st.signedIn) { state = 'signed-out'; tip = 'Cloud save · sign in to save across devices'; }
+      else if (st.syncing) { state = 'syncing'; tip = 'Cloud save · syncing…'; }
+      else if (st.lastError) { state = 'error'; tip = `Cloud save · ${st.lastError}${last}`; }
+      else if (offline) { state = 'offline'; tip = `Cloud save · offline, retrying${last}`; }
+      else if (st.dirty) { state = 'dirty'; tip = `Cloud save · changes waiting to sync${last}`; }
+      else { state = 'synced'; tip = st.lastSyncAt ? `Cloud save · synced ${Fmt.ago(Date.now() - st.lastSyncAt)} ago` : 'Cloud save · synced'; }
+      btn.hidden = state === 'off';
+      if (btn.dataset.state !== state) btn.dataset.state = state;
+      if (btn.dataset.tip !== tip) btn.dataset.tip = tip;
+      const dot = btn.querySelector('.dot'); if (dot) dot.hidden = !(state === 'syncing' || state === 'error' || state === 'offline' || state === 'dirty');
+    }
+    const ta = $('#title-account');
+    if (ta) {
+      let h;
+      if (avail && st.signedIn && st.user) {
+        const c = st.cloud && st.cloud.summary;
+        h = `<div class="title-signed"><span class="title-signed-main">${icon('cloud', 14)}<span>Signed in ${MID2} ${esc(st.user.email)}</span></span>` +
+          `<span class="micro">${c ? `Cloud save ${MID2} ${esc(c.name || 'station')} ${MID2} ${Fmt.day(c.day || 1)} ${MID2} L${c.level || 1} ${MID2} ${Fmt.n(c.credits || 0)} cr` : 'No cloud save yet'}${st.cloud && st.cloud.updatedAt ? ` ${MID2} ${Fmt.ago(Date.now() - st.cloud.updatedAt)} ago` : ''}</span>` +
+          `<button type="button" class="linkish" data-account="notyou">Not you?</button></div>`;
+      } else if (!avail) h = '';   // no cloud on this build: the Settings shelf explains, the title band stays quiet
+      else h = `<button type="button" class="btn ghost" data-account="signin">${icon('cloud', 14)}<span>Sign in</span></button>`;
+      if (ta._h !== h) { ta._h = h; ta.innerHTML = h; }
+    }
   },
   powerPips(used, produced) {
     const total = Math.max(produced, used); if (total <= 0) return '';
@@ -692,7 +772,7 @@ const UI = {
     if (cl) {
       const left = cl.remainingMs != null ? cl.remainingMs : Math.max(0, (cl.endsAt || 0) - Date.now());
       const am = cl.skipAM != null ? cl.skipAM : Math.max(1, Math.ceil(left / 480000));
-      Overlays.modal({ kind: 'confirm', icon: 'territory', tag: `Territory ${MID2} ring ${cl.ring} of ${p.rings}`, title: `Clearing ring ${cl.ring}`,
+      Overlays.modal({ kind: 'confirm', icon: 'territory', tag: `Territory ${MID2} ring ${cl.ring} of ${Math.max(1, p.rings - 1)}`, title: `Clearing ring ${cl.ring}`,
         html: `Crews are clearing the next ring of cells. <b>${Fmt.ms(left)}</b> left.`,
         actions: [{ label: `Skip ${MID2} ${am} AM`, am: true, icon: 'skip', fn: () => this.skipPlot() }, { label: 'Close', ghost: true }] });
       return;
@@ -702,7 +782,7 @@ const UI = {
     const am = nx.skipAM != null ? nx.skipAM : Math.max(1, Math.ceil(nx.ms / 480000));
     const s = S(), short = s && s.credits < nx.cost ? nx.cost - s.credits : 0;
     const cannot = !!short || nx.affordable === false;
-    Overlays.modal({ kind: 'confirm', icon: 'territory', tag: `Territory ${MID2} ring ${nx.ring} of ${p.rings}`, title: `Clear ring ${nx.ring}`,
+    Overlays.modal({ kind: 'confirm', icon: 'territory', tag: `Territory ${MID2} ring ${nx.ring} of ${Math.max(1, p.rings - 1)}`, title: `Clear ring ${nx.ring}`,
       html: `<div class="plot-spec"><span>${icon('territory', 14)}${Fmt.n(nx.cells)} cells</span><span>${icon('credits', 14)}${Fmt.n(nx.cost)} cr</span><span>${icon('clock', 14)}${Fmt.dur(nx.ms)}</span></div>` +
         `<p>Crews clear the debris and the plot grows by one ring. Hoppers and ships carry on meanwhile.</p>` +
         (ring && ring !== nx.ring ? `<p class="fine">Rings are cleared one at a time: ring ${nx.ring} comes first.</p>` : '') +
@@ -838,6 +918,124 @@ const UI = {
       onClaim: () => { const rw = MetaAdapter.claimDaily(); if (rw) { this.celebrate('daily', Object.assign({ reward: rw }, MetaAdapter.daily() || {})); Overlays.fly($('#btn-daily'), this.anchor(rw.am ? 'am' : 'credits'), { n: 8, icon: rw.am ? 'am' : 'credits', hue: rw.am ? 'am' : 'amber', onHit: () => this.anchorHit(rw.am ? 'am' : 'credits') }); } this.refresh(); },
       onRepair: () => { if (MetaAdapter.repairStreak()) this.toast('Streak repaired', 'good'); else this.toast('Not enough Antimatter', 'bad'); this.refresh(); },
     });
+  },
+
+  // ---------------------------------------------------------- A2.1 accounts: portal, recovery phrase, chooser, settings verbs
+  openPortal(tab) {
+    this._portalTab = tab || 'login'; this._portalBusy = false;
+    Overlays.modal({ kind: 'confirm', icon: 'cloud', tag: `Cloud save ${MID2} ${AccountAdapter.available() ? 'account' : 'not connected'}`, title: 'Your account', html: '', extra: this.portalHtml(), actions: [], dismissible: true });
+    const first = $('#modal .portal input'); if (first) first.focus();
+  },
+  portalHtml() {
+    const tab = this._portalTab, avail = AccountAdapter.available();
+    const tabs = [['login', 'Sign in'], ['signup', 'Create account'], ['recover', 'Recover']].map(([id, l]) => `<button type="button" class="ptab${id === tab ? ' active' : ''}" data-portal="tab:${id}" role="tab" aria-selected="${id === tab}">${l}</button>`).join('');
+    if (!avail) return `<div class="portal" data-tab="${tab}"><div class="panel-tabs portal-tabs" role="tablist">${tabs}</div><p class="portal-off">${icon('cloud', 16)}<span>Cloud saves are not connected on this build yet. Your profile is saved in this browser; export it from Settings ${GLYPH.arrow} Save data to move it.</span></p></div>`;
+    const pw = (label, hint) => `<label class="pfield"><span class="label">${label}</span><span class="pinput"><input type="password" id="pf-pass" class="input" minlength="10" autocomplete="${tab === 'login' ? 'current-password' : 'new-password'}" spellcheck="false"><button type="button" class="btn icon ghost peek" data-portal="peek" title="Show password" aria-label="Show password">${icon('eye', 16)}</button></span>${hint ? `<span class="phint">${hint}</span>` : ''}</label>`;
+    const email = `<label class="pfield"><span class="label">Email</span><input type="email" id="pf-email" class="input" autocomplete="email" spellcheck="false" placeholder="you@example.com"></label>`;
+    let form;
+    if (tab === 'login') form = email + pw('Password') + `<button type="button" class="btn big primary psubmit" data-portal="submit">${icon('cloud', 16)}<span>Sign in</span></button>`;
+    else if (tab === 'signup') form = email + pw('Password', 'At least 10 characters. You will get a recovery phrase: it is the only way back in without the password.') + `<button type="button" class="btn big primary psubmit" data-portal="submit">${icon('cloud', 16)}<span>Create account</span></button>`;
+    else form = email + `<label class="pfield"><span class="label">Recovery phrase</span><textarea id="pf-phrase" class="input io phrase-in" rows="2" autocomplete="off" spellcheck="false" placeholder="the ten words you were given at sign-up"></textarea></label>` + pw('New password', 'At least 10 characters. A new recovery phrase replaces the old one.') + `<button type="button" class="btn big primary psubmit" data-portal="submit">${icon('reroll', 16)}<span>Recover</span></button>`;
+    return `<div class="portal" data-tab="${tab}"><div class="panel-tabs portal-tabs" role="tablist">${tabs}</div><div class="pform">${form}<div class="perr" id="pf-err" role="alert" hidden></div></div></div>`;
+  },
+  portalAction(act, btn) {
+    if (act.startsWith('tab:')) { if (this._portalBusy) return; this._portalTab = act.slice(4); const x = $('#modal-extra'); if (x) { x.innerHTML = this.portalHtml(); const f = x.querySelector('input'); if (f) f.focus(); } return; }
+    if (act === 'peek') { const inp = btn.closest('.pinput').querySelector('input'); const show = inp.type === 'password'; inp.type = show ? 'text' : 'password'; btn.innerHTML = icon(show ? 'eye-off' : 'eye', 16); btn.title = show ? 'Hide password' : 'Show password'; inp.focus(); return; }
+    if (act === 'submit') this.portalSubmit();
+  },
+  portalError(msg, fieldId) {
+    const err = $('#pf-err'); if (err) { err.textContent = msg || ''; err.hidden = !msg; }
+    for (const el of $$('#modal .portal .input')) el.removeAttribute('aria-invalid');
+    const f = fieldId && $('#' + fieldId); if (f) { f.setAttribute('aria-invalid', 'true'); f.focus(); }
+  },
+  portalBusy(on) {
+    this._portalBusy = on;
+    const b = $('#modal .psubmit'); if (b) { b.classList.toggle('busy', on); b.disabled = on; }
+    for (const el of $$('#modal .portal .input, #modal .portal .ptab, #modal .portal .peek')) el.disabled = on;
+  },
+  async portalSubmit() {
+    if (this._portalBusy || !AccountAdapter.available()) return;
+    const tab = this._portalTab, email = (($('#pf-email') || {}).value || '').trim(), pass = ($('#pf-pass') || {}).value || '', phrase = (($('#pf-phrase') || {}).value || '').trim();
+    this.portalError('');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this.portalError('Enter the email address for your account.', 'pf-email');
+    if (tab === 'recover' && phrase.split(/\s+/).length < 10) return this.portalError('The recovery phrase is ten words.', 'pf-phrase');
+    if (pass.length < 10) return this.portalError(tab === 'login' ? 'Passwords are at least 10 characters.' : 'Choose a password of at least 10 characters.', 'pf-pass');
+    this.portalBusy(true);
+    const res = tab === 'login' ? await AccountAdapter.login(email, pass) : tab === 'signup' ? await AccountAdapter.signup(email, pass) : await AccountAdapter.recover(email, phrase, pass);
+    if (!$('#modal .portal')) return;   // the player closed the portal while the request ran
+    this.portalBusy(false);
+    if (!res || !res.ok) { this.portalError((res && res.why) || 'That did not work. Try again.', tab === 'login' ? 'pf-pass' : null); Sound.error(); return; }
+    Overlays.closeModal();
+    Sound.built();
+    if (res.recovery) this.showRecovery(res.recovery, tab === 'recover');
+    this.refresh();
+  },
+  // the recovery phrase is shown once; the sheet closes only after the player confirms they saved it
+  showRecovery(phrase, renewed) {
+    const words = Array.isArray(phrase) ? phrase.join(' ') : String(phrase || '');
+    Overlays.sheet({
+      id: 'recovery', hue: 'amber', dismissible: false,
+      html: `<div class="sheet-kicker">${renewed ? 'New recovery phrase' : 'Account created'}</div><h2 class="sheet-title">Save your recovery phrase</h2>` +
+        `<p class="sheet-lead">These ten words are the only way back into your account without the password. They are shown once: write them down or keep them in a password manager.</p>` +
+        `<div class="phrase-box"><pre class="phrase" id="recovery-phrase">${esc(words)}</pre><button type="button" class="btn" data-account="copy">${icon('copy', 14)}<span>Copy</span></button></div>` +
+        `<label class="gate"><input type="checkbox" id="recovery-gate"><span>I have saved my recovery phrase</span></label>`,
+      actions: [{ id: 'done', label: 'Done', primary: true, disabled: true, fn: () => { this.toast('Welcome aboard. Your profile now syncs to the cloud save.', 'good', { icon: 'cloud', chip: 'Account' }); } }],
+    });
+    const box = $('#sheet .sheet-box'), gate = box.querySelector('#recovery-gate'), done = box.querySelector('[data-sheet-act="done"]');
+    gate.addEventListener('change', () => { done.disabled = !gate.checked; });
+    box.querySelector('[data-account="copy"]').addEventListener('click', e => {
+      e.stopPropagation(); const b = e.currentTarget, ok = () => { b.innerHTML = `${icon('check', 14)}<span>Copied</span>`; };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(words).then(ok, () => this.selectPhrase()); else { this.selectPhrase(); ok(); }
+    });
+  },
+  selectPhrase() { const pre = $('#recovery-phrase'); if (!pre) return; const r = document.createRange(); r.selectNodeContents(pre); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); },
+  // Account.ui.choose hook: both saves moved since they last matched; the player picks the one that wins
+  chooseSave(req) {
+    return new Promise(resolve => {
+      const card = (key, title, icn, d) => {
+        const s = (d && d.summary) || {}, when = d && (d.savedAt || d.updatedAt);
+        return `<button type="button" class="save-card" data-save="${key}"><span class="save-head">${icon(icn, 18)}<span>${title}</span></span><span class="save-name">${esc(s.name || 'Station')}</span>` +
+          `<span class="kv tight"><span>Day</span><span class="num">${Fmt.n(s.day || 1)}</span><span>Level</span><span class="num">${s.level || 1}</span><span>Credits</span><span class="num amber">${Fmt.n(s.credits || 0)}</span><span>Antimatter</span><span class="num c-am">${Fmt.n(s.am || 0)}</span><span>Sectors</span><span class="num">${s.sectors != null ? Fmt.n(s.sectors) : 1}</span>${s.rank ? `<span>Rank</span><span class="num">${esc(String(s.rank.level || s.rank))}</span>` : ''}</span>` +
+          `<span class="save-when micro">${when ? `${Fmt.ago(Date.now() - when)} ago ${MID2} ${new Date(when).toLocaleString()}` : 'time unknown'}</span>` +
+          `<span class="btn${key === 'cloud' ? ' primary' : ''} save-pick">${key === 'cloud' ? 'Use the cloud save' : 'Keep this browser\u2019s'}</span></button>`;
+      };
+      let settled = false;
+      const finish = v => { if (settled) return; settled = true; resolve(v); };
+      Overlays.sheet({
+        id: 'chooser', hue: 'ice', wide: true, dismissible: false,
+        html: `<div class="sheet-kicker">Cloud save</div><h2 class="sheet-title">Two saves have moved on</h2><p class="sheet-lead">This browser and your cloud save both changed since they last matched. Keep one; the other is replaced.</p>` +
+          `<div class="save-cards">${card('local', 'This browser', 'station', req && req.local)}${card('cloud', 'Cloud save', 'cloud', req && req.cloud)}</div>`,
+        actions: [], onClose: () => finish('cloud'),
+      });
+      $('#sheet .save-cards').addEventListener('click', e => { const c = e.target.closest('.save-card'); if (!c) return; const pick = c.dataset.save; finish(pick); Overlays.closeSheet(); });
+    });
+  },
+  openAccountSettings() { this.openPanel('settings'); setTimeout(() => { const el = $('#acct-shelf'); if (el) el.scrollIntoView({ block: 'start', behavior: Motion.reduced() ? 'auto' : 'smooth' }); }, 60); },
+  accountSync(btn) {
+    if (btn) btn.classList.add('busy');
+    AccountAdapter.syncNow().then(res => { if (btn) btn.classList.remove('busy'); if (res && res.ok) this.toast('Cloud save up to date', 'good', { icon: 'cloud', chip: 'Account' }); else this.toast((res && res.why) || 'Sync failed', 'warn', { icon: 'cloud', chip: 'Account' }); this.refresh(); });
+  },
+  accountSignOut() {
+    this.confirm('Sign out?', 'Your profile stays in this browser and keeps playing locally. Sign in again any time to sync.', () => { AccountAdapter.logout().then(() => this.refresh()); }, { yes: 'Sign out', tag: 'Cloud save' });
+  },
+  accountDelete() {
+    this.confirm('Delete your account?', 'The cloud save and the account are erased. The profile in this browser stays until you reset it.', () => {
+      Overlays.modal({ kind: 'confirm', icon: 'bad', tag: `Cloud save ${MID2} delete`, title: 'Confirm with your password', html: 'This cannot be undone.', extra: '<input type="password" id="acct-del-pass" class="input" autocomplete="current-password" placeholder="Password" aria-label="Password">',
+        actions: [{ label: 'Delete account', danger: true, fn: () => { const pw = ($('#acct-del-pass') || {}).value || ''; AccountAdapter.deleteAccount(pw).then(res => { if (res && res.ok) this.toast('Account deleted. This browser keeps its local profile.', 'info', { icon: 'cloud', chip: 'Account' }); else { this.toast((res && res.why) || 'The account was not deleted', 'bad', { chip: 'Account' }); Sound.error(); } this.refresh(); }); } }, { label: 'Cancel', ghost: true }] });
+    }, { yes: 'Continue', danger: true, tag: 'Cloud save' });
+  },
+  // Sim bus 'account' {state:'signed-in'|'signed-out'|'synced'|'conflict'|'error'|'offline', email?, why?, message?}
+  onAccount(d) {
+    if (!d) return;
+    const st = d.state;
+    if (st === 'signed-in') { this._acctOffline = false; this._acctLastErr = null; this.toast(`Signed in as ${d.email || (AccountAdapter.state().user || {}).email || 'your account'}`, 'good', { icon: 'cloud', chip: 'Account' }); }
+    else if (st === 'signed-out') { this._acctOffline = false; this.toast(d.why ? `Signed out: ${d.why}` : 'Signed out. Your profile stays in this browser.', d.why ? 'warn' : 'info', { icon: 'cloud', chip: 'Account' }); }
+    else if (st === 'synced') { if (this._acctOffline) this.toast('Back online. Cloud save up to date.', 'good', { icon: 'cloud', chip: 'Account' }); this._acctOffline = false; this._acctLastErr = null; }
+    else if (st === 'conflict') this.toast('Both saves changed: choose which one to keep.', 'warn', { icon: 'cloud', chip: 'Account' });
+    else if (st === 'error') { const msg = d.message || d.why || 'Cloud save error'; if (this._acctLastErr !== msg) { this._acctLastErr = msg; this.toast(msg, 'warn', { icon: 'cloud', chip: 'Account' }); } }
+    else if (st === 'offline') { if (!this._acctOffline) this.toast('Cloud save offline. Playing locally; sync retries on its own.', 'warn', { icon: 'cloud', chip: 'Account' }); this._acctOffline = true; }
+    this.refreshAccount();
+    if (this.panel === 'settings' && this._inst) this._inst.update();
   },
 
   // ---------------------------------------------------------- panel verbs (called by panels.js through ctx.ui)

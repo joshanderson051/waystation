@@ -1,0 +1,6 @@
+# Local secrets for `wrangler dev` (PEPPER=...). Never commit.
+.dev.vars
+.dev.vars.*
+# Wrangler's local state and KV emulation
+.wrangler/
+node_modules/

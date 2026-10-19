@@ -231,9 +231,9 @@ function silhouette(group, idOrItem, index, found, hue) {
 // every 250ms after that, so a ticking number never forces a whole-panel re-render.
 function paint(el, html, store, key, meta) {
   if (!el) return false;
-  if (store[key] === html) return false;
+  if (store[key] === html && store.__last === key) return false;   // same key and same HTML: nothing to do; a different key (tab) always repaints
   const first = store[key] == null;
-  store[key] = html;
+  store[key] = html; store.__last = key;
   const scroll = el.scrollTop;
   el.innerHTML = html;
   if (first) {
@@ -283,7 +283,7 @@ function territoryBlock(s, ctx) {
     `<rect class="pp-grid" x="0" y="0" width="${W}" height="${H}"/>` +
     (nx || cl ? `<rect class="pp-next${cl ? ' clearing' : ''}" x="${nb.c0 * g}" y="${nb.r0 * g}" width="${(nb.c1 - nb.c0 + 1) * g}" height="${(nb.r1 - nb.r0 + 1) * g}"/>` : '') +
     `<rect class="pp-plot" x="${p.c0 * g}" y="${p.r0 * g}" width="${w * g}" height="${hgt * g}"/></svg>`;
-  let h = shelf('Territory', esc(`Ring ${p.ring} of ${p.rings} ${MID} ${w}x${hgt} plot`), { hue: 'var(--ice)' });
+  let h = shelf('Territory', esc(`${p.ring ? `Ring ${p.ring} of ${Math.max(1, p.rings - 1)}` : 'Starting plot'} ${MID} ${w}x${hgt} plot`), { hue: 'var(--ice)' });
   if (cl) {
     const left = cl.remainingMs != null ? cl.remainingMs : Math.max(0, (cl.endsAt || 0) - Date.now()), until = cl.endsAt || Date.now() + left, total = Math.max(1, cl.totalMs || left);
     const am = cl.skipAM != null ? cl.skipAM : Math.max(1, Math.ceil(left / 480000));
@@ -772,7 +772,7 @@ const Panels = {
       }
       const claimable = all.filter(m => m.claimable).length, done = all.filter(m => m.done || m.claimed).length;
       F.setSub(`${done} of ${all.length} complete${claimable ? ` ${MID} <span class="c-amber">${claimable} to claim</span>` : ''}`);
-      let h = shelf('Active', esc(`${active.length} of 3`), { first: true });
+      let h = shelf('Active', esc(`${active.length} of ${(typeof Meta !== 'undefined' && typeof Meta.missionSlots === 'function') ? Meta.missionSlots() : 3}`), { first: true });
       if (!active.length) h += `<p class="idle">Every goal is complete. New chapters open as the station grows.</p>`;
       for (const m of active) h += missionCard(m, true);
       const chapters = [];
@@ -852,8 +852,10 @@ const Panels = {
       let h = mode !== 'stripe' ? `<div class="ribbon"><i class="sq"></i>Test mode. Purchases are free and local until Stripe is connected.</div>` : '';
       h += `<div class="store-hero"><i class="spine"></i><div class="store-hero-head"><span class="store-hero-ic">${icon('am', 28)}</span><div><div class="store-hero-title">Antimatter</div><p class="body">Skip waits, bring crews home early and open sectors on your own schedule. Earned by play, or bought here.</p></div></div>` +
         `<div class="am-tiles">${am.map(i => tile(i)).join('')}</div></div>`;
-      if (boosts.length) { h += shelf('Boosts', 'credits now', { hue: 'var(--amber)' }); h += `<div class="sku-list">${boosts.map(i => row(i, 'amber')).join('')}</div>`; }
-      if (passes.length || cosm.length) { h += shelf('Passes and cosmetics', null, { hue: 'var(--rose)' }); h += `<div class="sku-list">${[...passes, ...cosm].map(i => row(i, i.kind === 'pass' ? 'am' : 'rose')).join('')}</div>`; }
+      const relief = (typeof TIMERS !== 'undefined' && TIMERS.RELIEF_CONVOY) || { am: 10, minutes: 30 };
+      const reliefRow = `<div class="sku" style="--hue:var(--am)"><i class="spine"></i><span class="sku-ic">${icon('credits', 20)}</span><div class="sku-main"><span class="sku-name">Relief convoy</span><span class="sku-desc">${relief.minutes} minutes of your whole station's rate, delivered now, paid with Antimatter you already hold.</span></div><button type="button" class="btn am" data-act="relief">${icon('am', 14)}<span>${relief.am} AM</span></button></div>`;
+      h += shelf('Boosts', 'credits now', { hue: 'var(--amber)' }); h += `<div class="sku-list">${boosts.map(i => row(i, 'amber')).join('')}${reliefRow}</div>`;
+      if (passes.length || cosm.length) { h += shelf('Passes and cosmetics', null, { hue: 'var(--rose)' }); h += `<div class="sku-list">${[...passes, ...cosm].map(i => row(i, i.kind === 'pass' ? 'am' : 'rose', i.kind === 'cosmetic')).join('')}</div>`; }
       h += shelf('Restore purchases', null, { hue: 'var(--ice)' });
       h += `<div class="restore"><input type="email" class="input" id="restore-email" placeholder="email used at checkout" aria-label="Email used at checkout" autocomplete="email"><button type="button" class="btn" data-act="restore">${icon('reroll', 14)}<span>Restore</span></button></div>`;
       h += `<p class="legal micro">Prices in USD. Antimatter is a game currency with no cash value and cannot be refunded or transferred. Sandbox grants are local to this browser.</p>`;
@@ -867,11 +869,18 @@ const Panels = {
       return `<button type="button" class="am-tile${i.badge ? ' lifted' : ''}${i.owned ? ' owned' : ''}" data-sku="${esc(i.sku)}"${i.owned ? ' disabled' : ''} aria-label="${esc(i.title)} for ${esc(i.priceLabel)}"><i class="spine"></i>${i.badge ? `<span class="am-badge">${esc(i.badge)}</span>` : ''}` +
         `<span class="am-ic">${icon('am', 22)}</span><span class="am-amount num">${Fmt.n(amOf(i))}</span><span class="am-lbl">AM${bonus ? ` <span class="c-good">+${bonus}%</span>` : ''}</span><span class="am-price num">${esc(i.priceLabel || '')}</span></button>`;
     };
-    const row = (i, hue) => `<div class="sku${i.owned ? ' owned' : ''}" style="--hue:var(--${hue})"><i class="spine"></i><span class="sku-ic">${icon(i.kind === 'pass' ? 'map' : i.kind === 'cosmetic' ? 'ship' : 'credits', 20)}</span>` +
+    const row = (i, hue, soon) => `<div class="sku${i.owned ? ' owned' : ''}${soon ? ' soon' : ''}" style="--hue:var(--${hue})"><i class="spine"></i><span class="sku-ic">${icon(i.kind === 'pass' ? 'map' : i.kind === 'cosmetic' ? 'ship' : 'credits', 20)}</span>` +
       `<div class="sku-main"><span class="sku-name">${esc(i.title || i.sku)}</span><span class="sku-desc">${esc(i.desc || '')}</span></div>` +
-      (i.owned ? `<span class="chip good" data-shape="up">Owned</span>` : `<button type="button" class="btn${hue === 'am' ? ' am' : ' primary'}" data-sku="${esc(i.sku)}">${esc(i.priceLabel || 'Buy')}</button>`) + `</div>`;
+      (i.owned ? `<span class="chip good" data-shape="up">Owned</span>` : soon ? `<span class="chip ivory" title="Liveries arrive in a coming update; nothing is sold until they show on your station">Coming soon</span>` : `<button type="button" class="btn${hue === 'am' ? ' am' : ' primary'}" data-sku="${esc(i.sku)}">${esc(i.priceLabel || 'Buy')}</button>`) + `</div>`;
     F.body.addEventListener('click', e => {
       const b = e.target.closest('[data-sku]'); if (b && !b.disabled) { ctx.ui.purchase(b.dataset.sku, b); return; }
+      const rl = e.target.closest('[data-act="relief"]');
+      if (rl) {
+        const res = (typeof Meta !== 'undefined' && typeof Meta.reliefConvoy === 'function') ? Meta.reliefConvoy() : null;
+        if (res && res.ok) { ctx.ui.toast(`Relief convoy arrived: +${Fmt.n(res.credits)} credits`, 'good'); if (ctx.sound && ctx.sound.click) ctx.sound.click(); }
+        else { ctx.ui.toast((res && res.why) || 'Not enough Antimatter', 'warn'); if (ctx.sound && ctx.sound.error) ctx.sound.error(); }
+        sig.s = ''; render(); ctx.ui.refresh(); return;
+      }
       const r = e.target.closest('[data-act="restore"]'); if (r) { const inp = host.querySelector('#restore-email'); ctx.ui.restore(inp ? inp.value.trim() : ''); }
     });
     render();
@@ -880,19 +889,53 @@ const Panels = {
 
   // ---------------------------------------------------------- Settings (5.2)
   settings(host, ctx) {
-    const F = frame(host, { id: 'settings', title: 'Settings', sub: 'Sound, motion, performance, save data' }, ctx), sig = {};
+    const F = frame(host, { id: 'settings', title: 'Settings', sub: 'Sound, motion, notifications, save data' }, ctx), sig = {};
+    // A3 push notifications: js/notify.js loads after this file and may be absent in previews, so every call is guarded
+    const notifyApi = () => (typeof Notify !== 'undefined' && Notify && typeof Notify.state === 'function') ? Notify : null;
+    const NOTIFY_CHIP = { on: ['good', 'On'], off: ['ink', 'Off'], pending: ['ice', 'Connecting'], blocked: ['warn', 'Blocked'], error: ['warn', 'Offline'], unsupported: ['ink', 'Unavailable'], unconfigured: ['ink', 'Not connected'] };
+    const NOTIFY_SUB = {
+      off: 'A browser notification when a build, upgrade, expedition or clearing finishes, even with the tab closed',
+      pending: 'Asking the browser and the notification service',
+      blocked: 'Notifications are blocked for this site. Allow them in the browser\'s site settings, then switch this on again.',
+      unsupported: 'This browser cannot show notifications for a closed tab.',
+      unconfigured: 'The notification service is not connected yet.',
+    };
     const render = () => {
       const st = ctx.meta.settings(), snd = ctx.sound.settings, perf = ctx.engine.perf();
-      const sw = (id, on, label, sub) => `<div class="setting"><div class="setting-main"><span class="setting-lbl">${esc(label)}</span>${sub ? `<span class="setting-sub">${esc(sub)}</span>` : ''}</div><button type="button" class="switch${on ? ' on' : ''}" role="switch" aria-checked="${on}" data-switch="${id}" aria-label="${esc(label)}"><i></i></button></div>`;
+      const sw = (id, on, label, sub, o = {}) => `<div class="setting"><div class="setting-main"><span class="setting-lbl">${esc(label)}</span>${sub ? `<span class="setting-sub">${esc(sub)}</span>` : ''}</div>${o.chip ? `<span class="chip ${o.chip[0]}">${esc(o.chip[1])}</span>` : ''}<button type="button" class="switch${on ? ' on' : ''}" role="switch" aria-checked="${on}" data-switch="${id}" aria-label="${esc(label)}"${o.disabled ? ' disabled' : ''}><i></i></button></div>`;
+      const notifyRows = () => {
+        const N = notifyApi() ? notifyApi().state() : { status: 'unsupported', wanted: false, daily: false, detail: '' };
+        const s2 = NOTIFY_CHIP[N.status] ? N.status : 'off';
+        const live = s2 === 'on' || (s2 === 'error' && N.wanted);
+        const sub = s2 === 'on' ? NOTIFY_SUB.off : s2 === 'error' ? (N.detail || 'The notification service could not be reached. It keeps trying.') : (NOTIFY_SUB[s2] || NOTIFY_SUB.off);
+        let h2 = sw('notify', live || s2 === 'pending', 'Notify me when something finishes', sub, { chip: NOTIFY_CHIP[s2], disabled: s2 === 'unsupported' || s2 === 'unconfigured' || s2 === 'pending' });
+        if (live) {
+          h2 += sw('notifyDaily', !!N.daily, 'Daily reward reminder', 'At 9 in the morning when a reward is waiting');
+          h2 += `<div class="actions"><button type="button" class="btn" data-act="notify-test">${icon('bell', 14)}<span>Send a test notification</span></button></div>`;
+        }
+        return h2;
+      };
       const slider = (id, v, label) => `<div class="setting"><div class="setting-main"><span class="setting-lbl">${esc(label)}</span></div><input type="range" class="slider" min="0" max="100" value="${Math.round(v * 100)}" data-slider="${id}" aria-label="${esc(label)}"><span class="num slider-val">${Math.round(v * 100)}</span></div>`;
       const seg = (id, val, opts, label) => `<div class="setting"><div class="setting-main"><span class="setting-lbl">${esc(label)}</span></div><div class="seg">${opts.map(([v, l]) => `<button type="button" data-seg="${id}" data-v="${v}" class="${String(val) === String(v) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div></div>`;
-      let h = shelf('Sound', null, { first: true, hue: 'var(--ice)' });
+      // A2.1 account shelf: not connected / signed out / signed in
+      const acct = ctx.account, ast = acct ? acct.state() : null;
+      let h = shelf('Account', null, { first: true, hue: 'var(--ice)', attrs: ' id="acct-shelf"' });
+      if (!acct || !acct.available()) h += `<p class="fine acct-off">${icon('cloud', 14)} Cloud saves are not connected on this build yet. Your profile is saved in this browser; export it from Save data to move it.</p>`;
+      else if (!ast.signedIn) h += `<div class="acct"><div class="acct-main"><span class="setting-lbl">Sign in to save across devices</span><span class="setting-sub">One cloud save per account, newest wins. A recovery phrase instead of email resets.</span></div><button type="button" class="btn primary" data-act="signin">${icon('cloud', 14)}<span>Sign in</span></button></div>`;
+      else {
+        const when = ast.lastSyncAt ? `${Fmt.ago(Date.now() - ast.lastSyncAt)} ago` : 'not yet', line = ast.syncing ? 'Syncing…' : ast.lastError ? `Error: ${ast.lastError}` : ast.dirty ? 'Changes waiting to sync' : 'Synced';
+        h += `<div class="acct signed"><div class="acct-main"><span class="setting-lbl">${icon('user', 14)} ${esc(ast.user ? ast.user.email : '')}</span><span class="setting-sub">${esc(line)} ${MID} last synced ${esc(when)}</span></div></div>` +
+          `<div class="actions"><button type="button" class="btn" data-act="sync">${icon('reroll', 14)}<span>Sync now</span></button><button type="button" class="btn ghost" data-act="signout">${icon('cloud', 14)}<span>Sign out</span></button><button type="button" class="btn ghost danger" data-act="delete-account">${icon('scrap', 14)}<span>Delete account</span></button></div>`;
+      }
+      h += shelf('Sound', null, { hue: 'var(--ice)' });
       h += sw('sfx', snd.sfx, 'Interface sounds', 'Clicks, collects, chimes') + slider('sfxVol', snd.sfxVol, 'Effects volume');
       h += sw('music', snd.music, 'Bridge ambience', 'A low hum and a slow pad') + slider('musicVol', snd.musicVol, 'Ambience volume');
       h += shelf('Motion and performance', null, { hue: 'var(--ice)' });
       h += seg('motion', st.motion || 'auto', [['auto', 'System'], ['reduced', 'Reduced'], ['full', 'Full']], 'Motion');
       h += seg('perf', st.perf == null ? 'auto' : st.perf, [['auto', 'Auto'], ['2', 'High'], ['1', 'Medium'], ['0', 'Low']], `Effects tier${perf ? ` ${MID} ${Math.round(perf.fps)} fps` : ''}`);
       h += sw('perfTag', !!st.perfTag, 'Show performance readout', 'fps and tier in the context bar');
+      h += shelf('Notifications', null, { hue: 'var(--ice)' });
+      h += notifyRows();
       h += shelf('Save data', null, { hue: 'var(--amber)' });
       h += `<div class="actions"><button type="button" class="btn" data-act="export">${icon('export', 14)}<span>Export save</span></button><button type="button" class="btn" data-act="import">${icon('import', 14)}<span>Import save</span></button><button type="button" class="btn" data-act="restore">${icon('reroll', 14)}<span>Restore purchases</span></button></div>`;
       h += `<textarea id="save-io" class="input io" rows="3" placeholder="Export writes your profile here. Paste a profile and press Import to load it." aria-label="Save data" spellcheck="false"></textarea>`;
@@ -905,6 +948,7 @@ const Panels = {
           `<p class="fine">Passphrase-protected testing console (also Ctrl+Shift+A). Grants made there are tagged admin in the profile history.</p>`;
       }
       h += shelf('About', null, { hue: 'var(--ink-3)' });
+      h += `<div class="actions"><button type="button" class="btn" data-act="replay-tour">${icon('play', 14)}<span>Replay the tour</span></button><a class="btn" href="../manual/" target="_blank" rel="noopener">${icon('registry', 14)}<span>Open the manual</span></a></div>`;
       h += `<p class="fine">Waystation v2 ${MID} a browser space-station builder. Hand-written HTML, CSS and JavaScript with PixiJS for the world. Procedural audio, no trackers, saves on your device. ${MID} Licence: all original work; PixiJS under MIT.</p>`;
       paint(F.body, h, sig, 'st');
     };
@@ -912,6 +956,12 @@ const Panels = {
       const sw = e.target.closest('[data-switch]');
       if (sw) {
         const id = sw.dataset.switch, on = !sw.classList.contains('on');
+        if (id === 'notify' || id === 'notifyDaily') {
+          const N = notifyApi(); if (!N || sw.disabled) return;
+          if (id === 'notify') { const p = on ? N.enable() : N.disable(); if (p && typeof p.then === 'function') p.then(() => { sig.st = ''; render(); }); }   // enable() must run inside the click: the permission prompt needs the gesture
+          else N.setDaily(on);
+          ctx.sound.click(); sig.st = ''; render(); return;
+        }
         if (id === 'sfx' || id === 'music') ctx.sound.set(id, on); else ctx.ui.setSetting(id, on);
         ctx.sound.click(); sig.st = ''; render(); return;
       }
@@ -922,9 +972,15 @@ const Panels = {
       if (act === 'export') { const txt = ctx.meta.exportSave(); if (io) { io.value = txt || ''; io.focus(); io.select(); } ctx.ui.toast(txt ? 'Profile exported. Copy the text to keep it safe.' : 'Nothing to export yet', txt ? 'good' : 'warn'); }
       else if (act === 'import') { const txt = io ? io.value.trim() : ''; if (!txt) { ctx.ui.toast('Paste a profile first', 'warn'); return; } ctx.ui.confirm('Import this profile?', 'The current profile in this browser will be replaced.', () => { const ok = ctx.meta.importSave(txt); ctx.ui.toast(ok ? 'Profile imported' : 'That does not look like a Waystation profile', ok ? 'good' : 'bad'); if (ok) ctx.ui.refresh(); }, { yes: 'Import', danger: true }); }
       else if (act === 'restore') ctx.ui.openPanel('store');
+      else if (act === 'notify-test') { const N = notifyApi(); if (N) N.test().then(ok => ctx.ui.toast(ok ? 'A test notification is on its way. It can take up to a minute.' : 'The test could not be sent. Check the notification service.', ok ? 'good' : 'warn')); }
       else if (act === 'scrap-station') ctx.ui.scrapStation();
       else if (act === 'reset-profile') ctx.ui.resetProfile();
       else if (act === 'admin') { if (typeof Admin !== 'undefined') Admin.open(); }
+      else if (act === 'signin') ctx.ui.openPortal('login');
+      else if (act === 'sync') ctx.ui.accountSync(b);
+      else if (act === 'signout') ctx.ui.accountSignOut();
+      else if (act === 'delete-account') ctx.ui.accountDelete();
+      else if (act === 'replay-tour') ctx.ui.replayTour();
     });
     host.addEventListener('input', e => {
       const sl = e.target.closest('[data-slider]'); if (!sl) return;

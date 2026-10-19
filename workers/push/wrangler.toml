@@ -1,0 +1,35 @@
+# Waystation push backend — Cloudflare Worker configuration (DESIGN2.md Addendum A3).
+# Follow README.md in this folder step by step; every REPLACE_… below is filled in there.
+#
+# Secrets are NEVER written in this file. Set the one secret with:
+#   npx wrangler secret put VAPID_PRIVATE_KEY     (the private half of the pair `npm run keys` prints)
+
+name = "waystation-push"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+workers_dev = true            # publishes at https://waystation-push.<your-subdomain>.workers.dev
+
+[observability]
+enabled = true                # request and cron logs in the Cloudflare dashboard (free tier includes this)
+
+# ---------------------------------------------------------------- cron: look for due timers once a minute
+[triggers]
+crons = ["* * * * *"]
+
+# ---------------------------------------------------------------- KV: subscriptions, timers and the due index
+# Create the namespace once with `npx wrangler kv namespace create PUSH` and paste the id it prints.
+[[kv_namespaces]]
+binding = "PUSH"
+id = "cd020b72ad0543bda1b545933c50b575"
+
+# ---------------------------------------------------------------- plain variables (not secret)
+[vars]
+# The site origins allowed to call this worker, comma-separated, no trailing slash.
+# Add "http://localhost:8787" (or whatever port you serve the game on) while testing locally.
+ALLOWED_ORIGIN = "https://joshanderson051.github.io"
+
+# The public half of the VAPID pair from `npm run keys`. Browsers subscribe with it; the private half signs each push.
+VAPID_PUBLIC_KEY = "BAraD38ycV_7TPBCxTEE5Y0_oBiKCsGMOuem2D4e2d1XqEpyO04sieX0Mephsx2jb5VoAT2SE7wqsDo-2YY_ZO0"
+
+# How a push service can reach you if your worker misbehaves: an https: URL or a mailto: address.
+VAPID_SUBJECT = "https://joshanderson051.github.io/waystation/"

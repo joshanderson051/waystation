@@ -54,7 +54,7 @@ const Overlays = {
       const b = e.target.closest('#modal-actions button'); if (b) { this.modalAction(+b.dataset.i); return; }
       if (e.target === modal && this._modal && this._modal.dismissible !== false) this.escModal();
     });
-    modal.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); this.modalAction(0); } });
+    modal.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT' && this._modal && this._modal.actions && this._modal.actions.length) { e.preventDefault(); this.modalAction(0); } });
     const sheet = $('#sheet');
     sheet.addEventListener('click', e => {
       const b = e.target.closest('[data-sheet-act]');
@@ -115,7 +115,7 @@ const Overlays = {
   },
   // Esc closes confirmations; a transmission (event / alert) must be answered
   escModal() {
-    if (this._sheet) { this.closeSheet(); return; }
+    if (this._sheet) { if (this._sheet.dismissible !== false) this.closeSheet(); return; }
     if (this._modal && this._modal.kind !== 'event' && this._modal.kind !== 'alert') this.closeModal();
   },
   // confirm(title, html, onYes, { yes, no, kind, danger, am, tag }) -> Promise<boolean>
@@ -139,6 +139,7 @@ const Overlays = {
     box.dataset.sheet = o.id || 'sheet';
     box.dataset.hue = o.hue || 'amber';
     box.classList.toggle('wide', !!o.wide);
+    box.classList.toggle('locked', o.dismissible === false);
     const acts = (o.actions || []).map(a => {
       const cls = ['btn', 'big', a.primary ? 'primary' : '', a.am ? 'am' : '', a.ghost ? 'ghost' : '', a.danger ? 'danger' : ''].filter(Boolean).join(' ');
       return `<button type="button" class="${cls}" data-sheet-act="${esc(a.id)}"${a.disabled ? ' disabled' : ''}>${a.icon ? icon(a.icon, 16) : ''}<span>${esc(a.label)}</span></button>`;
@@ -155,7 +156,7 @@ const Overlays = {
   },
   sheetAction(id, btn) {
     const o = this._sheet; if (!o) return;
-    if (id === '__close') { this.closeSheet(); return; }
+    if (id === '__close') { if (o.dismissible !== false) this.closeSheet(); return; }
     const a = (o.actions || []).find(x => x.id === id);
     if (a && typeof a.fn === 'function') { const keep = a.fn(btn); if (keep !== true) this.closeSheet(); }
     if (this.sound) this.sound.click();
@@ -247,9 +248,9 @@ const Overlays = {
   // Keys overlay (5.1)
   keys() {
     const rows = [
-      ['Space', 'Pause / resume'], ['1 · 2 · 4', 'Game speed'], ['B', 'Build'], ['S', 'Station'], ['M', 'Market'], ['F', 'Fleet'],
+      ['Space', 'Pause / resume'], ['1', 'Run'], ['B', 'Build'], ['S', 'Station'], ['M', 'Market'], ['F', 'Fleet'],
       ['E', 'Expeditions'], ['G', 'Galaxy map'], ['J', 'Missions'], ['R', 'Registry'], ['Esc', 'Close panel · cancel placing · deselect'],
-      ['Arrows', 'Pan the camera'], ['+ · −', 'Zoom'], ['0', 'Fit the station'], ['Shift-click', 'Collect every ready bank nearby'], ['?', 'This reference'],
+      ['Arrows', 'Pan the camera'], ['+ · −', 'Zoom'], ['0', 'Fit the station'], ['Shift-click', 'Collect every ready bank nearby'], ['?', 'This reference'], ['Tour', 'Settings > Replay the tour'],
     ].map(([k, v]) => `<div class="key-row"><kbd>${esc(k)}</kbd><span>${esc(v)}</span></div>`).join('');
     this.sheet({ id: 'keys', hue: 'ice', html: `<div class="sheet-kicker">Reference</div><h2 class="sheet-title">Keys</h2><div class="key-grid">${rows}</div>`, actions: [{ id: 'ok', label: 'Close', ghost: true }] });
   },
@@ -321,9 +322,12 @@ const Overlays = {
     this._celeQueue.push({ kind, data });
     if (!this._celeBusy) this._nextCele();
   },
+  // deferred celebrations (A2.2: the tour holds them) resume through flushCelebrations()
+  flushCelebrations() { if (!this._celeBusy && this._celeQueue.length) this._nextCele(); },
   _nextCele() {
     const item = this._celeQueue.shift();
     if (!item) { this._celeBusy = false; return; }
+    if (typeof Tutorial !== 'undefined' && Tutorial && Tutorial.active) { this._celeQueue.unshift(item); this._celeBusy = false; return; }
     this._celeBusy = true;
     const host = $('#celebrate'); if (!host) { this._celeBusy = false; return; }
     const { kind, data } = item;

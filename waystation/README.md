@@ -53,7 +53,7 @@ node serve.js --port 8788 --base waystation
   click it and the credits fly to the counter. Banks fill while you are away (up to their cap).
 - **Ships** dock for fuel, repairs, food and trade, and pay on departure, as before. Residents move in when
   quality of life is high. Reputation and module count unlock the five station tiers.
-- **Expeditions** (E): from a Docking Bay, send a survey to any sector. It returns after 10 to 120 minutes with
+- **Expeditions** (E): from a Docking Bay, send a survey to any sector. It returns after 30 minutes to 24 hours with
   goods, charts, Antimatter and discoveries for the Registry.
 - **Galaxy** (G): eight sectors, each a full station with its own world and bias. Unlock with credits, charts
   and level, or with Antimatter. Credits are one wallet across all sectors; banks fill everywhere.
@@ -84,6 +84,29 @@ Sandbox is the default: purchases are free, local and clearly labelled. To sell 
 Cloudflare Worker in `workers/store` with your Stripe keys (its README walks through test mode and live mode),
 then set `<meta name="waystation-store" content='{"mode":"stripe","apiBase":"https://…workers.dev"}'>` in
 `play/index.html`.
+
+## Manual, tutorial, accounts, admin
+
+- **Manual**: `manual/index.html`, a long-form guide generated from the same data files; linked from the landing page, Settings and the tour.
+- **Tutorial**: a 13-step coach-mark tour (`play/js/ui/tutorial.js`) runs on a profile's first commission and replays from Settings.
+- **Accounts and cloud saves**: `play/js/account.js` talks to `workers/account` (email and password, recovery phrase, one cloud save per
+  account, newest-wins sync with a chooser). Until that Worker is deployed and its URL is set in
+  `<meta name="waystation-account">`, the game says cloud saves are not connected and saves locally.
+- **Admin console** (`play/js/ui/admin.js`): Settings > Admin or Ctrl+Shift+A, gated by a passphrase whose SHA-256 sits in
+  `<meta name="waystation-admin">` in `play/index.html` (the passphrase itself is not in the repository). It grants Antimatter and
+  credits (tagged `admin` in the profile history), finishes timers, fills banks, unlocks sectors and forces the store mode. To change
+  the passphrase: `node -e "console.log(require('crypto').createHash('sha256').update('new passphrase').digest('hex'))"` and paste the
+  hex into the tag. In a client-side game this is a convenience gate, not a security boundary.
+
+## Push notifications
+
+Settings > Notifications > **Notify me when something finishes** sends a browser notification when a build, upgrade,
+expedition or plot clearing finishes while the tab is closed (optionally a daily-reward reminder at 9 in the morning).
+It is opt-in per browser and needs the small Cloudflare Worker in `workers/push` (its README walks through the setup:
+`npm run keys`, `wrangler login`, a KV namespace, one secret, deploy). Until its address is set in
+`<meta name="waystation-push" content='{"apiBase":"https://…workers.dev"}'>` in `play/index.html`, the switch reads
+"Not connected" and the game never asks for notification permission. `play/js/notify.js` keeps the backend's copy of the
+pending timers current; `play/sw.js` shows the notification and focuses or opens `/play/` on click.
 
 ## Hosting and caching
 

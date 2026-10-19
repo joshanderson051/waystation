@@ -89,7 +89,10 @@
      #flights > i.flight(.amber .am .ice)
 
    Title (#title)
-     .title-band.glass > .sweep + .wordmark.hero + .title-sub
+     .title-band.glass > .sweep + .wordmark.hero + .title-sub + #title-account(.title-account > .btn[data-account=signin] | .title-signed(.title-signed-main .micro .linkish[data-account=notyou]))
+   Tour (#tour, A2.2): .tour-dim .tour-ring .tour-callout.glass.cut[data-step][data-side] > .spine .tour-kicker .tour-title .tour-text .tour-wait(.pulse-dot) .tour-actions(#tour-manual .btn[data-tour=skip|next])
+   Account (A2.1): #btn-cloud.sb-btn.cloud[data-state=off|signed-out|synced|dirty|syncing|offline|error]  modal .portal[data-tab] > .portal-tabs(.ptab[data-portal=tab:*]) .pform(.pfield .pinput(.peek) .phint .psubmit .perr)
+                   sheets: recovery (.phrase-box .phrase .gate) · chooser (.save-cards > .save-card[data-save] .save-head .save-name .kv .save-when .save-pick)   Settings: #acct-shelf .acct(.signed) .acct-main .acct-off
      .commission.glass.cut > .spine #title-resume(#btn-resume.resume-card > #title-thumb .resume-main(.resume-rank #resume-name .resume-meta .resume-cta)) .title-actions(#btn-newstation)
                             #title-form(.field .name-row(#title-name #btn-reroll) #title-registry #title-confirm(.confirm-text #btn-title-back) .title-actions(#btn-commission))
    #phone   the ≤760px / coarse-pointer message screen
@@ -338,7 +341,10 @@ b, strong { font-weight: 500; color: var(--ink); }
 .btn.icon::before { display: none; }
 .btn.icon.small { width: 30px; height: 30px; min-height: 30px; }
 .btn.icon .ic { width: 16px; height: 16px; }
-.btn.busy { pointer-events: none; animation: busy 1s linear infinite; }
+.btn.busy { position: relative; color: transparent !important; pointer-events: none; }
+.btn.busy .ic { opacity: 0; }
+.btn.busy::after { content: ''; position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid rgba(230,232,236,.3); border-top-color: var(--ink); animation: spin 800ms linear infinite; }
+.btn.primary.busy::after { border-color: rgba(20,12,0,.3); border-top-color: var(--on-accent); }
 .linkish { background: none; border: 0; padding: 0; color: var(--ice); font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
 .linkish:hover { color: var(--ice-hi); text-decoration: underline; }
 
@@ -411,6 +417,7 @@ textarea.input.io { height: auto; min-height: 72px; padding: 10px 12px; font: 50
 .switch { position: relative; width: 52px; height: 32px; border-radius: 16px; background: rgba(4,5,10,.5); border: 1px solid var(--edge); flex: none; transition: background-color var(--dur-state) var(--ease-out), border-color var(--dur-state) var(--ease-out); }
 .switch i { position: absolute; left: 4px; top: 4px; width: 22px; height: 22px; border-radius: 50%; background: var(--ink-2); transition: transform var(--dur-state) var(--ease-out), background-color var(--dur-state) var(--ease-out); }
 .switch.on { background: rgba(143,211,232,.22); border-color: var(--ice); }
+.switch:disabled { opacity: .4; cursor: not-allowed; }
 .switch.on i { transform: translateX(20px); background: var(--ice-hi); box-shadow: var(--glow-ice-2); }
 
 input.slider { -webkit-appearance: none; appearance: none; width: 140px; height: 32px; background: transparent; flex: none; }
@@ -1199,6 +1206,70 @@ body[data-boot] #statusbar > .spine, body[data-boot] #contextbar > .spine { anim
 .rail-btn:nth-child(6) { --i: 5; } .rail-btn:nth-child(7) { --i: 6; } .rail-btn:nth-child(8) { --i: 7; } .rail-btn:nth-child(9) { --i: 8; } .rail-btn:nth-child(10) { --i: 9; }
 
 /* --------------------------------------------------------------------------
+   A2.2 Tour: spotlight dim with an evenodd cut-out, ivory ring, glass callout
+   -------------------------------------------------------------------------- */
+#tour { position: fixed; inset: 0; z-index: 45; pointer-events: none; }
+#tour.out { opacity: 0; transition: opacity 240ms var(--ease-exit); }
+.tour-dim { position: absolute; inset: 0; background: rgba(3,4,10,.62); transition: clip-path 320ms var(--ease-out); }
+.tour-ring { position: absolute; left: 0; top: 0; border: 1px solid var(--ivory); border-radius: 6px; box-shadow: var(--glow-ivory), inset 0 0 12px rgba(243,233,214,.12); transition: transform 320ms var(--ease-out), width 320ms var(--ease-out), height 320ms var(--ease-out); }
+.tour-callout { position: absolute; left: 0; top: 0; width: 380px; max-width: calc(100vw - 24px); padding: 16px 18px 14px 22px; pointer-events: auto; background-color: var(--glass-3); --spine: var(--amber); --spine-glow: var(--glow-amber-2); box-shadow: inset 0 1px 0 var(--glass-hi), 0 24px 60px rgba(0,0,0,.5); transition: transform 320ms var(--ease-out); }
+.tour-callout > .spine { top: var(--cut); }
+.tour-callout.in { animation: row-in 280ms var(--ease-out) backwards; }
+.tour-kicker { font: 600 12px/1 var(--font-cond); letter-spacing: .14em; text-transform: uppercase; color: var(--amber); margin-bottom: 8px; }
+.tour-title { font: 700 22px/1.1 var(--font-cond); letter-spacing: .04em; text-transform: uppercase; color: var(--ink); margin-bottom: 8px; }
+.tour-text { font: 400 var(--fs-body-lg)/1.55 var(--font-body); color: var(--ink-2); }
+.tour-wait { display: flex; align-items: center; gap: 8px; margin-top: 12px; font: 600 12px/1 var(--font-cond); letter-spacing: .12em; text-transform: uppercase; color: var(--ice); }
+.pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ice); box-shadow: var(--glow-ice-2); animation: pulse-edge 1.6s ease-in-out infinite; }
+.tour-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+.tour-spacer { flex: 1; }
+a.btn { text-decoration: none; }
+body[data-motion="reduced"] .tour-dim, body[data-motion="reduced"] .tour-ring, body[data-motion="reduced"] .tour-callout { transition: none; }
+
+/* A2.1 accounts: cloud glyph, title band lozenge, portal, recovery phrase, chooser, settings shelf */
+.sb-btn.cloud[data-state="signed-out"] { color: var(--ink-3); }
+.sb-btn.cloud[data-state="synced"], .sb-btn.cloud[data-state="dirty"] { color: var(--ice); }
+.sb-btn.cloud[data-state="dirty"] .dot { background: var(--ice-dim); box-shadow: none; }
+.sb-btn.cloud[data-state="syncing"] { color: var(--ice-hi); }
+.sb-btn.cloud[data-state="syncing"] .dot { background: var(--ice); box-shadow: var(--glow-ice-2); animation: pulse-edge 1.2s ease-in-out infinite; }
+.sb-btn.cloud[data-state="offline"], .sb-btn.cloud[data-state="error"] { color: var(--warn); }
+.sb-btn.cloud[data-state="offline"] .dot, .sb-btn.cloud[data-state="error"] .dot { background: var(--warn); box-shadow: var(--glow-warn); border-radius: 0; width: 7px; height: 7px; }
+.title-account { position: absolute; right: 28px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; }
+.title-signed { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+.title-signed-main { display: inline-flex; align-items: center; gap: 6px; font: 600 13px/1 var(--font-cond); letter-spacing: .08em; text-transform: uppercase; color: var(--ice); }
+.title-signed .micro { color: var(--ink-2); }
+.portal-tabs { padding: 0; margin: -4px 0 14px; }
+.portal-off { display: flex; gap: 10px; align-items: flex-start; color: var(--ink-2); margin: 4px 0; }
+.portal-off .ic { color: var(--ink-3); flex: none; margin-top: 2px; }
+.pform { display: flex; flex-direction: column; gap: 12px; }
+.pfield { display: flex; flex-direction: column; gap: 6px; }
+.pfield .label { color: var(--ink-2); }
+.pinput { position: relative; display: flex; }
+.pinput .input { padding-right: 44px; }
+.pinput .peek { position: absolute; right: 2px; top: 2px; width: 32px; height: 32px; min-height: 32px; }
+.phint { font: 400 12px/1.45 var(--font-body); color: var(--ink-2); }
+.perr { padding: 8px 10px; border-radius: 3px; background: var(--bad-ghost); border: 1px solid rgba(255,79,94,.4); color: var(--bad); font: 400 13px/1.4 var(--font-body); }
+.input[aria-invalid="true"] { border-color: var(--bad); box-shadow: 0 0 10px rgba(255,79,94,.25); }
+.psubmit { align-self: flex-end; min-width: 160px; }
+.phrase-in { font-family: var(--font-mono); margin: 0; }
+.phrase-box { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 14px; }
+.phrase { flex: 1; margin: 0; padding: 14px 16px; border-radius: 3px; background: rgba(4,5,10,.55); border: 1px solid var(--edge-amber); color: var(--amber-hi); font: 600 16px/1.7 var(--font-mono); white-space: pre-wrap; word-break: break-word; user-select: text; text-shadow: var(--glow-amber-2); }
+.gate { display: flex; align-items: center; gap: 10px; font: 400 var(--fs-body-lg)/1.4 var(--font-body); color: var(--ink); cursor: pointer; }
+.gate input { width: 20px; height: 20px; accent-color: var(--amber); }
+.sheet-box.locked .sheet-close { display: none; }
+.save-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.save-card { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 14px 16px; text-align: left; background: rgba(4,5,10,.4); border: 1px solid var(--edge); border-radius: 3px; color: var(--ink); transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out); }
+.save-card:hover { background: rgba(16,23,44,.85); border-color: var(--edge-2); transform: translateY(-1px); }
+.save-head { display: inline-flex; align-items: center; gap: 8px; font: 600 12px/1 var(--font-cond); letter-spacing: .14em; text-transform: uppercase; color: var(--ice); }
+.save-name { font: 700 20px/1.1 var(--font-cond); letter-spacing: .04em; text-transform: uppercase; color: var(--ink); }
+.save-card .kv { margin: 2px 0; }
+.save-when { color: var(--ink-2); }
+.save-pick { align-self: flex-end; margin-top: 4px; }
+.acct { display: flex; align-items: center; gap: 12px; padding: 8px 0 4px; }
+.acct-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.acct .setting-lbl { display: inline-flex; align-items: center; gap: 6px; }
+.acct-off .ic { color: var(--ink-3); }
+
+/* --------------------------------------------------------------------------
    30. Responsive degradation (2.4)
    -------------------------------------------------------------------------- */
 @media (max-width: 1366px) {
@@ -1255,7 +1326,7 @@ body[data-boot] #statusbar > .spine, body[data-boot] #contextbar > .spine { anim
 @keyframes cele-out { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(40px); } }
 @keyframes sweep { from { left: -30%; } to { left: 110%; } }
 @keyframes spine-boot { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-@keyframes busy { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* --------------------------------------------------------------------------
    32. Reduced motion (2.6): tweens ≤120ms, no sweeps, no scan, no flights,

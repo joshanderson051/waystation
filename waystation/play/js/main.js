@@ -166,6 +166,11 @@
     const had = !!(safeGet('waystation.profile.v2') || safeGet('waystation-save-v1'));
     const r = Meta.init() || {};
     call(Store, 'flush');
+    if (typeof Notify !== 'undefined') call(Notify, 'boot');   // A3: re-attaches push notifications only when the player opted in earlier
+    // cloud save (A2.1): with a stored sign-in, pull a newer cloud profile or push a newer local one before the title shows
+    if (typeof Account !== 'undefined' && has(Account, 'boot')) {
+      try { const a = await Account.boot(); if (a && a.status === 'cloud') call(Meta, 'load'); } catch (e) { /* play continues locally */ }
+    }
 
     const host = $('#world') || body;
     try { await Engine.init(host); }

@@ -1,0 +1,22 @@
+{
+  "name": "waystation-account-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Waystation accounts and cloud saves: a Cloudflare Worker with email + password sign-in (PBKDF2-SHA256), recovery phrases, sliding tokens and one cloud save per account in KV (DESIGN2.md A2.1). No runtime dependencies.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "pepper": "node -e \"console.log(require('crypto').randomBytes(32).toString('base64url'))\"",
+    "dev": "wrangler dev --port 8790",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "login": "wrangler login"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

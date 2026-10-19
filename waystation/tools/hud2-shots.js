@@ -50,6 +50,26 @@ const SHOTS = [
   ['tooltip', [1440, 900], click('[data-h="tooltip"]'), 700],
   ['condition-flare', [1440, 900], async p => { await click('[data-h="ev:flare"]')(p); await click('[data-h="panel:station"]')(p); }, 700],
   ['title', [1440, 900], click('[data-h="title"]'), 1800],
+  // A2.1 accounts
+  ['title-signedin', [1440, 900], async p => { await click('[data-h="acct:signed-in"]')(p); await click('[data-h="title"]')(p); }, 1800],
+  ['portal-login', [1440, 900], click('[data-h="acct:portal-login"]'), 600],
+  ['portal-signup', [1440, 900], click('[data-h="acct:portal-signup"]'), 600],
+  ['portal-recover', [1440, 900], click('[data-h="acct:portal-recover"]'), 600],
+  ['portal-error', [1440, 900], click('[data-h="acct:portal-error"]'), 1300],
+  ['portal-busy', [1440, 900], click('[data-h="acct:portal-busy"]'), 250],
+  ['portal-unavailable', [1440, 900], async p => { await click('[data-h="acct:unavailable"]')(p); await click('[data-h="acct:portal-login"]')(p); }, 600],
+  ['account-recovery', [1440, 900], click('[data-h="acct:recovery"]'), 600],
+  ['account-chooser', [1440, 900], click('[data-h="acct:chooser"]'), 600],
+  ['account-cloud-synced', [1440, 900], click('[data-h="acct:signed-in"]'), 500],
+  ['account-cloud-syncing', [1440, 900], async p => { await click('[data-h="acct:signed-in"]')(p); await click('[data-h="acct:syncing"]')(p); }, 500],
+  ['account-cloud-offline', [1440, 900], async p => { await click('[data-h="acct:signed-in"]')(p); await click('[data-h="acct:offline"]')(p); }, 600],
+  ['account-settings-signedout', [1440, 900], click('[data-h="panel:settings"]'), 600],
+  ['account-settings-signedin', [1440, 900], async p => { await click('[data-h="acct:signed-in"]')(p); await click('[data-h="panel:settings"]')(p); }, 600],
+  ['account-settings-unavailable', [1440, 900], async p => { await click('[data-h="acct:unavailable"]')(p); await click('[data-h="panel:settings"]')(p); }, 600],
+  // A2.2 the tour: launched by UI.start on a fresh station (hub only), then step by step on the staged station
+  ['tour-fresh', [1440, 900], async () => {}, 2200, 'fresh=1'],
+  ['tour-fresh-dock', [1440, 900], click('[data-h="tour:4"]'), 700, 'fresh=1'],
+  ...Array.from({ length: 13 }, (_, i) => [`tour-${i + 1}`, [1440, 900], click(`[data-h="tour:${i + 1}"]`), 700]),
   ['reduced-build', [1440, 900], async p => { await click('[data-h="motion"]')(p); await click('[data-h="panel:build"]')(p); }, 400],
   ['1180-bridge', [1180, 700], async () => {}, 800],
   ['1180-build', [1180, 700], click('[data-h="panel:build"]'), 700],
@@ -57,6 +77,8 @@ const SHOTS = [
   ['1180-expeditions', [1180, 700], click('[data-h="panel:expeditions"]'), 700],
   ['1180-territory', [1180, 700], click('[data-h="panel:station"]'), 700],
   ['1180-achievements', [1180, 700], click('[data-h="panel:achievements"]'), 700],
+  ['1180-tour-4', [1180, 700], click('[data-h="tour:4"]'), 700],
+  ['1180-portal', [1180, 700], click('[data-h="acct:portal-signup"]'), 600],
   ['1024-bridge', [1024, 768], async () => {}, 800],
   ['1024-build', [1024, 768], click('[data-h="panel:build"]'), 700],
   ['1024-store', [1024, 768], click('[data-h="panel:store"]'), 700],
@@ -74,11 +96,11 @@ const SHOTS = [
   page.on('requestfailed', r => errs.push('REQFAIL ' + r.url() + ' ' + (r.failure() && r.failure().errorText)));
   page.on('response', r => { if (r.status() >= 400) errs.push('HTTP ' + r.status() + ' ' + r.url()); });
   let contrast = null, lastVp = '';
-  for (const [name, [w, h], steps, settle] of SHOTS) {
+  for (const [name, [w, h], steps, settle, query] of SHOTS) {
     if (ONLY && !name.includes(ONLY)) continue;
     const vp = `${w}x${h}`;
     await page.setViewport({ width: w, height: h, deviceScaleFactor: 1 });
-    await page.goto(PAGE, { waitUntil: 'networkidle0' });
+    await page.goto(PAGE + (query ? '&' + query : ''), { waitUntil: 'networkidle0' });
     await page.evaluate(() => document.fonts.ready);
     await sleep(lastVp === vp ? 350 : 700);
     lastVp = vp;

@@ -62,6 +62,13 @@ const UI_ICONS = {
   // A1: territory (plot corners) and achievement rosette
   territory:   { d: 'M4 8V4h4 M16 4h4v4 M20 16v4h-4 M8 20H4v-4 M9 12h6 M12 9v6' },
   award:       { d: 'M12 3.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11Z M8.5 13.5 7 21l5-2.5 5 2.5-1.5-7.5 M12 7.75v.5' },
+  // A2: cloud save, password visibility, copy, account, tour replay
+  cloud:       { d: 'M7 18.5h10a4 4 0 0 0 .6-7.95A5.5 5.5 0 0 0 7 9.6a4.5 4.5 0 0 0 0 8.9Z' },
+  eye:         { d: 'M3 12c2.5-4.5 5.5-6.5 9-6.5s6.5 2 9 6.5c-2.5 4.5-5.5 6.5-9 6.5S5.5 16.5 3 12Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z' },
+  'eye-off':   { d: 'M3 12c2.5-4.5 5.5-6.5 9-6.5 1.4 0 2.7.3 3.9.9 M21 12c-2.5 4.5-5.5 6.5-9 6.5-1.4 0-2.7-.3-3.9-.9 M4 20 20 4 M9.9 14.1a3 3 0 0 1 4.2-4.2' },
+  copy:        { d: 'M8 8.5h11v11H8Z M5 15.5V4.5h11' },
+  user:        { d: 'M15.5 8a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Z M5 20.5v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1' },
+  play:        { d: 'M7 5l11 7-11 7Z' },
 };
 if (typeof ICONS !== 'undefined' && ICONS) {
   for (const k of Object.keys(UI_ICONS)) if (!Object.prototype.hasOwnProperty.call(ICONS, k)) ICONS[k] = UI_ICONS[k];

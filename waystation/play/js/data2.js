@@ -428,7 +428,7 @@ const COLLECTION = {
 };
 const COLLECTION_KINDS = ['ships', 'species', 'artifacts'];
 
-// ------------------------------------------------------------ 4.7 missions (48)
+// ------------------------------------------------------------ 4.7 missions (50)
 // track(state, profile) -> progress number; complete when progress >= goal. `state` is the active station.
 // Trackers recount from state wherever possible; profile.stats holds only what cannot be recounted
 // (collects, transmissions, expeditions, convoy service).
@@ -447,7 +447,7 @@ function mAmenity(state) { return Sim.state === state ? Math.round(Sim.amenity(S
 function mSets(profile) { let n = 0; for (const s of COLLECTION.sets) if (profile.collection.sets[s.id]) n++; return n; }
 
 const MISSIONS = [
-  // ---- Commissioning (tutorial, 6): pays 30 AM in total
+  // ---- Commissioning (tutorial, 7): pays 35 AM in total
   { id: 'c_dock', chapter: 'Commissioning', title: 'First Berth', desc: 'Build a Docking Bay so ships have somewhere to pull up.', type: 'build', goal: 1, reward: { credits: 300, am: 5, xp: 20 }, requires: [], pointer: 'build', track: s => mCount(s, 'dock') },
   { id: 'c_warehouse', chapter: 'Commissioning', title: 'Room to Breathe', desc: 'Build a Cargo Warehouse. Ships sell into your stores and buy from them.', type: 'build', goal: 1, reward: { credits: 300, am: 5, xp: 20 }, requires: ['c_dock'], pointer: 'build', track: s => mCount(s, 'warehouse') },
   { id: 'c_solar', chapter: 'Commissioning', title: 'Lights On', desc: 'Build a Solar Array. Every module draws power.', type: 'build', goal: 1, reward: { credits: 400, am: 5, xp: 20 }, requires: ['c_warehouse'], pointer: 'build', track: s => mCount(s, 'solar') },
