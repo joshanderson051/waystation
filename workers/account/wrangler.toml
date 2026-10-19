@@ -1,0 +1,27 @@
+# Waystation account backend — Cloudflare Worker configuration (DESIGN2.md Addendum A2.1).
+# Follow README.md in this folder step by step; every REPLACE_… below is filled in there.
+#
+# Secrets are NEVER written in this file. Set the one secret with:
+#   npx wrangler secret put PEPPER      (a long random string; `npm run pepper` prints one)
+
+name = "waystation-account"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+workers_dev = true            # publishes at https://waystation-account.<your-subdomain>.workers.dev
+
+[observability]
+enabled = true                # request logs in the Cloudflare dashboard (free tier includes this)
+
+# ---------------------------------------------------------------- KV: users, sign-in tokens, cloud saves, rate limits
+# Create the namespace once with `npx wrangler kv namespace create ACCOUNTS` and paste the id it prints.
+[[kv_namespaces]]
+binding = "ACCOUNTS"
+id = "49c534db58b94e3190a36443908faca5"
+# For `npx wrangler dev` (local testing) create a second one with `--preview` and paste it here:
+# preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+
+# ---------------------------------------------------------------- plain variables (not secret)
+[vars]
+# The site origins allowed to call this worker, comma-separated, no trailing slash.
+# Add "http://localhost:8794" (or whatever port you serve the game on) while testing locally.
+ALLOWED_ORIGIN = "https://joshanderson051.github.io"
