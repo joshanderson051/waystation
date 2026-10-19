@@ -82,8 +82,47 @@ const SHOTS = [
   ['1024-bridge', [1024, 768], async () => {}, 800],
   ['1024-build', [1024, 768], click('[data-h="panel:build"]'), 700],
   ['1024-store', [1024, 768], click('[data-h="panel:store"]'), 700],
-  ['phone', [720, 1200], async () => {}, 500],
+  // A4 phone layout: 390x844 (iPhone 14 class) in full, 430x932 (Pro Max class) as a spot check
+  ...phoneShots('phone', [390, 844]),
+  ...phoneShots('phone430', [430, 932], true),
 ];
+function phoneShots(tag, vp, brief) {
+  const all = [
+    [`${tag}-bridge`, vp, async () => {}, 900],
+    ...PANELS.map(id => [`${tag}-panel-${id}`, vp, click(`[data-h="panel:${id}"]`), 700]),
+    [`${tag}-achievements`, vp, click('[data-h="panel:achievements"]'), 700],
+    [`${tag}-station-selected`, vp, click('[data-h="select:bank"]'), 700],
+    [`${tag}-station-scaffold`, vp, click('[data-h="select:scaffold"]'), 700],
+    [`${tag}-placing`, vp, async p => { await click('[data-h="panel:build"]')(p); await frames(p, 300); await click('[data-h="place:dock"]')(p); }, 800],
+    [`${tag}-peek`, vp, async p => { await click('[data-h="panel:station"]')(p); await frames(p, 300); await click('[data-h="phone:peek"]')(p); }, 700],
+    [`${tag}-more`, vp, click('[data-h="phone:more"]'), 600],
+    [`${tag}-menu`, vp, click('[data-h="phone:menu"]'), 600],
+    [`${tag}-toasts`, vp, async p => { await click('[data-h="toast:all"]')(p); await frames(p, 200); await click('[data-h="toast:action"]')(p); }, 900],
+    [`${tag}-condition`, vp, async p => { await click('[data-h="ev:flare"]')(p); await click('[data-h="toast:good"]')(p); }, 700],
+    [`${tag}-modal-event`, vp, click('[data-h="modal:event"]'), 600],
+    [`${tag}-modal-confirm`, vp, click('[data-h="modal:confirm"]'), 600],
+    [`${tag}-plot-confirm`, vp, click('[data-h="plot:confirm"]'), 600],
+    [`${tag}-modal-store`, vp, async p => { await click('[data-h="panel:store"]')(p); await frames(p, 300); await click('[data-h="modal:store"]')(p); }, 600],
+    [`${tag}-sheet-daily`, vp, click('[data-h="sheet:daily"]'), 600],
+    [`${tag}-sheet-away`, vp, click('[data-h="sheet:away"]'), 600],
+    [`${tag}-sheet-keys`, vp, click('[data-h="sheet:keys"]'), 600],
+    [`${tag}-celebrate-rank`, vp, click('[data-h="cele:rank"]'), 1200],
+    [`${tag}-celebrate-unlock`, vp, click('[data-h="cele:unlock"]'), 1200],
+    [`${tag}-celebrate-expedition`, vp, async p => { await click('[data-h="panel:expeditions"]')(p); await frames(p, 300); await click('[data-h="cele:expedition"]')(p); }, 1200],
+    [`${tag}-title`, vp, click('[data-h="title"]'), 1800],
+    [`${tag}-title-signedin`, vp, async p => { await click('[data-h="acct:signed-in"]')(p); await click('[data-h="title"]')(p); }, 1800],
+    [`${tag}-portal-signup`, vp, click('[data-h="acct:portal-signup"]'), 600],
+    [`${tag}-account-recovery`, vp, click('[data-h="acct:recovery"]'), 600],
+    [`${tag}-account-chooser`, vp, click('[data-h="acct:chooser"]'), 600],
+    [`${tag}-tour-fresh`, vp, async () => {}, 2200, 'fresh=1'],
+    ...Array.from({ length: 13 }, (_, i) => [`${tag}-tour-${i + 1}`, vp, click(`[data-h="tour:${i + 1}"]`), 700]),
+    // step 4 after the card is picked: the sheet peeks, the spotlight falls back to the dock's Build button
+    [`${tag}-tour-4-placing`, vp, async p => { await click('[data-h="tour:4"]')(p); await frames(p, 400); await p.$eval('#panel .card[data-mod="dock"]', el => el.click()); }, 800],
+  ];
+  if (!brief) return all;
+  const keep = new Set(['bridge', 'panel-build', 'panel-station', 'panel-map', 'panel-missions', 'panel-store', 'more', 'menu', 'placing', 'sheet-daily', 'celebrate-rank', 'title', 'tour-4', 'tour-13']);
+  return all.filter(([name]) => keep.has(name.slice(tag.length + 1)));
+}
 
 (async () => {
   if (!CHROME) { console.error('No Chrome or Edge found'); process.exit(1); }
@@ -123,8 +162,42 @@ const SHOTS = [
     const sb = document.getElementById('statusbar'); if (sb && sb.scrollWidth > sb.clientWidth + 1) out.push(`statusbar scrollWidth ${sb.scrollWidth} > ${sb.clientWidth}`);
     return out;
   });
+  // A4 phone gates at 390x844: nothing wider than the viewport (page, bridge, each panel, the sheets, the title, the tour),
+  // no horizontal scroll inside a panel body, and every visible control at least 32px tall (the list is informational)
+  const phoneGate = {};
+  const PHONE_STATES = [['bridge', ''], ...PANELS.map(id => [`panel-${id}`, `panel:${id}`]), ['achievements', 'panel:achievements'], ['station-selected', 'select:bank'], ['placing', 'place:dock'], ['more', 'phone:more'], ['menu', 'phone:menu'],
+    ['daily', 'sheet:daily'], ['away', 'sheet:away'], ['modal-event', 'modal:event'], ['plot-confirm', 'plot:confirm'], ['portal', 'acct:portal-signup'], ['chooser', 'acct:chooser'], ['title', 'title'], ['tour-1', 'tour:1'], ['tour-4', 'tour:4'], ['tour-13', 'tour:13']];
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+  for (const [name, h] of PHONE_STATES) {
+    await page.goto(PAGE, { waitUntil: 'networkidle0' });
+    await sleep(500);
+    // the chooser's handler returns a promise that settles on a pick: fire without returning it
+    if (h) { try { if (/^tour:\d+$/.test(h) || h.startsWith('panel:')) await page.$eval(`[data-h="${h}"]`, el => el.click()); else await page.evaluate(k => { window.HARNESS.fire(k); }, h); } catch (e) { errs.push(`PHONEGATE ${name}: ${e.message}`); } }
+    await frames(page, 700);
+    phoneGate[name] = await page.evaluate(() => {
+      const out = { wide: [], hscroll: [], short: [] }, W = innerWidth;
+      if (document.documentElement.scrollWidth > W + 1) out.wide.push(`document scrollWidth ${document.documentElement.scrollWidth}`);
+      const vis = el => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
+      for (const el of document.querySelectorAll('#statusbar, #statusbar *, #rail, .rail-btn, #panel, #panel *, #contextbar, #notices, .toast, #sheet .sheet-box, #sheet .sheet-box *, #modal .box, #modal .box *, #title, #title *, .tour-callout, .tour-callout *, .cele-band, .cele-inner *')) {
+        if (!vis(el) || el.classList.contains('sweep')) continue;   // the title band's light sweep lives off-canvas by design (clipped)
+        const r = el.getBoundingClientRect();
+        if (r.right > W + 1 || r.left < -1) out.wide.push(`${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : ''} left=${Math.round(r.left)} right=${Math.round(r.right)}`);
+      }
+      for (const el of document.querySelectorAll('.panel-body, .sheet-box, .modal-body, #statusbar')) if (vis(el) && el.scrollWidth > el.clientWidth + 1) out.hscroll.push(`${el.id || el.className} ${el.scrollWidth} > ${el.clientWidth}`);
+      for (const el of document.querySelectorAll('#app button, #panel button, #panel .card, #sheet button, #sheet .nu-row, #modal button, #title button, .tour-callout .btn, .toast button')) {
+        if (!vis(el)) continue; const r = el.getBoundingClientRect();
+        if (r.height < 31.5) out.short.push(`${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}.${(el.className || '').toString().trim().split(/\s+/).slice(0, 2).join('.')} h=${Math.round(r.height)}`);
+      }
+      out.wide = [...new Set(out.wide)].slice(0, 12); out.short = [...new Set(out.short)].slice(0, 12);
+      return out;
+    });
+  }
   await browser.close();
   console.log('contrast', JSON.stringify(contrast));
   console.log('overflow@1180', JSON.stringify(overflow));
+  const bad = Object.entries(phoneGate).filter(([, g]) => g.wide.length || g.hscroll.length);
+  console.log('phone@390 overflow', bad.length ? JSON.stringify(Object.fromEntries(bad), null, 1) : 'none');
+  const short = Object.entries(phoneGate).filter(([, g]) => g.short.length);
+  console.log('phone@390 controls under 32px', short.length ? JSON.stringify(Object.fromEntries(short), null, 1) : 'none');
   console.log('errs', JSON.stringify([...new Set(errs)], null, 1));
 })().catch(e => { console.error(e); process.exit(1); });

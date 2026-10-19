@@ -69,6 +69,9 @@ const UI_ICONS = {
   copy:        { d: 'M8 8.5h11v11H8Z M5 15.5V4.5h11' },
   user:        { d: 'M15.5 8a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Z M5 20.5v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1' },
   play:        { d: 'M7 5l11 7-11 7Z' },
+  // A4 phone: the status-bar menu and the dock's More button
+  menu:        { d: 'M4 7h16 M4 12h16 M4 17h16' },
+  more:        { d: 'M4 4h6.5v6.5H4Z M13.5 4H20v6.5h-6.5Z M4 13.5h6.5V20H4Z M13.5 13.5H20V20h-6.5Z' },
 };
 if (typeof ICONS !== 'undefined' && ICONS) {
   for (const k of Object.keys(UI_ICONS)) if (!Object.prototype.hasOwnProperty.call(ICONS, k)) ICONS[k] = UI_ICONS[k];

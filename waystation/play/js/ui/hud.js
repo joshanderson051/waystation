@@ -137,6 +137,10 @@ const AccountAdapter = {
   login(email, password) { return this._p('login', [email, password]); },
   logout() { return this._p('logout', []); },
   recover(email, phrase, newPassword) { return this._p('recover', [email, phrase, newPassword]); },
+  forgot(email) { return this._p('forgot', [email]); },
+  reset(token, newPassword) { return this._p('reset', [token, newPassword]); },
+  resetToken() { const t = this.present() && Account.resetToken; return typeof t === 'string' && t ? t : null; },   // from ?reset=<token> in the email link
+  clearResetToken() { call(Account, 'clearResetToken', [], undefined); },
   deleteAccount(password) { return this._p('deleteAccount', [password]); },
   syncNow() { return this._p('syncNow', []); },
   // Account.ui.choose({ local, cloud }) -> Promise<'local'|'cloud'> is the HUD's chooser sheet
@@ -147,12 +151,12 @@ const AccountAdapter = {
 // 1. Constants
 // ------------------------------------------------------------
 const MID2 = GLYPH.mid;
-  forgot(email) { return this._p('forgot', [email]); },
-  reset(token, newPassword) { return this._p('reset', [token, newPassword]); },
-  resetToken() { const t = this.present() && Account.resetToken; return typeof t === 'string' && t ? t : null; },   // from ?reset=<token> in the email link
-  clearResetToken() { call(Account, 'clearResetToken', [], undefined); },
 const KEY_PANEL = { b: 'build', s: 'station', m: 'market', f: 'fleet', e: 'expeditions', g: 'map', j: 'missions', r: 'registry' };
 const regOf = name => (typeof registryOf === 'function') ? registryOf(name) : 'WS-0000';
+// A4 phone layout: the same query as style.css section 30b. CSS folds the bridge; the HUD keys the
+// behaviour that CSS cannot express off it (sheet peek and drag, the dock's More sheet, the menu).
+const PHONE_MQ = '(max-width: 760px), ((pointer: coarse) and (max-width: 1023px))';
+const MORE_PANELS = ['market', 'fleet', 'expeditions', 'registry', 'store', 'settings'];
 // achievement tiers arrive as 1..3 or as a word (TIER_WORDS comes from panels.js)
 const tierName = t => typeof t === 'string' ? t.toLowerCase() : (t >= 1 && t <= 3 ? TIER_WORDS[t - 1] : '');
 
@@ -170,6 +174,8 @@ const UI = {
   _tipTimer: 0,
   sig: {},
   ctx: null,
+  _phoneMq: null, _peek: false,   // A4
+  get phone() { return !!(this._phoneMq && this._phoneMq.matches); },
 
   // ---------------------------------------------------------- init (0.4)
   init() {
@@ -194,6 +200,14 @@ const UI = {
     this.buildRail();
     this.buildContextBar();
     this.buildNotices();
+    // A4 phone: the layout query drives the sheet peek, More and the menu (CSS reads the same query)
+    try {
+      this._phoneMq = matchMedia(PHONE_MQ);
+      const sync = () => this.onPhoneChange();
+      if (this._phoneMq.addEventListener) this._phoneMq.addEventListener('change', sync); else if (this._phoneMq.addListener) this._phoneMq.addListener(sync);
+    } catch (e) { this._phoneMq = null; }
+    this.onPhoneChange();
+    this.bindSheetDrag();
     // title screen and any static markup: <span class="ic-slot" data-icon="..."> gets its SVG
     for (const el of $$('.ic-slot[data-icon]')) if (!el.firstChild) el.innerHTML = icon(el.dataset.icon, 14);
     this.ctx = {
@@ -218,7 +232,14 @@ const UI = {
     });
 
     // rail, status bar, context bar handlers
-    $('#rail').addEventListener('click', e => { const b = e.target.closest('.rail-btn[data-panel]'); if (b) this.openPanel(this.panel === b.dataset.panel ? null : b.dataset.panel); });
+    $('#rail').addEventListener('click', e => {
+      if (e.target.closest('.rail-btn[data-more]')) { this.openMore(); return; }
+      const b = e.target.closest('.rail-btn[data-panel]'); if (!b) return;
+      // A4: on a phone the active dock button lifts a peeking sheet before it closes anything
+      if (this.phone && this.panel === b.dataset.panel && this._peek) { this.setPeek(false); return; }
+      this.openPanel(this.panel === b.dataset.panel ? null : b.dataset.panel);
+    });
+    const menuBtn = $('#sb-menu'); if (menuBtn) menuBtn.addEventListener('click', () => this.openMenu());
     $('#sb-sector').addEventListener('click', () => this.openPanel('map'));
     $('#btn-am-plus').addEventListener('click', e => { e.stopPropagation(); this.openPanel('store'); });
     $('#btn-daily').addEventListener('click', () => this.openDaily());
@@ -232,6 +253,8 @@ const UI = {
     $('#modal').addEventListener('click', e => { const b = e.target.closest('[data-portal]'); if (b) { e.preventDefault(); this.portalAction(b.dataset.portal, b); } });
     $('#modal').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest && e.target.closest('.portal') && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); this.portalAction('submit'); } });
     AccountAdapter.setChooser(req => this.chooseSave(req));
+    // arrived through the link in a "Forgot your password?" email: the portal opens on "Set a new password" over the title
+    if (AccountAdapter.resetToken()) requestAnimationFrame(() => this.openPortal('reset'));
     if (typeof Tutorial !== 'undefined' && Tutorial) Tutorial.onEnd = () => this.onTourEnd();
     $('#speed').addEventListener('click', e => { const b = e.target.closest('button[data-speed]'); if (b) this.setSpeed(+b.dataset.speed); });
     const bell = $('#btn-notices'); if (bell) bell.addEventListener('click', () => { body.toggleAttribute('data-notices'); });
@@ -263,8 +286,6 @@ const UI = {
       Sim.on('offline', d => { if (this.started) this.showAway(d); else this._pendingOffline = d; });
       Sim.on('plot', d => this.onPlot(d));
       Sim.on('achievement', d => this.onAchievement(d));
-    // arrived through the link in a "Forgot your password?" email: the portal opens on "Set a new password" over the title
-    if (AccountAdapter.resetToken()) requestAnimationFrame(() => this.openPortal('reset'));
       Sim.on('account', d => this.onAccount(d));
     }
     // Engine events (0.3)
@@ -302,12 +323,16 @@ const UI = {
       `<button type="button" class="sb-btn" id="btn-daily" title="Daily reward" aria-label="Daily reward">${icon('calendar', 20)}<i class="dot" hidden></i></button>` +
       `<div id="speed" class="seg" role="group" aria-label="Game speed"><button type="button" data-speed="0" title="Pause (Space)" aria-label="Pause">${icon('pause', 14)}</button><button type="button" data-speed="1" class="on" title="Run (1)">1${GLYPH.times}</button></div>` +
       `<button type="button" class="sb-btn narrow-only" id="btn-notices" title="Notices" aria-label="Toggle notices">${icon('bell', 20)}<i class="dot" hidden></i></button>` +
+      // A4 phone: the menu holds what the compact bar hides (readouts, daily reward, pause, cloud save, Next up)
+      `<button type="button" class="sb-btn phone-only" id="sb-menu" title="Menu" aria-label="Bridge menu" aria-haspopup="dialog">${icon('menu', 20)}<i class="dot" hidden></i></button>` +
       `</div>`;
   },
   buildRail() {
     const el = $('#rail'); if (!el) return;
     el.innerHTML = PANEL_DEFS.map(p =>
-      `<button type="button" class="rail-btn${p.pinned ? ' pinned' : ''}" data-panel="${p.id}" data-tip="${esc(p.label)}${p.key ? ` ${MID2} ${p.key}` : ''}" aria-label="${esc(p.label)}" aria-pressed="false"><i class="spine"></i><span class="rail-ic">${icon(p.icon, 22)}</span><span class="rail-lbl">${esc(p.label)}</span><span class="rail-badge" hidden></span></button>`).join('');
+      `<button type="button" class="rail-btn${p.pinned ? ' pinned' : ''}" data-panel="${p.id}" data-tip="${esc(p.label)}${p.key ? ` ${MID2} ${p.key}` : ''}" aria-label="${esc(p.label)}" aria-pressed="false"><i class="spine"></i><span class="rail-ic">${icon(p.icon, 22)}</span><span class="rail-lbl">${esc(p.label)}</span><span class="rail-badge" hidden></span></button>`).join('') +
+      // A4 phone: the dock shows Build, Station, Map and Missions; More opens the rest as a sheet
+      `<button type="button" class="rail-btn phone-only" data-more="1" aria-label="More panels" aria-pressed="false" aria-haspopup="dialog"><i class="spine"></i><span class="rail-ic">${icon('more', 22)}</span><span class="rail-lbl">More</span><span class="rail-badge" hidden></span></button>`;
   },
   buildContextBar() {
     const el = $('#contextbar'); if (!el) return;
@@ -364,6 +389,7 @@ const UI = {
     this.refreshNextUp();
     this.refreshContext();
     this.refreshBadges();
+    this.refreshMenu();
     if (this._inst) this._inst.update();
     const tag = $('#perf-tag');
     if (tag && !tag.hidden) { const p = EngineAdapter.perf(); const s2 = p ? `${Math.round(p.fps)} fps ${MID2} T${p.tier != null ? p.tier : 2}` : 'perf —'; if (tag.textContent !== s2) tag.textContent = s2; }
@@ -464,13 +490,24 @@ const UI = {
   raiseAlert(kind) { this._alert = { kind, until: performance.now() + 6000 }; this.refreshTop(); },
 
   // ---------------------------------------------------------- rail badges (2.4)
+  // { n: count | true (dot) | 0, cls } for a rail button; 'more' carries the first badge of the panels under it (A4)
+  badgeFor(id) {
+    switch (id) {
+      case 'missions': return { n: MetaAdapter.missions().filter(m => m.claimable).length + MetaAdapter.achievementBadge(), cls: 'amber' };
+      case 'expeditions': return { n: MetaAdapter.expeditions().filter(x => x.status === 'ready').length, cls: 'ice' };
+      case 'store': return { n: StoreAdapter.offer() ? true : 0, cls: 'am' };
+      case 'station': { const ready = MetaAdapter.readyCells().length; return { n: ready > 0 && MetaAdapter.canCollectAll() ? ready : 0, cls: 'amber' }; }
+      case 'more': { for (const p of MORE_PANELS) { const b = this.badgeFor(p); if (b.n) return b; } return { n: 0, cls: '' }; }
+      default: return { n: 0, cls: '' };
+    }
+  },
   refreshBadges() {
-    const set = (id, n, cls) => { const b = $(`.rail-btn[data-panel="${id}"] .rail-badge`); if (!b) return; const txt = n === true ? '' : String(n); b.className = 'rail-badge' + (cls ? ' ' + cls : '') + (n === true ? ' dot' : ''); if (b.textContent !== txt) b.textContent = txt; b.hidden = !n; };
-    set('missions', MetaAdapter.missions().filter(m => m.claimable).length + MetaAdapter.achievementBadge(), 'amber');
-    set('expeditions', MetaAdapter.expeditions().filter(x => x.status === 'ready').length, 'ice');
-    set('store', StoreAdapter.offer() ? true : 0, 'am');
-    const ready = MetaAdapter.readyCells().length;
-    set('station', ready > 0 && MetaAdapter.canCollectAll() ? ready : 0, 'amber');
+    const set = (b, { n, cls }) => { if (!b) return; const txt = n === true ? '' : String(n); b.className = 'rail-badge' + (cls ? ' ' + cls : '') + (n === true ? ' dot' : ''); if (b.textContent !== txt) b.textContent = txt; b.hidden = !n; };
+    for (const id of ['missions', 'expeditions', 'store', 'station']) set($(`.rail-btn[data-panel="${id}"] .rail-badge`), this.badgeFor(id));
+    set($('.rail-btn[data-more] .rail-badge'), this.badgeFor('more'));
+    // A4: the menu button carries a dot when the daily reward is ready or the cloud glyph wants attention
+    const md = $('#sb-menu .dot');
+    if (md) { const d = MetaAdapter.daily(), cd = $('#btn-cloud .dot'), cb = $('#btn-cloud'); md.hidden = !((d && d.claimable) || (cb && !cb.hidden && cd && !cd.hidden)); }
   },
 
   // ---------------------------------------------------------- Next up (2.4)
@@ -551,7 +588,7 @@ const UI = {
     if (pl && MODULES[pl]) {
       const hv = EngineAdapter.hover();
       if (hv && has(Sim, 'canPlace')) { const chk = Sim.canPlace(pl, hv.r, hv.c); if (!chk.ok) return this.reasonSentence(chk.why, pl); }
-      return `Placing ${MODULES[pl].name}: click a bracketed cell. Right-click or Esc to stop.`;
+      return this.phone ? `Placing ${MODULES[pl].name}: tap a bracketed cell beside the station.` : `Placing ${MODULES[pl].name}: click a bracketed cell. Right-click or Esc to stop.`;
     }
     const hov = EngineAdapter.hover();
     if (hov && !MetaAdapter.inPlot(hov.r, hov.c)) return 'Unclaimed space: click it to clear the next ring.';
@@ -590,12 +627,14 @@ const UI = {
     if (!Panels[id]) return;
     const host = $('#panel'), wrap = $('#panel-host');
     if (!host) return;
-    if (this.panel === id) { if (this._inst) this._inst.update(); return; }
+    if (this.panel === id) { if (this._inst) this._inst.update(); this.setPeek(false); return; }
     if (this._inst) { this._inst.destroy(); this._inst = null; }
+    this.setPeek(false);
     this.panel = id;
     host.dataset.panel = id;
     document.body.setAttribute('data-panel', id);
-    for (const b of $$('.rail-btn')) { const on = b.dataset.panel === id; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); if (on) b.classList.remove('pulse'); }
+    for (const b of $$('.rail-btn[data-panel]')) { const on = b.dataset.panel === id; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); if (on) b.classList.remove('pulse'); }
+    this.syncDock();
     wrap.hidden = false;
     host.classList.remove('open', 'closing'); void host.offsetWidth; host.classList.add('open');
     this._inst = Panels[id](host, this.ctx);
@@ -608,6 +647,7 @@ const UI = {
     const host = $('#panel'), wrap = $('#panel-host');
     if (!this.panel) return;
     if (this._inst) { this._inst.destroy(); this._inst = null; }
+    this.setPeek(false);
     this.panel = null;
     document.body.removeAttribute('data-panel');
     for (const b of $$('.rail-btn')) { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); }
@@ -615,10 +655,10 @@ const UI = {
     Sound.close();
     EngineAdapter.avoid(null);
   },
-  // the camera keeps the station clear of the panel (2.4 / 3.2)
+  // the camera keeps the station clear of the panel (2.4 / 3.2); a phone sheet covers the world instead of sharing it
   placeAvoid() {
     const host = $('#panel');
-    if (!this.panel || !host) { EngineAdapter.avoid(null); return; }
+    if (!this.panel || !host || this.phone) { EngineAdapter.avoid(null); return; }
     const r = host.getBoundingClientRect();
     EngineAdapter.avoid({ x: r.left, y: r.top, w: r.width, h: r.height });
   },
@@ -629,16 +669,130 @@ const UI = {
     EngineAdapter.setPlacing(null); document.body.removeAttribute('data-placing');
     EngineAdapter.setSelected({ r, c });
     EngineAdapter.fx('pulse', r, c, 'ivory');
-    if (this.panel !== 'station') this.openPanel('station');
+    if (this.panel !== 'station') this.openPanel('station'); else this.setPeek(false);
     this.refresh();
   },
   deselect() { if (EngineAdapter.selected()) { EngineAdapter.setSelected(null); this.refresh(); } },
   place(id) {
     if (id && !MODULES[id]) return;
     EngineAdapter.setPlacing(id || null);
-    if (id) { EngineAdapter.setSelected(null); document.body.setAttribute('data-placing', id); const s = S(); if (s && s.credits < MODULES[id].cost) this.toast(`Need ${Fmt.n(MODULES[id].cost - s.credits)} more credits for ${Fmt.aOrAn(MODULES[id].name)}`, 'warn'); }
+    if (id) {
+      EngineAdapter.setSelected(null); document.body.setAttribute('data-placing', id);
+      const s = S(); if (s && s.credits < MODULES[id].cost) this.toast(`Need ${Fmt.n(MODULES[id].cost - s.credits)} more credits for ${Fmt.aOrAn(MODULES[id].name)}`, 'warn');
+      this.setPeek(true);   // A4: the sheet drops to its handle so the bracketed cells can be tapped
+    }
     else document.body.removeAttribute('data-placing');
     this.refresh();
+  },
+
+  // ---------------------------------------------------------- A4 phone: layout query, sheet peek and drag, More, the menu
+  onPhoneChange() {
+    const on = this.phone;
+    document.body.toggleAttribute('data-phone', on);
+    if (!on) this.setPeek(false);
+    this.syncDock();
+    this.placeAvoid();
+    if (S()) this.refreshBadges();
+  },
+  // a peeking sheet shows only its handle and head above the dock so the world underneath can be tapped
+  setPeek(on) {
+    on = !!on && this.phone && !!this.panel;
+    if (this._peek === on) return;
+    this._peek = on;
+    const host = $('#panel-host'); if (host) host.toggleAttribute('data-peek', on);
+    document.body.toggleAttribute('data-peek', on);
+  },
+  syncDock() {
+    const more = $('.rail-btn[data-more]'); if (!more) return;
+    const on = !!this.panel && MORE_PANELS.includes(this.panel);
+    more.classList.toggle('active', on); more.setAttribute('aria-pressed', String(on));
+  },
+  // drag the sheet by its head: down from full peeks it, down from peek closes it, up lifts it; a tap on a peeking head lifts it
+  bindSheetDrag() {
+    const host = $('#panel-host'), panel = $('#panel'); if (!host || !panel) return;
+    let drag = null;
+    const peekH = () => { const v = parseFloat(getComputedStyle(host).getPropertyValue('--peek-h')); return Number.isFinite(v) ? v : 74; };
+    panel.addEventListener('pointerdown', e => {
+      if (!this.phone || !this.panel || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      if (!e.target.closest('.panel-head') || e.target.closest('button, a, input, select, textarea')) return;
+      const H = host.getBoundingClientRect().height;
+      drag = { id: e.pointerId, y0: e.clientY, base: this._peek ? H - peekH() : 0, H, moved: false, lastY: e.clientY, lastT: performance.now(), v: 0 };
+      try { panel.setPointerCapture(e.pointerId); } catch (err) { /* capture unsupported */ }
+    });
+    panel.addEventListener('pointermove', e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const dy = e.clientY - drag.y0, now = performance.now();
+      if (!drag.moved && Math.abs(dy) > 4) { drag.moved = true; host.classList.add('dragging'); }
+      const dt = Math.max(1, now - drag.lastT); drag.v = (e.clientY - drag.lastY) / dt; drag.lastY = e.clientY; drag.lastT = now;
+      if (drag.moved) host.style.transform = `translateY(${Math.max(0, Math.min(drag.H, drag.base + dy))}px)`;
+    });
+    const end = e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const d = drag; drag = null;
+      host.classList.remove('dragging'); host.style.transform = '';
+      if (!d.moved) { if (this._peek) this.setPeek(false); return; }
+      const dy = e.clientY - d.y0, fling = Math.abs(d.v) > 0.6;
+      if (this._peek) { if ((fling && d.v > 0) || dy > 28) this.closePanel(); else if ((fling && d.v < 0) || dy < -40) this.setPeek(false); }
+      else if ((fling && d.v > 0) || dy > 110) this.setPeek(true);
+    };
+    panel.addEventListener('pointerup', end);
+    panel.addEventListener('pointercancel', end);
+  },
+  // the dock's More button: the panels without a dock button, as a sheet of rows
+  openMore() {
+    const rows = PANEL_DEFS.filter(p => MORE_PANELS.includes(p.id)).map(p => {
+      const b = this.badgeFor(p.id), badge = b.n ? `<span class="rail-badge ${b.cls}${b.n === true ? ' dot' : ''}">${b.n === true ? '' : b.n}</span>` : '';
+      return `<button type="button" class="more-row${this.panel === p.id ? ' active' : ''}" data-go="${p.id}" style="--hue:var(--${p.hue})"><span class="more-ic">${icon(p.icon, 22)}</span><span class="more-lbl">${esc(p.label)}</span>${badge}<span class="more-chev">${icon('chevron-right', 16)}</span></button>`;
+    }).join('');
+    Overlays.sheet({ id: 'more', hue: 'amber', html: `<div class="sheet-kicker">Bridge</div><h2 class="sheet-title">More</h2><div class="more-grid">${rows}</div>`, actions: [] });
+    const grid = $('#sheet .more-grid');
+    if (grid) grid.addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (!b) return; Overlays.closeSheet(); this.openPanel(b.dataset.go); });
+  },
+  // the status-bar menu: station and sector, the readouts the compact bar hides, daily reward, pause, cloud save, the manual, Next up
+  openMenu() {
+    const s = S(); if (!s) return;
+    const rk = MetaAdapter.rank(), daily = MetaAdapter.daily(), cloud = $('#btn-cloud');
+    const sectorName = MetaAdapter.sectorDef(s.sector || 'home').name || 'Home';
+    const row = (go, ic, label, meta) => `<button type="button" class="menu-row" data-go="${esc(go)}"><span class="menu-ic">${icon(ic, 18)}</span><span class="menu-lbl">${label}</span>${meta ? `<span class="menu-meta">${meta}</span>` : ''}<span class="menu-chev">${icon('chevron-right', 14)}</span></button>`;
+    let h = `<div class="menu-wrap"><div class="sheet-kicker">${esc(sectorName)} ${MID2} ${Fmt.day(s.day)}</div><h2 class="sheet-title">${esc(s.name)}</h2>` +
+      `<p class="sheet-lead">${esc(regOf(s.name))} ${MID2} L${s.level} ${esc(TIER_NAMES[s.level] || 'Galactic Hub')} ${MID2} Rank ${rk.level} ${esc(rk.title || '')}</p>`;
+    h += `<div class="menu-ro">` +
+      `<div class="tile"><span class="tile-lbl">Power</span><span class="tile-val num" data-m="power"></span></div>` +
+      `<div class="tile"><span class="tile-lbl">Residents</span><span class="tile-val num c-sage" data-m="people"></span></div>` +
+      `<div class="tile"><span class="tile-lbl">Reputation</span><span class="tile-val num c-amber" data-m="rep"></span></div>` +
+      `<div class="tile"><span class="tile-lbl">Income</span><span class="tile-val num" data-m="income"></span></div></div>`;
+    h += `<div class="menu-rows">`;
+    h += row('daily', 'calendar', 'Daily reward', daily ? (daily.claimable ? '<span class="chip amber" data-shape="up">Ready</span>' : 'Claimed today') : '');
+    h += row('pause', s.speed ? 'pause' : 'play', s.speed ? 'Pause the station' : 'Resume the station', s.speed ? '' : '<span class="chip warn" data-shape="sq">Paused</span>');
+    if (cloud && !cloud.hidden) { const CLOUD_WORD = { 'signed-out': 'Sign in', synced: 'Synced', dirty: 'Pending', syncing: 'Syncing', offline: 'Offline', error: 'Error' }; h += row('cloud', 'cloud', 'Cloud save', esc(CLOUD_WORD[cloud.dataset.state] || '')); }
+    h += row('panel:map', 'map', 'Galaxy map', esc(sectorName));
+    h += `<a class="menu-row" href="../manual/" target="_blank" rel="noopener"><span class="menu-ic">${icon('registry', 18)}</span><span class="menu-lbl">Manual</span><span class="menu-chev">${icon('chevron-right', 14)}</span></a>`;
+    h += `</div>`;
+    const nu = $('#nextup .nu-rows');
+    if (nu && nu.children.length) h += `<div class="shelf" style="--hue:var(--ice)"><span class="shelf-label">Next up</span></div><div class="nu-rows menu-nu">${nu.innerHTML}</div>`;
+    h += `</div>`;
+    Overlays.sheet({ id: 'menu', hue: 'amber', html: h, actions: [] });
+    this.refreshMenu();
+    const wrap = $('#sheet .menu-wrap');
+    if (wrap) wrap.addEventListener('click', e => {
+      const r = e.target.closest('[data-go]'); if (!r) return;
+      const go = r.dataset.go;
+      Overlays.closeSheet();
+      if (go === 'pause') this.togglePause(); else if (go === 'cloud') this.openAccountSettings(); else this.nextUpGo(go);
+    });
+  },
+  // the menu's readouts and countdowns follow the status bar while it is open (called from tick)
+  refreshMenu() {
+    const wrap = $('#sheet.open .menu-wrap'); if (!wrap) return;
+    const s = S(); if (!s) return;
+    const T = Sim.totals(), y = s.income ? s.income.yesterday : 0, over = T.used > T.produced;
+    const set = (key, html, cls) => { const el = wrap.querySelector(`[data-m="${key}"]`); if (!el) return; if (el._h !== html) { el._h = html; el.innerHTML = html; } if (cls && el.className !== cls) el.className = cls; };
+    set('power', `${over ? GLYPH.down + ' ' : T.flare ? GLYPH.sq + ' ' : ''}${Fmt.n(T.used)} <small>/ ${Fmt.n(T.produced)}</small>`, `tile-val num ${over ? 'c-bad' : T.flare ? 'c-warn' : 'c-ice'}`);
+    set('people', `${Fmt.n(s.residents)} <small>/ ${Fmt.n(T.homes)} homes</small>`);
+    set('rep', `${(Number(s.rep) || 0).toFixed(1)} <small>/ 5</small>`);
+    set('income', `${Fmt.signed(y)} <small>/ day</small>`, `tile-val num ${y >= 0 ? 'c-good' : 'c-bad'}`);
+    const now = Date.now();
+    for (const el of wrap.querySelectorAll('.nu-time[data-until]')) { const left = +el.dataset.until - now; const s2 = left <= 500 ? 'now' : Fmt.ms(left); if (el.textContent !== s2) el.textContent = s2; }
   },
   onCellClick(d) {
     const s = S(); if (!s || !d) return;
@@ -921,24 +1075,29 @@ const UI = {
     const d = MetaAdapter.daily();
     if (!d) { this.toast('Daily rewards need a profile', 'warn'); return; }
     Overlays.daily(d, {
-      onClaim: () => { const rw = MetaAdapter.claimDaily(); if (rw) { this.celebrate('daily', Object.assign({ reward: rw }, MetaAdapter.daily() || {})); Overlays.fly($('#btn-daily'), this.anchor(rw.am ? 'am' : 'credits'), { n: 8, icon: rw.am ? 'am' : 'credits', hue: rw.am ? 'am' : 'amber', onHit: () => this.anchorHit(rw.am ? 'am' : 'credits') }); } this.refresh(); },
+      onClaim: () => { const rw = MetaAdapter.claimDaily(); if (rw) { this.celebrate('daily', Object.assign({ reward: rw }, MetaAdapter.daily() || {})); Overlays.fly($(this.phone ? '#sb-menu' : '#btn-daily'), this.anchor(rw.am ? 'am' : 'credits'), { n: 8, icon: rw.am ? 'am' : 'credits', hue: rw.am ? 'am' : 'amber', onHit: () => this.anchorHit(rw.am ? 'am' : 'credits') }); } this.refresh(); },
       onRepair: () => { if (MetaAdapter.repairStreak()) this.toast('Streak repaired', 'good'); else this.toast('Not enough Antimatter', 'bad'); this.refresh(); },
     });
   },
 
   // ---------------------------------------------------------- A2.1 accounts: portal, recovery phrase, chooser, settings verbs
+  // tabs: login | signup | recover; views without a tab of their own: forgot (ask for a reset email), sent (its
+  // confirmation) and reset (the ?reset= link from that email: choose a new password)
   openPortal(tab) {
     this._portalTab = tab || 'login'; this._portalBusy = false;
     if (this._portalTab === 'reset') this._resetToken = AccountAdapter.resetToken();
     Overlays.modal({ kind: 'confirm', icon: 'cloud', tag: `Cloud save ${MID2} ${AccountAdapter.available() ? 'account' : 'not connected'}`, title: this.portalTitle(), html: '', extra: this.portalHtml(), actions: [], dismissible: true });
     const first = $('#modal .portal input'); if (first) first.focus();
   },
+  portalTitle() { return this._portalTab === 'reset' ? 'Set a new password' : this._portalTab === 'forgot' || this._portalTab === 'sent' ? 'Forgot your password?' : 'Your account'; },
   portalHtml() {
     const tab = this._portalTab, avail = AccountAdapter.available(), active = tab === 'forgot' || tab === 'sent' ? 'login' : tab;
     const tabs = tab === 'reset' ? '' : `<div class="panel-tabs portal-tabs" role="tablist">${[['login', 'Sign in'], ['signup', 'Create account'], ['recover', 'Recover']].map(([id, l]) => `<button type="button" class="ptab${id === active ? ' active' : ''}" data-portal="tab:${id}" role="tab" aria-selected="${id === active}">${l}</button>`).join('')}</div>`;
     if (!avail) return `<div class="portal" data-tab="${tab}">${tabs}<p class="portal-off">${icon('cloud', 16)}<span>Cloud saves are not connected on this build yet. Your profile is saved in this browser; export it from Settings ${GLYPH.arrow} Save data to move it.</span></p></div>`;
     const pw = (label, hint) => `<label class="pfield"><span class="label">${label}</span><span class="pinput"><input type="password" id="pf-pass" class="input" minlength="10" autocomplete="${tab === 'login' ? 'current-password' : 'new-password'}" spellcheck="false"><button type="button" class="btn icon ghost peek" data-portal="peek" title="Show password" aria-label="Show password">${icon('eye', 16)}</button></span>${hint ? `<span class="phint">${hint}</span>` : ''}</label>`;
     const email = `<label class="pfield"><span class="label">Email</span><input type="email" id="pf-email" class="input" autocomplete="email" spellcheck="false" placeholder="you@example.com"></label>`;
+    const submit = (icn, label) => `<button type="button" class="btn big primary psubmit" data-portal="submit">${icon(icn, 16)}<span>${label}</span></button>`;
+    const back = `<button type="button" class="linkish" data-portal="tab:login">Back to sign in</button>`;
     let form;
     if (tab === 'login') form = email + pw('Password') + `<div class="pfoot"><button type="button" class="linkish" data-portal="tab:forgot">Forgot your password?</button>${submit('cloud', 'Sign in')}</div>`;
     else if (tab === 'signup') form = email + pw('Password', 'At least 10 characters. You will get a recovery phrase: it is the only way back in without the password.') + submit('cloud', 'Create account');
@@ -974,6 +1133,7 @@ const UI = {
   async portalSubmit() {
     if (this._portalBusy || !AccountAdapter.available()) return;
     const tab = this._portalTab, email = (($('#pf-email') || {}).value || '').trim(), pass = ($('#pf-pass') || {}).value || '', phrase = (($('#pf-phrase') || {}).value || '').trim();
+    if (tab === 'sent') return this.portalAction('tab:login');
     this.portalError('');
     if (tab !== 'reset' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return this.portalError('Enter the email address for your account.', 'pf-email');
     if (tab === 'recover' && phrase.split(/\s+/).length < 10) return this.portalError('The recovery phrase is ten words.', 'pf-phrase');
@@ -1117,22 +1277,17 @@ const UI = {
     Overlays.modal({
       kind: 'lend', tag: `Loan desk ${MID2} ${Fmt.day(s.day)} ${MID2} ${c.name}`, title: `Lend to ${c.name}`,
       html: `Trust <span class="num">${co.trust}/100</span> sets the rate at <b>${rate}%</b>, repaid over 10 days. Lower trust means a higher rate but a real chance of default. You have <span class="num">${Fmt.n(max)}</span> credits.`,
-  // tabs: login | signup | recover; views without a tab of their own: forgot (ask for a reset email), sent (its
-  // confirmation) and reset (the ?reset= link from that email: choose a new password)
       extra: `<input type="number" id="lend-amt" class="input" min="500" step="100" max="${max}" value="${Math.min(max, 2000)}" aria-label="Loan amount">`,
       actions: [{ label: 'Lend', primary: true, fn: () => { const inp = $('#lend-amt'); Sim.lend(companyId, inp ? +inp.value : 0); } }, { label: 'Cancel', ghost: true }],
     });
   },
   travel(id) {
-  portalTitle() { return this._portalTab === 'reset' ? 'Set a new password' : this._portalTab === 'forgot' || this._portalTab === 'sent' ? 'Forgot your password?' : 'Your account'; },
     const def = MetaAdapter.sectorDef(id);
     Sound.warp();
     const p = EngineAdapter.fx('warp');
     document.body.setAttribute('data-warp', '');
     const go = () => {
       // Meta refuses locked or unknown sectors; a success emits sector 'switched', which the engine
-    const submit = (icn, label) => `<button type="button" class="btn big primary psubmit" data-portal="submit">${icon(icn, 16)}<span>${label}</span></button>`;
-    const back = `<button type="button" class="linkish" data-portal="tab:login">Back to sign in</button>`;
       // follows with its own setSector (no second rebuild here)
       const res = MetaAdapter.switchSector(id);
       const ok = res === true || (res && typeof res === 'object' && res.ok !== false && !res.why);
@@ -1157,7 +1312,6 @@ const UI = {
     else this.confirm(`Unlock ${def.name}?`, `${esc(def.flavour || def.flavor || 'A new station, a new world, the same wallet.')}${def.unlock && def.unlock.credits ? `<br><br>Costs <b>${Fmt.n(def.unlock.credits)}</b> credits.` : ''}`, doIt, { yes: 'Unlock', tag: 'Galaxy' });
   },
   launch(sectorId) {
-    if (tab === 'sent') return this.portalAction('tab:login');
     const res = MetaAdapter.launchExpedition(sectorId);
     const ok = res === true || (res && res.ok !== false);
     if (ok) { Sound.open(); this.toast(`Expedition launched to ${MetaAdapter.sectorDef(sectorId).name || sectorId}`, 'info', { icon: 'expeditions', chip: 'Expedition' }); }

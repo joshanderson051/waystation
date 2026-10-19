@@ -17,21 +17,24 @@
 // ============================================================
 'use strict';
 
+// A4 phone: `phoneText` replaces `text` on a phone layout (UI.phone), and targets that live under the
+// dock's More button or the status-bar menu there fall through to those buttons.
 const TOUR_STEPS = [
-  { id: 'welcome', title: 'Welcome, Commander', text: 'This is the Core Hub, and everything around it is yours to grow. Drag to pan the view and roll the wheel to zoom in on the plating.', target: 'hub' },
-  { id: 'status', title: 'The status bar', text: 'Credits, Antimatter, power, residents and reputation at a glance, with your Commander rank at the right. Readouts move when something changes and stay still when nothing does.', target: '#statusbar', place: 'below' },
-  { id: 'build-open', title: 'Open Build', text: 'Every module on the station starts here. Open the Build panel from the command rail.', target: '.rail-btn[data-panel="build"]', waitFor: { panel: 'build' } },
-  { id: 'dock', title: 'Place a Docking Bay', text: 'Ships need a berth before they can trade with you. Pick the Docking Bay, then click one of the bracketed cells beside the hub.', target: ['#panel .card[data-mod="dock"]', '.rail-btn[data-panel="build"]'], ensurePanel: 'build', waitFor: { built: 'dock' } },
+  { id: 'welcome', title: 'Welcome, Commander', text: 'This is the Core Hub, and everything around it is yours to grow. Drag to pan the view and roll the wheel to zoom in on the plating.', phoneText: 'This is the Core Hub, and everything around it is yours to grow. Drag to pan the view and pinch to zoom in on the plating.', target: 'hub' },
+  { id: 'status', title: 'The status bar', text: 'Credits, Antimatter, power, residents and reputation at a glance, with your Commander rank at the right. Readouts move when something changes and stay still when nothing does.', phoneText: 'Credits and Antimatter at a glance, with your Commander rank at the right. Power, residents, reputation and the daily reward sit behind the menu button.', target: '#statusbar', place: 'below' },
+  { id: 'build-open', title: 'Open Build', text: 'Every module on the station starts here. Open the Build panel from the command rail.', phoneText: 'Every module on the station starts here. Open the Build panel from the dock at the bottom.', target: '.rail-btn[data-panel="build"]', waitFor: { panel: 'build' } },
+  { id: 'dock', title: 'Place a Docking Bay', text: 'Ships need a berth before they can trade with you. Pick the Docking Bay, then click one of the bracketed cells beside the hub.', phoneText: 'Ships need a berth before they can trade with you. Pick the Docking Bay, then tap one of the bracketed cells beside the hub.', target: ['#panel .card[data-mod="dock"]', '.rail-btn[data-panel="build"]'], ensurePanel: 'build', waitFor: { built: 'dock' } },
   { id: 'solar', title: 'Power', text: 'Every module draws power and the hub only covers the first few. A Solar Array is cheap and quick: place one now.', target: ['#panel .card[data-mod="solar"]', '.rail-btn[data-panel="build"]'], ensurePanel: 'build', waitFor: { built: 'solar' } },
   { id: 'warehouse', title: 'Storage', text: 'Cargo needs somewhere to sit. A Cargo Warehouse holds what ships sell you and what you sell back to them.', target: ['#panel .card[data-mod="warehouse"]', '.rail-btn[data-panel="build"]'], ensurePanel: 'build', waitFor: { built: 'warehouse' } },
   { id: 'timers', title: 'Builds take time', text: 'From here on, builds and upgrades run on real time: a timer under the scaffold, a ring that closes, and Antimatter if you would rather not wait. Hoppers keep filling meanwhile.', target: ['#panel .card[data-mod="dock"] .card-meta', '#panel .card[data-mod="dock"]', '.rail-btn[data-panel="build"]'], ensurePanel: 'build' },
   { id: 'banks', title: 'Banks', text: 'Modules earn credits into a bank while you are away. A glowing coin above a module means its bank is ready: tap it to collect.', target: 'hub', waitFor: { collect: true }, allowNext: true, waitLabel: 'Collect one when it glows, or Next' },
-  { id: 'fleet', title: 'Ships and trade', text: 'Fleet shows who is docked, on approach or holding for a berth. Market shows what their worlds buy and sell, and lets you set a policy per good.', target: '.rail-btn[data-panel="fleet"]' },
+  { id: 'fleet', title: 'Ships and trade', text: 'Fleet shows who is docked, on approach or holding for a berth. Market shows what their worlds buy and sell, and lets you set a policy per good.', phoneText: 'Fleet, under More, shows who is docked, on approach or holding for a berth. Market shows what their worlds buy and sell, and lets you set a policy per good.', target: ['.rail-btn[data-panel="fleet"]', '.rail-btn[data-more]'] },
   { id: 'missions', title: 'Missions and achievements', text: 'Goals pay credits, Antimatter and rank. When one lights up, come here and claim it.', target: '.rail-btn[data-panel="missions"]' },
   { id: 'map', title: 'Territory and the galaxy', text: 'Unclaimed space around the station is cleared ring by ring. Beyond it, eight sectors wait on the galaxy map, each with its own world and its own station.', target: '.rail-btn[data-panel="map"]' },
-  { id: 'expeditions', title: 'Expeditions', text: 'Send a crew out and they come back hours later with charts, cargo and discoveries for the Registry.', target: '.rail-btn[data-panel="expeditions"]' },
-  { id: 'finish', title: 'You have the bridge.', text: 'A reward waits here every day, the Store sells Antimatter when you are in a hurry, and the manual covers everything in depth.', target: '#btn-daily', place: 'below', finish: true, manual: true },
+  { id: 'expeditions', title: 'Expeditions', text: 'Send a crew out and they come back hours later with charts, cargo and discoveries for the Registry.', phoneText: 'Send a crew out from Expeditions, under More, and they come back hours later with charts, cargo and discoveries for the Registry.', target: ['.rail-btn[data-panel="expeditions"]', '.rail-btn[data-more]'] },
+  { id: 'finish', title: 'You have the bridge.', text: 'A reward waits here every day, the Store sells Antimatter when you are in a hurry, and the manual covers everything in depth.', phoneText: 'A reward waits in this menu every day, the Store under More sells Antimatter when you are in a hurry, and the manual covers everything in depth.', target: ['#btn-daily', '#sb-menu'], place: 'below', finish: true, manual: true },
 ];
+const phoneLayout = () => !!(typeof UI !== 'undefined' && UI && UI.phone);
 
 const Tutorial = {
   active: false,
@@ -130,6 +133,8 @@ const Tutorial = {
     const st = this.steps[this.step];
     this._satisfied = false; clearTimeout(this._advancing); this._advancing = 0;
     if (st.ensurePanel && typeof UI !== 'undefined' && UI.panel !== st.ensurePanel) UI.openPanel(st.ensurePanel);
+    // A4: a sheet left peeking (the player was placing) rises again so the step's card is in view
+    if (st.ensurePanel && typeof UI !== 'undefined' && typeof UI.setPeek === 'function') UI.setPeek(false);
     // waitFor steps already satisfied on entry keep Next visible instead of advancing past their explanation
     if (st.waitFor) {
       this._counts = this.counts();
@@ -146,7 +151,7 @@ const Tutorial = {
     const el = this._el, st = this.steps[this.step]; if (!el || !st) return;
     el.querySelector('#tour-kicker').textContent = `Tour ${GLYPH.mid} ${this.step + 1} of ${this.steps.length}`;
     el.querySelector('#tour-title').textContent = st.title;
-    el.querySelector('#tour-text').textContent = st.text;
+    el.querySelector('#tour-text').textContent = (phoneLayout() && st.phoneText) || st.text;
     const waiting = !!st.waitFor && !this._satisfied;
     el.querySelector('#tour-wait').hidden = !waiting;
     el.querySelector('#tour-wait-text').textContent = st.waitLabel || 'Do it to continue';
@@ -163,9 +168,12 @@ const Tutorial = {
     const st = this.steps[this.step]; if (!st) return null;
     if (st.target === 'hub') return this.hubRect();
     const sels = Array.isArray(st.target) ? st.target : [st.target];
+    const peeked = !!document.querySelector('#panel-host[data-peek]');   // A4: a peeking sheet hides its body
     for (const sel of sels) {
       const el = document.querySelector(sel);
-      if (el && el.offsetWidth) { const r = el.getBoundingClientRect(); if (r.width && r.height) return { x: r.left, y: r.top, w: r.width, h: r.height, el }; }
+      if (!el || !el.offsetWidth) continue;
+      if (peeked && el.closest('.panel-body')) continue;
+      const r = el.getBoundingClientRect(); if (r.width && r.height) return { x: r.left, y: r.top, w: r.width, h: r.height, el };
     }
     return null;
   },

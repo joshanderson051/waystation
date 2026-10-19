@@ -39,13 +39,37 @@ const EngineInput = (() => {
   }
   function cellKey(c) { return c ? c.r + ',' + c.c : ''; }
 
-  // Classify a click at host px (sx, sy) and emit the matching Engine event.
-  function click(sx, sy, shift) {
+  // Touch (2.4 phone, A4): a fingertip is wider than a cursor and the chips shrink with the zoom, so a
+  // touch tap also probes a TOUCH_RING px ring around the point for a bank chip (bankAt tests a 16-unit
+  // disc, so eight probes cover the ring) and, on an empty cell, snaps to a scaffold whose centre is
+  // within TOUCH_SNAP px: 32 px targets at any zoom.
+  const TOUCH_RING = 16, TOUCH_SNAP = 22;
+  function bankNearScreen(sx, sy, w) {
+    let b = EngineWorld.bankAt(w.x, w.y); if (b) return b;
+    const rho = TOUCH_RING / Math.max(0.05, CAM.zoom);
+    for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; b = EngineWorld.bankAt(w.x + Math.cos(a) * rho, w.y + Math.sin(a) * rho); if (b) return b; }
+    return null;
+  }
+  function scaffoldNearScreen(sx, sy, cell) {
+    const CELL = CAM.CELL, half = CELL * CAM.zoom / 2;
+    let best = null, bd = Infinity;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const r = cell.r + dr, c = cell.c + dc;
+      if (!EngineWorld.isScaffold(r, c)) continue;
+      const p = CAM.worldToScreen((c + 0.5) * CELL, (r + 0.5) * CELL), d = Math.hypot(p.x - sx, p.y - sy);
+      if (d <= half + TOUCH_SNAP && d < bd) { bd = d; best = { r, c }; }
+    }
+    return best;
+  }
+
+  // Classify a click at host px (sx, sy) and emit the matching Engine event. `touch` widens the targets.
+  function click(sx, sy, shift, touch) {
     const w = CAM.screenToWorld(sx, sy);
     const cell = EngineWorld.cellAt(w.x, w.y);
     // placement is modal: the cell wins; otherwise bank chips (floating above plates), then ships, then cells
     if (!EngineWorld.placing) {
-      const bank = EngineWorld.bankAt(w.x, w.y);
+      const bank = touch ? bankNearScreen(sx, sy, w) : EngineWorld.bankAt(w.x, w.y);
       if (bank) { emitBanks(bank, shift); return; }
       if (shift && cell) { const near = EngineWorld.readyBanksNear(cell.r, cell.c, 3); if (near.length) { for (const b of near) S.emit('bank-click', b); return; } }
       const ship = EngineTraffic.shipAt(w.x, w.y);
@@ -56,6 +80,7 @@ const EngineInput = (() => {
       if (!EngineWorld.inPlot(cell.r, cell.c)) { S.emit('plot-click', { r: cell.r, c: cell.c, ring: EngineWorld.ringOf(cell.r, cell.c) }); return; }
       if (EngineWorld.isScaffold(cell.r, cell.c)) { S.emit('scaffold-click', { r: cell.r, c: cell.c }); return; }
       const occupied = EngineWorld.occupied(cell.r, cell.c);
+      if (touch && !occupied && !EngineWorld.placing) { const sc = scaffoldNearScreen(sx, sy, cell); if (sc) { S.emit('scaffold-click', sc); return; } }
       // double-click a module: focus at zoom 1.6
       const key = cellKey(cell), now = U.nowMs();
       if (occupied && S.lastClick.key === key && now - S.lastClick.t < DBL_MS) { CAM.focusCell(cell.r, cell.c, { zoom: 1.6, ms: 600 }); S.lastClick.t = 0; return; }
@@ -126,7 +151,7 @@ const EngineInput = (() => {
     if (!d || d.id !== ev.pointerId) return;
     S.down = null; clearLong();
     if (d.moved) { S.dragging = false; CAM.endDrag(); return; }
-    if (ev.type === 'pointerup') click(d.x, d.y, d.shift || ev.shiftKey);
+    if (ev.type === 'pointerup') click(d.x, d.y, d.shift || ev.shiftKey, d.touch);
   }
   function onLeave() { S.lastPos = null; }
   function clearLong() { if (S.longTimer) { clearTimeout(S.longTimer); S.longTimer = 0; } }

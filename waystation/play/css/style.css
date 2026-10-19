@@ -95,7 +95,10 @@
                    sheets: recovery (.phrase-box .phrase .gate) · chooser (.save-cards > .save-card[data-save] .save-head .save-name .kv .save-when .save-pick)   Settings: #acct-shelf .acct(.signed) .acct-main .acct-off
      .commission.glass.cut > .spine #title-resume(#btn-resume.resume-card > #title-thumb .resume-main(.resume-rank #resume-name .resume-meta .resume-cta)) .title-actions(#btn-newstation)
                             #title-form(.field .name-row(#title-name #btn-reroll) #title-registry #title-confirm(.confirm-text #btn-title-back) .title-actions(#btn-commission))
-   #phone   the ≤760px / coarse-pointer message screen
+   Phone (A4, section 30b; ≤760px or coarse pointer ≤1023px): body[data-phone] body[data-peek]
+     #statusbar keeps .ro.credits .ro.am .rank + #sb-menu.sb-btn.phone-only (> .dot)   #rail is the dock: four .rail-btn[data-panel] + .rail-btn[data-more].phone-only
+     #panel-host[data-peek](.dragging) is the sheet (handle = #panel::before, drag on .panel-head)   #contextbar is the placing strip
+     sheets from hud.js: .menu-wrap > .menu-ro(.tile) .menu-rows > .menu-row[data-go](.menu-ic .menu-lbl .menu-meta .menu-chev) .menu-nu   .more-grid > .more-row[data-go](.more-ic .more-lbl .rail-badge .more-chev)
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
@@ -1185,15 +1188,12 @@ body:not([data-screen="title"]) #title { display: none; }
 .title-confirm .confirm-text::before { content: '\25A0'; font-size: 8px; margin-right: 6px; vertical-align: 1px; }
 
 /* --------------------------------------------------------------------------
-   28. Phone message (2.4)
+   28. Phone (2.4, Addendum A4): the bridge folds instead of showing a message;
+   the layout lives in section 30b after the desktop degradation rules.
+   Elements that exist only on phones (the status-bar menu, the dock's More
+   button) carry .phone-only and stay hidden on wider screens.
    -------------------------------------------------------------------------- */
-#phone { position: fixed; inset: 16px; z-index: 90; display: none; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 16px; padding: 22vh 24px 28px 30px; background-color: var(--glass-3); --spine: var(--amber); --spine-glow: var(--glow-amber-2); }
-#phone > .spine { top: var(--cut); }
-#phone .body-lg { color: var(--ink-2); }
-@media (max-width: 760px), ((pointer: coarse) and (max-width: 1023px)) {
-  #phone { display: flex; }
-  #app, #title, #world, #notices, #tooltip, #celebrate { display: none !important; }
-}
+.phone-only { display: none; }
 
 /* --------------------------------------------------------------------------
    29. Boot (11.1): once per session, 700ms
@@ -1250,6 +1250,13 @@ body[data-motion="reduced"] .tour-dim, body[data-motion="reduced"] .tour-ring, b
 .perr { padding: 8px 10px; border-radius: 3px; background: var(--bad-ghost); border: 1px solid rgba(255,79,94,.4); color: var(--bad); font: 400 13px/1.4 var(--font-body); }
 .input[aria-invalid="true"] { border-color: var(--bad); box-shadow: 0 0 10px rgba(255,79,94,.25); }
 .psubmit { align-self: flex-end; min-width: 160px; }
+.pfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pfoot .linkish { font: 400 13px/1.4 var(--font-body); color: var(--ink-2); }
+.pfoot .linkish:hover { color: var(--ice-hi); }
+.pfoot .psubmit { margin-left: auto; }
+.portal-note { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0; font: 400 var(--fs-body-lg)/1.45 var(--font-body); color: var(--ink); }
+.portal-note .ic { color: var(--ice); flex: none; margin-top: 3px; }
+.perr .linkish { color: var(--ice); font: inherit; margin-left: 4px; }
 .phrase-in { font-family: var(--font-mono); margin: 0; }
 .phrase-box { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 14px; }
 .phrase { flex: 1; margin: 0; padding: 14px 16px; border-radius: 3px; background: rgba(4,5,10,.55); border: 1px solid var(--edge-amber); color: var(--amber-hi); font: 600 16px/1.7 var(--font-mono); white-space: pre-wrap; word-break: break-word; user-select: text; text-shadow: var(--glow-amber-2); }
@@ -1265,13 +1272,6 @@ body[data-motion="reduced"] .tour-dim, body[data-motion="reduced"] .tour-ring, b
 .save-when { color: var(--ink-2); }
 .save-pick { align-self: flex-end; margin-top: 4px; }
 .acct { display: flex; align-items: center; gap: 12px; padding: 8px 0 4px; }
-.pfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.pfoot .linkish { font: 400 13px/1.4 var(--font-body); color: var(--ink-2); }
-.pfoot .linkish:hover { color: var(--ice-hi); }
-.pfoot .psubmit { margin-left: auto; }
-.portal-note { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0; font: 400 var(--fs-body-lg)/1.45 var(--font-body); color: var(--ink); }
-.portal-note .ic { color: var(--ice); flex: none; margin-top: 3px; }
-.perr .linkish { color: var(--ice); font: inherit; margin-left: 4px; }
 .acct-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .acct .setting-lbl { display: inline-flex; align-items: center; gap: 6px; }
 .acct-off .ic { color: var(--ink-3); }
@@ -1313,8 +1313,172 @@ body[data-motion="reduced"] .tour-dim, body[data-motion="reduced"] .tour-ring, b
 }
 
 /* --------------------------------------------------------------------------
+   30b. Phone layout (2.4, Addendum A4): portrait 360..430, Safari and Chrome.
+   The same bridge folded: a compact status bar (credits, Antimatter, rank,
+   a menu for the rest), the command rail as a five-button dock (Build,
+   Station, Map, Missions, More), panels as bottom sheets with a drag handle
+   and a peek state while placing, the context bar as a placing strip above
+   the dock, toasts under the status bar, modals and sheets that scroll
+   inside themselves. hud.js reads the same query (PHONE_MQ) for behaviour.
+   Desktop above 1024 is untouched: every rule here sits inside the query.
+   -------------------------------------------------------------------------- */
+@media (max-width: 760px), ((pointer: coarse) and (max-width: 1023px)) {
+  :root { --sb-h: 52px; --cb-h: 0px; --inset: 10px; --dock-h: calc(58px + env(safe-area-inset-bottom, 0px)); --peek-h: 74px; }
+  html, body { overscroll-behavior: none; }
+  body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  #world, #world canvas { touch-action: none; }
+  #app { grid-template-rows: var(--sb-h) 1fr 0; }
+  /* iOS zooms the page into any field under 16px */
+  .input, input[type="text"], input[type="number"], input[type="email"], input[type="password"], textarea.input { font-size: 16px; }
+
+  /* status bar: credits, Antimatter and the rank ring stay; the rest moves into the menu (UI.openMenu) */
+  #statusbar { gap: 6px; padding: 0 8px 0 8px; }
+  .sb-left, .ro.power, .ro.people, .ro.rep, .ro-top, .rank-main, #btn-daily, #btn-cloud, #speed, #btn-notices { display: none; }
+  .sb-center { flex: 1 1 auto; margin: 0; justify-content: flex-start; min-width: 0; }
+  .ro { height: 40px; padding: 0 6px; gap: 6px; border-left: 0; min-width: 0; }
+  .ro.am { border-left: 1px solid rgba(143,211,232,.14); }
+  .ro-ic .ic { width: 18px; height: 18px; }
+  .ro.credits .ro-val.hero { font-size: 18px; line-height: 20px; }
+  .ro.am .ro-val.big { font-size: 16px; line-height: 18px; }
+  .ro .plus { width: 32px; height: 32px; }
+  .sb-right { gap: 6px; }
+  .rank { height: 40px; padding: 0; gap: 0; }
+  .sb-btn.phone-only { display: grid; }
+  #condition { font-size: 11px; letter-spacing: .08em; padding: 0 10px; overflow: hidden; text-overflow: ellipsis; }
+
+  /* the command rail becomes the dock: five buttons, the other panels under More */
+  #rail { position: fixed; left: 0; right: 0; top: auto; bottom: 0; width: auto; height: var(--dock-h); flex-direction: row; align-items: stretch; gap: 0; padding: 3px 4px calc(2px + env(safe-area-inset-bottom, 0px)); border: 0; border-top: 1px solid var(--edge); z-index: 6; }
+  .rail-btn { flex: 1 1 0; min-width: 0; height: auto; margin: 0 2px; gap: 3px; }
+  .rail-btn[data-panel="market"], .rail-btn[data-panel="fleet"], .rail-btn[data-panel="expeditions"], .rail-btn[data-panel="registry"], .rail-btn[data-panel="store"], .rail-btn[data-panel="settings"] { display: none; }
+  .rail-btn.phone-only { display: flex; }
+  .rail-btn.pinned { margin-top: 0; }
+  .rail-btn .spine { left: 10px; right: 10px; top: -4px; bottom: auto; width: auto; height: 2px; transform: scaleX(.3); }
+  .rail-btn.active .spine { transform: scaleX(1); }
+  .rail-lbl { display: block; font-size: 10px; letter-spacing: .08em; }
+  .rail-badge { top: 1px; right: calc(50% - 24px); }
+  .rail-badge.dot { top: 4px; right: calc(50% - 18px); }
+  .rail-btn.pulse::after { inset: 1px; }
+
+  /* panels open as bottom sheets: full height under the status bar, a handle, a peek state while placing */
+  #panel-host { position: fixed; left: 0; right: 0; top: calc(var(--sb-h) + 10px); bottom: var(--dock-h); width: auto; min-width: 0; z-index: 5; transition: transform 300ms var(--ease-out); }
+  #panel-host[data-peek] { transform: translateY(calc(100% - var(--peek-h))); }
+  #panel-host.dragging { transition: none; }
+  #panel { transform: none; border-bottom: 0; }
+  #panel.open { animation: sheet-in var(--dur-panel) var(--ease-out) both; }
+  #panel.closing { animation: sheet-out 180ms var(--ease-exit) both; }
+  #panel::before { content: ''; position: absolute; left: 50%; top: 8px; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: rgba(243,233,214,.35); z-index: 6; pointer-events: none; }
+  .panel-head { padding: 20px 10px 8px 18px; touch-action: none; cursor: grab; }
+  #panel-host[data-peek] .panel-head { cursor: pointer; }
+  .panel-title { font-size: 22px; }
+  .panel-sub { margin-top: 4px; }
+  .panel-tabs { padding: 0 10px 0 18px; }
+  .panel-body { padding: 4px 12px 16px 18px; touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  .panel-foot { padding: 10px 12px 12px 18px; }
+  .panel-foot .btn { flex: 1 1 auto; }
+  /* panel content at 320..400px of width; every control reaches 32px (8) */
+  .seg > button, .seg.small > button { height: 32px; }
+  .btn.icon.small { width: 32px; height: 32px; min-height: 32px; }
+  .shelf.chapter { height: 36px; }
+  .panel-sub .linkish { padding: 9px 0; margin: -9px 0; }
+  .panel-body .linkish { padding: 6px 0; margin: -6px 0; }
+  .hero-row { grid-template-columns: 1fr; }
+  .am-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 8px; }
+  input.slider { width: 104px; }
+  .setting .seg > button { min-width: 48px; padding: 0 6px; }
+  .market th.pol, .market td.pol { width: 88px; }
+  .market th.price, .market td.price { width: 64px; }
+  .psubmit { align-self: stretch; }
+
+  /* context bar: a placing strip above the dock; the selected module's actions live in the Station sheet */
+  #contextbar { position: fixed; left: 10px; right: 10px; top: auto; bottom: calc(var(--dock-h) + 8px); height: auto; min-height: 44px; display: none; gap: 8px; padding: 6px 6px 6px 14px; border: 1px solid var(--edge); z-index: 7; --c: var(--cut-sm); clip-path: polygon(var(--c) 0, 100% 0, 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, 0 100%, 0 var(--c)); }
+  #contextbar > .spine { left: 0; right: auto; top: var(--c); bottom: 0; width: 2px; height: auto; opacity: .9; box-shadow: var(--spine-glow); }
+  body[data-placing] #contextbar { display: flex; }
+  body[data-peek] #contextbar { bottom: calc(var(--dock-h) + var(--peek-h) + 8px); }
+  .hint { white-space: normal; font-size: 13px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .ctx-right { display: none; }
+  .ctx-actions .btn { padding: 0 12px 0 14px; }
+  .ctx-actions .btn span { display: inline; }
+  .ctx-actions .btn::before { display: block; }
+
+  /* notices: toasts stack under the status bar; Next up lives in the menu */
+  #notices { display: flex !important; position: fixed; left: 10px; right: 10px; top: calc(var(--sb-h) + 8px); width: auto; z-index: 7; }
+  body[data-condition] #notices { top: calc(var(--sb-h) + 36px); }
+  #nextup { display: none !important; }
+  #toasts, .toast { pointer-events: none; }   /* a toast over the sheet's head must not catch the drag; its buttons stay live */
+  .toast { padding: 8px 4px 8px 14px; gap: 8px; }
+  .toast .btn, .toast .toast-close { pointer-events: auto; }
+  .toast-close { opacity: 1; }
+  .toast-act { min-height: 32px; }
+
+  /* modals and sheets scroll inside themselves; sheets rise from the bottom */
+  #modal { padding: 12px; }
+  #modal .box { width: 100%; max-width: 100%; max-height: calc(100dvh - 24px); }
+  .modal-body { padding: 14px 16px 4px 18px; }
+  #modal-title { font-size: 21px; }
+  #modal-actions { flex-wrap: wrap; gap: 8px; padding: 12px 16px 16px; }
+  #modal-actions .btn { flex: 1 1 auto; }
+  #sheet { place-items: end stretch; }
+  #sheet.open .sheet-box { animation: sheet-in var(--dur-state) var(--ease-out) backwards; }
+  .sheet-box, .sheet-box.wide { width: auto; max-width: none; max-height: calc(100dvh - var(--sb-h) - 10px); padding: 26px 14px calc(18px + env(safe-area-inset-bottom, 0px)) 18px; --c: var(--cut); clip-path: polygon(var(--c) 0, 100% 0, 100% 100%, 0 100%, 0 var(--c)); background-size: var(--c) var(--c), 0 0; overscroll-behavior: contain; }
+  .sheet-box::before { content: ''; position: absolute; left: 50%; top: 8px; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: rgba(243,233,214,.35); }
+  .sheet-close { top: 10px; right: 8px; }
+  .sheet-title { font-size: 24px; }
+  .sheet-lead { font-size: var(--fs-body); margin-bottom: 14px; }
+  .sheet-actions { flex-wrap: wrap; margin-top: 16px; }
+  .sheet-actions .btn { flex: 1 1 auto; }
+  .day-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .day-cell { min-height: 96px; }
+  .key-grid { grid-template-columns: 1fr; }
+  .save-cards { grid-template-columns: 1fr; }
+  .phrase { font-size: 14px; }
+  .phrase-box { flex-wrap: wrap; }
+
+  /* celebrations and the tour fit the width; the spotlight cut-out is unchanged */
+  .cele-wrap { top: 26%; height: 48%; }
+  .cele-inner { padding: 0 14px; gap: 8px; max-width: 100%; }
+  .cele-kicker { font-size: 12px; letter-spacing: .16em; }
+  .cele-title { font-size: 26px; letter-spacing: .06em; }
+  .tour-callout { width: calc(100vw - 20px); max-width: 430px; padding: 14px 14px 12px 18px; }
+  .tour-title { font-size: 19px; }
+  .tour-text { font-size: var(--fs-body); }
+  .tour-actions { flex-wrap: wrap; }
+  .tour-manual { flex: 1 1 100%; justify-content: center; }
+  #tooltip { display: none; }
+
+  /* title screen */
+  #title { justify-content: flex-start; gap: 14px; padding: max(20px, 6vh) 12px 20px; overflow-y: auto; }
+  .title-band { padding: 22px 14px 18px; gap: 8px; }
+  .wordmark.hero { font-size: clamp(30px, 9.4vw, 44px); }
+  .title-sub { font-size: 12px; }
+  .title-account { position: static; transform: none; margin-top: 6px; justify-content: center; }
+  .title-signed { align-items: center; text-align: center; }
+  .commission { width: 100%; max-width: 100%; padding: 18px 14px 16px 18px; }
+  .resume-card { grid-template-columns: 1fr; gap: 12px; padding: 12px; }
+  #title-thumb { width: 100%; height: auto; aspect-ratio: 5 / 3; }
+  .resume-name { font-size: 22px; white-space: normal; }
+  .title-actions { flex-wrap: wrap; }
+  .title-actions .btn.big { flex: 1 1 auto; }
+}
+/* the menu and More sheets (phone only; hud.js builds the rows) */
+.menu-ro { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }
+.menu-rows, .more-grid { display: flex; flex-direction: column; gap: 4px; }
+.menu-row, .more-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 8px 6px 12px; border-radius: 3px; text-align: left; color: var(--ink); background: var(--glass-2); border: 1px solid var(--edge); --hue: var(--ice); text-decoration: none; transition: background-color var(--dur-micro) var(--ease-out); }
+.menu-row:hover, .more-row:hover { background: var(--glass-3); }
+.menu-ic, .more-ic { display: inline-flex; color: var(--hue); flex: none; filter: drop-shadow(0 0 4px var(--hue)); }
+.menu-ic .ic { width: 18px; height: 18px; vertical-align: 0; }
+.more-ic .ic { width: 22px; height: 22px; vertical-align: 0; }
+.menu-lbl, .more-lbl { flex: 1; min-width: 0; font: 600 15px/18px var(--font-cond); letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-meta { flex: none; display: inline-flex; align-items: center; font: 500 12px/14px var(--font-mono); color: var(--ink-2); max-width: 52%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-chev, .more-chev { display: inline-flex; color: var(--ink-3); flex: none; }
+.menu-row .rail-badge, .more-row .rail-badge { position: static; }
+.menu-nu { margin-top: 6px; }
+.menu-nu .nu-row { min-height: 44px; margin-bottom: 4px; padding: 0 10px 0 8px; background: var(--glass-2); border: 1px solid var(--edge); }
+
+/* --------------------------------------------------------------------------
    31. Keyframes (transform, opacity, clip-path, colour only)
    -------------------------------------------------------------------------- */
+@keyframes sheet-in { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sheet-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(20px); } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes row-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes panel-in { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: translateX(0); } }

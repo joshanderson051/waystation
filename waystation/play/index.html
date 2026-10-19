@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Waystation</title>
 <meta name="description" content="Waystation: run a way station on the edge of interstellar space. Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate. Plays in the browser, saves on your device.">
 <meta name="theme-color" content="#04050A">
@@ -108,11 +108,7 @@
   </div>
 </div>
 
-<!-- 2.4 phones get a message, not a broken bridge -->
-<div id="phone" class="glass cut" data-hue="amber"><i class="spine"></i>
-  <span class="wordmark">Waystation</span>
-  <p class="body-lg">Waystation is a desktop and tablet game. Open it on a screen at least 1024 pixels wide and the bridge will be waiting.</p>
-</div>
+<!-- 2.4 / A4: phones get the same bridge folded (style.css 30b, hud.js PHONE_MQ), not a message -->
 
 <!-- 0.1 load order -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.6.6/pixi.min.js"></script>

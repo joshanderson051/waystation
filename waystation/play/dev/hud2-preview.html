@@ -91,11 +91,6 @@
   </div>
 </div>
 
-<div id="phone" class="glass cut" data-hue="amber"><i class="spine"></i>
-  <span class="wordmark">Waystation</span>
-  <p class="body-lg">Waystation is a desktop and tablet game. Open it on a screen at least 1024 pixels wide and the bridge will be waiting.</p>
-</div>
-
 <!-- harness toolbar -->
 <button type="button" id="h-toggle" title="Toggle the harness toolbar">H</button>
 <div id="h-bar" hidden>
@@ -122,8 +117,10 @@
   <div class="row" id="h-tour"><button data-h="tour:start">start</button><button data-h="tour:next">next</button><button data-h="tour:skip">skip</button></div>
   <h4>State</h4>
   <div class="row"><button data-h="place:dock">placing dock</button><button data-h="select:hub">select hub</button><button data-h="select:scaffold">select scaffold</button><button data-h="select:bank">select bank</button><button data-h="deselect">deselect</button><button data-h="motion">reduced motion</button><button data-h="title">title screen</button><button data-h="level:4">level 4</button></div>
+  <h4>Phone (A4)</h4>
+  <div class="row"><button data-h="phone:more">More sheet</button><button data-h="phone:menu">menu sheet</button><button data-h="phone:peek">peek sheet</button><button data-h="phone:lift">lift sheet</button></div>
   <h4>Viewport (new window)</h4>
-  <div class="row"><button data-h="vp:1440x900">1440x900</button><button data-h="vp:1180x700">1180x700</button><button data-h="vp:1024x768">1024x768</button><button data-h="vp:720x1200">phone</button></div>
+  <div class="row"><button data-h="vp:1440x900">1440x900</button><button data-h="vp:1180x700">1180x700</button><button data-h="vp:1024x768">1024x768</button><button data-h="vp:390x844">390x844</button><button data-h="vp:430x932">430x932</button></div>
   <div class="contrast" id="h-contrast"></div>
   <div class="log" id="h-log"></div>
 </div>
@@ -388,7 +385,9 @@ const Engine = {
   // grid geometry: cell size from the free area, station centred in the clear part of the screen
   geom() {
     const s = Sim.state, cols = s.grid[0].length, rows = s.grid.length;
-    const top = 56, bottom = this.h - 48, left = 72 + (this._avoid ? this._avoid.w + 24 : 0), right = this.w - 330;
+    // A4 phone: the whole width between the status bar and the dock (the real engine fills the viewport)
+    const phone = typeof UI !== 'undefined' && UI && UI.phone;
+    const top = phone ? 64 : 56, bottom = this.h - (phone ? 72 : 48), left = phone ? 6 : 72 + (this._avoid ? this._avoid.w + 24 : 0), right = phone ? this.w - 6 : this.w - 330;
     const cell = Math.max(8, Math.floor(Math.min((right - left) / (cols + 3), (bottom - top) / (rows + 3))));
     const ox = Math.round((left + right) / 2 - cols * cell / 2), oy = Math.round((top + bottom) / 2 - rows * cell / 2);
     return { cell, ox, oy, cols, rows };

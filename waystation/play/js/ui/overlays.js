@@ -158,7 +158,8 @@ const Overlays = {
     const o = this._sheet; if (!o) return;
     if (id === '__close') { if (o.dismissible !== false) this.closeSheet(); return; }
     const a = (o.actions || []).find(x => x.id === id);
-    if (a && typeof a.fn === 'function') { const keep = a.fn(btn); if (keep !== true) this.closeSheet(); }
+    // an action closes the sheet unless its fn returns true; a plain Later / Close (no fn) closes it too
+    if (a) { const keep = typeof a.fn === 'function' ? a.fn(btn) : undefined; if (keep !== true) this.closeSheet(); }
     if (this.sound) this.sound.click();
   },
   closeSheet() {
