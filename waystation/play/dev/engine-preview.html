@@ -163,9 +163,35 @@ const PLAN = [
   ['fuel', 0, -2], ['warehouse', 0, 2], ['solar', -1, -1], ['solar', -1, 1], ['hydro', 1, -1], ['clinic', 1, 1],
   ['dock', 0, -3], ['dock', 0, 3], ['dock', -2, 0], ['reactor', -1, -2], ['customs', -1, 2], ['rec', 1, -2], ['security', 1, 2],
   ['bank', -2, -1], ['shipyard', -2, 1], ['cantina', 2, 0], ['quarters', 2, -1], ['habitat', 2, 1], ['dock', 2, -2], ['refinery', 2, 2],
-  ['habitat', 3, 0], ['plaza', 3, 1], ['school', 3, -1], ['gate', 4, 0],
+  ['habitat', 3, 0], ['plaza', 3, 1], ['school', 3, -1], ['gate', 3, 2],
 ].map(([id, dr, dc]) => [id, HUB.r + dr, HUB.c + dc]);
 const at = (dr, dc) => [HUB.r + dr, HUB.c + dc];
+// plot (A1.2): a 9x7 plot around the hub (ring 1 on the 15x9 grid) with ring 2 clearing; written directly to Sim.state,
+// before placement because Sim.canPlace rejects cells outside the plot
+const Plot = {
+  rings() { return typeof plotRings === 'function' ? plotRings(Sim.state.grid.length, Sim.state.grid[0].length, HUB) : null; },
+  bounds(ring) {
+    const rs = this.rings(); if (rs && rs[ring]) return rs[ring];
+    const w = 7 + 2 * ring, h = [5, 7, 7, 9, 9, 11, 11][ring] || 9;              // 7x5 -> 9x7 -> 11x7 -> 13x9 -> 15x9 (A1.2 example)
+    const rows = Sim.state.grid.length, cols = Sim.state.grid[0].length;
+    return { r0: Math.max(0, HUB.r - (h - 1) / 2), c0: Math.max(0, HUB.c - (w - 1) / 2), r1: Math.min(rows - 1, HUB.r + (h - 1) / 2), c1: Math.min(cols - 1, HUB.c + (w - 1) / 2) };
+  },
+  set(ring, clearing) { const b = this.bounds(ring); Sim.state.plot = { ring, r0: b.r0, c0: b.c0, r1: b.r1, c1: b.c1, clearing: clearing || null }; },
+  start(ring, ms) {
+    const p = Sim.state.plot; if (!p || p.clearing) return;
+    p.clearing = { ring, startedAt: Date.now(), endsAt: Date.now() + ms, totalMs: ms };
+    Sim.emit('plot', { state: 'start', ring, bounds: this.bounds(ring) }); log(`clearing ring ${ring} (${Math.round(ms / 1000)} s)`);
+  },
+  done() {
+    const p = Sim.state.plot; if (!p) return;
+    const ring = p.clearing ? p.clearing.ring : p.ring + 1, b = this.bounds(ring);
+    this.set(ring, null);
+    Sim.emit('plot', { state: 'done', ring, bounds: b }); log(`ring ${ring} cleared`);
+  },
+  skip() { const p = Sim.state.plot; if (p && p.clearing) { const ring = p.clearing.ring; p.clearing = null; Sim.emit('plot', { state: 'skip', ring, bounds: this.bounds(ring) }); this.done(); } },
+};
+if (q.get('plot') === '0') delete Sim.state.plot;
+else Plot.set(1, { ring: 2, startedAt: Date.now(), endsAt: Date.now() + 28 * 60e3, totalMs: 28 * 60e3 });
 let placed = 0;
 for (const [id, r, c] of PLAN) if (Sim.place(id, r, c)) placed++;
 // every staged module is finished unless staged as a scaffold below
@@ -208,6 +234,10 @@ const FXB = {
   warp: () => Engine.fx.warp().then(() => log('warp resolved')),
   comet: () => EngineSpace.comet(),
   'skip build': () => Stage.skip(...at(3, -1)),
+  'plot done': () => Plot.done(),
+  'plot start': () => { const p = Sim.state.plot; if (p) Plot.start(p.ring + 1, 90e3); },
+  'plot skip': () => Plot.skip(),
+  'plot none': () => { delete Sim.state.plot; Sim.emit('change'); },
 };
 const fxHost = $('#fx');
 for (const k in FXB) btn(fxHost, k, () => FXB[k]());
@@ -253,6 +283,7 @@ Engine.on('cell-click', d => {
 });
 Engine.on('bank-click', d => { const amt = Stage.collect(d.r, d.c); if (amt > 0) Engine.fx.collect(d.r, d.c, amt, anchor); log(`collected ${amt} at ${d.r},${d.c}`); });
 Engine.on('scaffold-click', d => { Stage.skip(d.r, d.c); log(`skipped build at ${d.r},${d.c}`); });
+Engine.on('plot-click', d => { log(`plot-click ${d.r},${d.c} ring ${d.ring}`); const p = Sim.state.plot; if (p && !p.clearing) Plot.start(p.ring + 1, 90e3); });
 Engine.on('ship-click', d => log(`ship ${d.ship.id} ${d.ship.cls} (${d.ship.company}) ${d.ship.state}`));
 Engine.on('empty-click', () => { Engine.selected = null; });
 Engine.on('context', () => { Engine.placing = null; Engine.selected = null; mark(placeHost, null); });
@@ -273,7 +304,7 @@ Sim.on('toast', d => log('toast: ' + d.msg));
   if (q.get('drift') === '1') { drifting = true; Engine.camera.drift(true); }
   if (q.get('select')) { const [r, c] = q.get('select').split(',').map(Number); Engine.selected = { r, c }; }
   if (q.get('placing')) Engine.placing = q.get('placing');
-  window.harness = { fire: k => FXB[k] && FXB[k](), Meta, Stage, PLAN };
+  window.harness = { fire: k => FXB[k] && FXB[k](), Meta, Stage, Plot, PLAN };
   // loop: Sim.tick each frame so ships fly and dock
   let last = performance.now();
   const readout = $('#readout');
@@ -281,6 +312,8 @@ Sim.on('toast', d => log('toast: ' + d.msg));
   function loop(now) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
     if (!paused) Sim.tick(dt);
+    const pl = Sim.state.plot;
+    if (pl && pl.clearing && Date.now() >= pl.clearing.endsAt) Plot.done();      // the fake clearing timer completes
     acc += dt;
     if (acc > 0.25) {
       acc = 0;

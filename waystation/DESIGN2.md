@@ -479,3 +479,45 @@ Body ≥ 14px, numbers ≥ 14px, labels ≥ 12px; glass panels keep ≥ 7:1 for 
 ## Appendix A. Glossary
 
 **Bank / hopper**: a module's local accumulation of credits waiting to be tapped. **Chart**: proof of an expedition to a sector; three charts fully chart it. **AM / Antimatter**: the premium currency (violet). **Sector**: a star system with its own station. **Rank**: the profile-wide commander level. **Tell**: a module's one quiet live-state animation (DESIGN.md 8.1). **Spine**: the 2px luminous leading edge of a v2 panel (the v1 keel, lit).
+
+
+---
+
+## Addendum A1 — v2.1 "Patient": pacing, plot expansion, achievements (2026-10-19, owner's brief)
+
+The owner, after playing v2: the game must be slow, in the way Clash of Clans and DragonVale are slow. People log back in to check on it. Build times and upgrade times are the heartbeat; acceleration is something you buy. There must be levels and achievements, and territory to expand. Where this addendum and the sections above disagree, this addendum wins.
+
+### A1.1 Pacing preset `patient` (S; ships as the file default in `data2.js`, replacing `slow`)
+
+- **Build times** (`TIMERS.BUILD_MS`): tier 1 = 90 s (the first three builds of a profile stay instant), tier 2 = 12 min, tier 3 = 60 min, tier 4 = 4 h. Far sectors (index >= 4) x1.5. **Upgrades**: level 2 takes 2x the build time, level 3 takes 5x. A tier-3 module at level 3 is therefore a five-hour project; the Jump Gate at level 3 is twenty hours.
+- **Banks**: rate = cost / 150 per real minute at level 1 (x1.6 / x2.4 at levels 2 / 3); caps = 180 / 240 / 360 minutes of rate. Offline accrual cap 24 h.
+- **Expeditions**: durations 30 min, 1 h, 2 h, 4 h, 6 h, 8 h, 12 h, 24 h by sector order; costs unchanged. Charts still guaranteed on the third run.
+- **Game time**: `TIMERS.DAY_MS` = 48,000 (one game day = 48 s at 1x); `ECON.shipSpeed` tuned so ships read as calm (about 40 cells/day). `ECON.live` stays 0.06. The 2x and 4x speeds are **removed from the product**: `Sim.state.speed` is clamped to 0 or 1 by `Sim.tick` and by `UI.setSpeed`; the HUD shows only Pause and 1x.
+- **Skip cost** stays `max(1, ceil(remainingMinutes / 8))` AM, so a 4 h build costs 30 AM to finish (about one dollar at the 140 pack). Antimatter is the only accelerator.
+- **Sector unlock costs**: recalibrated by the pacing bot (three 15-minute sessions a day) to land **sable day 2-3, kessler day 4-5, thessaly day 8-10, marrow day 13-15, oros day 18-22, keth day 24-28, aurelia day 32-40**. S prints the table and ships the costs that hit it.
+- Daily reward credits scale with the station's total rate as before; the Store's credit packs keep their floors.
+
+### A1.2 Plot expansion ("territory") per station (S, E, H)
+
+Every station starts with a **7x5 plot** around the hub inside its sector grid; the rest of the grid is **unclaimed space**: dim, hatched, with drifting debris (E). The player buys the next **ring** of cells with credits, waits for the clearing timer (or pays Antimatter), and the plot grows: 7x5 -> 9x7 -> 11x7 -> 13x9 -> 15x9 (home); larger grids add rings up to their size (17x9, 15x11, 17x11, 19x11). Ring k (1-based) costs `PLOT.baseCost x PLOT.costMul^(k-1)` credits (base 4,000, mul 2.2) and takes `PLOT.baseMs x PLOT.msMul^(k-1)` (base 15 min, mul 1.9); far sectors x1.5 on time. Rings are cleared one at a time.
+
+- Data (`data2.js`): `PLOT = { start: {w:7, h:5}, baseCost: 4000, baseMs: 15*60e3, costMul: 2.2, msMul: 1.9 }` and `plotRings(rows, cols, hub)` -> the list of ring bounds `{r0,c0,r1,c1}` for a grid (ring 0 = the start plot, last ring = the full grid; a ring grows by one cell on each side where the grid allows, alternating width-first when the grid is wider than tall).
+- State: `Sim.state.plot = { ring: 0, r0, c0, r1, c1, clearing: null | { ring, startedAt, endsAt, totalMs } }`. Migration of an existing profile sets `ring` to the smallest ring containing every occupied cell.
+- Read model: `Meta.plot() -> { ring, rings, r0, c0, r1, c1, cells, next: { ring, cost, ms, cells, affordable } | null, clearing: { ring, endsAt, remainingMs, totalMs, skipAM } | null }`; `Sim.inPlot(r, c) -> bool`; `Sim.canPlace` returns `{ ok:false, why:'plot' }` outside the plot.
+- Mutators: `Meta.expandPlot() -> { ok, cost, endsAt, why }`, `Meta.skipPlot() -> { ok, cost }`. Events: `plot {state:'start'|'done'|'skip', ring, bounds}`. `Meta.nextUp()` includes the clearing timer (`kind:'plot'`). Missions: two new ones in *Commissioning* ("Clear your first ring") and *Town* ("Clear ring 4"). Achievements below track rings cleared across sectors.
+- Engine: cells outside the plot draw on `world.shadow` as a hatched unclaimed field (ice at 6-8%) with 1-3 small debris sprites per cell drifting slowly; the plot edge is a faint dashed ivory boundary; the ring being cleared shows a sweeping clear-progress band along the boundary plus a mono timer at the plot's bottom edge; completion plays a reveal (the band brightens, debris blows outward as motes, `Engine.fx.pulse` on each new cell over 400 ms). Clicking an unclaimed cell emits **`'plot-click' {r, c, ring}`** (the ring that cell belongs to); placement mode treats unclaimed cells as invalid (hatched). Camera bounds use the full grid as before.
+- HUD: `plot-click` opens a confirm: "Clear ring 2 . 20 cells . 8,800 cr . 28 min" with Clear / Clear now for N AM (when a clearing is already running: "Clearing ring 2 . 14:20 left . Skip for 2 AM"). The Station overview gets a **Territory** block (plot size, ring k of n, Expand button, timer). The Build panel's tier heads show "needs more plot" when no valid cell exists in the plot for a module. Next-up shows the clearing timer. Context hint: "Unclaimed space: click it to clear the next ring".
+
+### A1.3 Achievements (S, H)
+
+Lifetime, profile-wide, tiered; separate from missions (which are chapter goals) and from rank (which is XP). `ACHIEVEMENTS` in `data2.js`: 24 entries, each `{ id, title, desc, icon, fam, stat, tiers: [{ goal, am }] }` with 3 tiers (bronze/silver/gold) paying 5 / 15 / 40 AM (gold on the hardest ones 60). Stats come from `profile.stats` (lifetime: servedTotal, collects, amEarned, buildsDone, upgrades, expeditionsClaimed, discoveries, missionsClaimed, dailyClaims, sectorsUnlocked, plotRings) and derived values (best level, rank, charts total, registry found count, banked lifetime, residents peak, Aurelian liners served, convoys served). Examples: *Harbourmaster* (serve 50 / 500 / 5,000 ships), *Banker* (collect 50k / 1M / 20M credits), *Architect* (build 10 / 100 / 500 modules), *Foreman* (upgrade 5 / 50 / 200), *Surveyor* (claim 3 / 25 / 150 expeditions), *Cartographer* (charts 3 / 12 / 24), *Collector* (registry 10 / 30 / 52), *Pioneer* (sectors 2 / 5 / 8), *Landholder* (rings 2 / 10 / 30), *Regular* (dailies 7 / 30 / 100), *Patron* (AM earned 50 / 500 / 5,000), *Town Planner* (residents 20 / 60 / 150), plus one per tier reached in any sector and one per rank milestone.
+- Read model: `Meta.achievements() -> [{ id, title, desc, icon, fam, tier /*claimed tiers 0..3*/, progress, goal /*next tier goal*/, nextAM, claimable, done }]`; `Meta.claimAchievement(id) -> { am, tier } | null`; event `achievement { id, tier, state:'complete'|'claimed' }`; `Meta.achievementBadge() -> count claimable`.
+- HUD: the Missions panel becomes **Missions | Achievements** tabs; achievement rows show a three-segment tier bar, progress and a Claim lozenge; the rail badge counts missions **and** achievements; `UI.celebrate('achievement', {title, tier, am})` uses the amber band with a bronze/silver/gold chip.
+
+### A1.4 Levels
+
+Station tiers (L1-L5) and Commander rank (ten ranks) are the two level systems; the HUD already shows both. The status bar's rank ring gains a tooltip with the next rank's grant. No new system.
+
+### A1.5 Gates for v2.1
+
+`node play/dev/sim-test.js` extends section 14 for the `patient` default and adds sections for plots (rings per grid size, costs, timers, skip, migration ring, canPlace outside the plot) and achievements (tier progression, claim once, badge count), plus the recalibrated pacing table. The HUD harness adds the Territory block, a plot confirm, the Achievements tab and the celebration. The engine harness stages a 9x7 plot on a 15x9 grid with ring 2 clearing. The integrated journey gains: click unclaimed space -> clear ring with AM -> build on the new cells -> claim an achievement.

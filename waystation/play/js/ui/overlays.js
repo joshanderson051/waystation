@@ -87,7 +87,7 @@ const Overlays = {
     $('#modal-extra').innerHTML = o.extra || '';
     $('#modal-actions').innerHTML = (o.actions || []).map((a, i) => {
       const cls = ['btn', 'big', a.primary ? 'primary' : '', a.danger ? 'danger' : '', a.am ? 'am' : '', a.ghost ? 'ghost' : ''].filter(Boolean).join(' ');
-      return `<button type="button" class="${cls}" data-i="${i}">${a.icon ? icon(a.icon, 16) : ''}<span>${esc(a.label)}</span></button>`;
+      return `<button type="button" class="${cls}" data-i="${i}"${a.disabled ? ' disabled' : ''}>${a.icon ? icon(a.icon, 16) : ''}<span>${esc(a.label)}</span></button>`;
     }).join('');
     this._modal = o;
     m.classList.remove('open'); void m.offsetWidth; m.classList.add('open');
@@ -200,6 +200,7 @@ const Overlays = {
     }
     if (reward.livery) out.push(chip('rose', 'ship', esc(typeof reward.livery === 'string' ? reward.livery : 'Livery token')));
     if (reward.title) out.push(chip('ivory', 'rep', esc(reward.title)));
+    if (reward.tier) out.push(`<span class="rchip tier ${esc(reward.tier)}${size ? ' ' + size : ''}">${icon('award', 14)}<span>${esc(Fmt.cap(reward.tier))}</span></span>`);
     if (reward.discover) out.push(chip('rose', reward.discover.kind === 'species' ? 'species' : reward.discover.kind === 'ships' || reward.discover.kind === 'ship' ? 'ship' : 'artifact', esc(reward.discover.name || 'Discovery')));
     if (reward.label && !out.length) out.push(chip('ink', 'info', esc(reward.label)));
     return out.join('');

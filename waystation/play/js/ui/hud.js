@@ -53,6 +53,21 @@ const MetaAdapter = {
   bankedTotal() { const s = S(); if (!s || !has(Sim, 'cells')) return 0; let t = 0; for (const { r, c } of Sim.cells()) { const h = this.hopper(r, c); if (h) t += Math.floor(h.bank || 0); } return t; },
   buildingCells() { const s = S(); if (!s || !has(Sim, 'cells')) return []; const out = []; for (const { r, c, m } of Sim.cells()) { const b = this.build(r, c); if (b && b.building) out.push({ r, c, id: m.id, remainingMs: b.remainingMs, totalMs: b.totalMs, skipAM: b.skipAM }); } return out; },
   canCollectAll() { if (typeof Meta !== 'undefined' && Meta && Meta.canCollectAll != null) return typeof Meta.canCollectAll === 'function' ? !!Meta.canCollectAll() : !!Meta.canCollectAll; return this.rank().level >= 3; },
+  // A1.2 territory: Meta.plot() -> { ring, rings, r0, c0, r1, c1, cells, next: { ring, cost, ms, cells, affordable } | null, clearing: { ring, endsAt, remainingMs, totalMs, skipAM } | null }
+  // before S lands, the whole grid is the plot (flagged `whole` so the HUD hides expansion)
+  plot() {
+    if (has(Meta, 'plot')) { const p = Meta.plot(); if (p) return p; }
+    const s = S(); if (!s || !s.grid || !s.grid.length) return null;
+    const rows = s.grid.length, cols = s.grid[0].length;
+    return { ring: 0, rings: 0, r0: 0, c0: 0, r1: rows - 1, c1: cols - 1, cells: rows * cols, next: null, clearing: null, whole: true };
+  },
+  inPlot(r, c) { if (has(Sim, 'inPlot')) return !!Sim.inPlot(r, c); const p = this.plot(); return !p || (r >= p.r0 && r <= p.r1 && c >= p.c0 && c <= p.c1); },
+  expandPlot() { return call(Meta, 'expandPlot', [], { ok: false, why: 'Territory needs the station link (Meta)' }); },
+  skipPlot() { return call(Meta, 'skipPlot', [], { ok: false, why: 'Territory needs the station link (Meta)' }); },
+  // A1.3 achievements: Meta.achievements() -> [{ id, title, desc, icon, fam, tier, progress, goal, nextAM, claimable, done }]
+  achievements() { return call(Meta, 'achievements', [], []) || []; },
+  claimAchievement(id) { return call(Meta, 'claimAchievement', [id], null); },
+  achievementBadge() { if (has(Meta, 'achievementBadge')) return Number(Meta.achievementBadge()) || 0; return this.achievements().filter(a => a.claimable).length; },
   // mutators
   collect(r, c) { return call(Meta, 'collect', [r, c], 0); },
   collectAll() { return call(Meta, 'collectAll', [], 0); },
@@ -112,6 +127,8 @@ const StoreAdapter = {
 const MID2 = GLYPH.mid;
 const KEY_PANEL = { b: 'build', s: 'station', m: 'market', f: 'fleet', e: 'expeditions', g: 'map', j: 'missions', r: 'registry' };
 const regOf = name => (typeof registryOf === 'function') ? registryOf(name) : 'WS-0000';
+// achievement tiers arrive as 1..3 or as a word (TIER_WORDS comes from panels.js)
+const tierName = t => typeof t === 'string' ? t.toLowerCase() : (t >= 1 && t <= 3 ? TIER_WORDS[t - 1] : '');
 
 // ------------------------------------------------------------
 // 2. UI
@@ -120,7 +137,6 @@ const UI = {
   panel: null,            // open panel id | null (facade)
   _inst: null,            // { update, destroy } of the open panel
   started: false,
-  _lastSpeed: 1,
   _focusShip: { id: null, until: 0 },
   _cond: null, _alert: { kind: null, until: 0 },
   _pendingOffline: null,
@@ -208,6 +224,8 @@ const UI = {
       Sim.on('discover', d => this.onDiscover(d));
       Sim.on('purchase', d => this.onPurchase(d));
       Sim.on('offline', d => { if (this.started) this.showAway(d); else this._pendingOffline = d; });
+      Sim.on('plot', d => this.onPlot(d));
+      Sim.on('achievement', d => this.onAchievement(d));
     }
     // Engine events (0.3)
     EngineAdapter.on('cell-click', d => this.onCellClick(d));
@@ -217,6 +235,7 @@ const UI = {
     EngineAdapter.on('empty-click', () => { if (!EngineAdapter.placing()) this.deselect(); });
     EngineAdapter.on('context', () => { if (EngineAdapter.placing()) this.place(null); else this.deselect(); });
     EngineAdapter.on('cell-hover', d => this.onCellHover(d));
+    EngineAdapter.on('plot-click', d => d && this.plotConfirm(d.ring));
     EngineAdapter.on('ship-hover', d => this.onShipHover(d));
     EngineAdapter.on('camera', () => { if (this._hoverTip) this.onCellHover(this._hoverTip); });
 
@@ -239,7 +258,7 @@ const UI = {
       `<div class="sb-right">` +
       `<div class="rank" id="ro-rank" data-tip="Commander rank · XP from banks, ships, missions and expeditions"><span class="rank-ring">${'<svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true"><circle class="ring-track" cx="20" cy="20" r="17"/><circle class="ring-arc" id="rank-arc" cx="20" cy="20" r="17" stroke-dasharray="106.81" stroke-dashoffset="106.81"/></svg>'}<span class="rank-level num" id="v-rank-level">1</span></span><div class="rank-main"><span class="ro-lbl" id="v-rank-lbl">Rank 1</span><span class="rank-title" id="v-rank-title">Ensign</span></div></div>` +
       `<button type="button" class="sb-btn" id="btn-daily" title="Daily reward" aria-label="Daily reward">${icon('calendar', 20)}<i class="dot" hidden></i></button>` +
-      `<div id="speed" class="seg" role="group" aria-label="Game speed"><button type="button" data-speed="0" title="Pause (Space)" aria-label="Pause">${icon('pause', 14)}</button><button type="button" data-speed="1" class="on" title="Normal speed (1)">1${GLYPH.times}</button><button type="button" data-speed="2" title="Double speed (2)">2${GLYPH.times}</button><button type="button" data-speed="4" title="Quadruple speed (4)">4${GLYPH.times}</button></div>` +
+      `<div id="speed" class="seg" role="group" aria-label="Game speed"><button type="button" data-speed="0" title="Pause (Space)" aria-label="Pause">${icon('pause', 14)}</button><button type="button" data-speed="1" class="on" title="Run (1)">1${GLYPH.times}</button></div>` +
       `<button type="button" class="sb-btn narrow-only" id="btn-notices" title="Notices" aria-label="Toggle notices">${icon('bell', 20)}<i class="dot" hidden></i></button>` +
       `</div>`;
   },
@@ -329,7 +348,12 @@ const UI = {
     setText('#v-rank-lbl', `Rank ${rk.level}`);
     setText('#v-rank-title', rk.title || '');
     const arc = $('#rank-arc'); if (arc) { const c = 106.81, off = (c * (1 - Math.max(0, Math.min(1, rk.pct || 0)))).toFixed(2); if (arc.getAttribute('stroke-dashoffset') !== off) arc.setAttribute('stroke-dashoffset', off); }
-    const rankEl = $('#ro-rank'); if (rankEl) rankEl.dataset.tip = `Rank ${rk.level} ${MID2} ${rk.title || ''} ${MID2} ${Fmt.n(rk.xp || 0)}${rk.next ? ` / ${Fmt.n(rk.next)}` : ''} XP`;
+    const rankEl = $('#ro-rank');
+    if (rankEl) {
+      const nxDef = typeof RANKS !== 'undefined' && Array.isArray(RANKS) ? RANKS.find(x => x.level === rk.level + 1) : null;
+      const nextTitle = rk.nextTitle || (nxDef && nxDef.title) || '', grantText = rk.nextGrant || (nxDef && nxDef.grantText) || '';
+      rankEl.dataset.tip = `Rank ${rk.level} ${MID2} ${rk.title || ''} ${MID2} ${Fmt.n(rk.xp || 0)}${rk.next ? ` / ${Fmt.n(rk.next)}` : ''} XP` + (nextTitle ? ` ${MID2} Next: ${nextTitle}${grantText ? ` (grants ${grantText.toLowerCase()})` : ''}` : ` ${MID2} Top rank`);
+    }
     const daily = MetaAdapter.daily(); const dot = $('#btn-daily .dot'); if (dot) dot.hidden = !(daily && daily.claimable);
     const lvl = String(s.level); if (document.body.getAttribute('data-level') !== lvl) document.body.setAttribute('data-level', lvl);
     this.refreshCondition(s, T);
@@ -356,7 +380,7 @@ const UI = {
   // ---------------------------------------------------------- rail badges (2.4)
   refreshBadges() {
     const set = (id, n, cls) => { const b = $(`.rail-btn[data-panel="${id}"] .rail-badge`); if (!b) return; const txt = n === true ? '' : String(n); b.className = 'rail-badge' + (cls ? ' ' + cls : '') + (n === true ? ' dot' : ''); if (b.textContent !== txt) b.textContent = txt; b.hidden = !n; };
-    set('missions', MetaAdapter.missions().filter(m => m.claimable).length, 'amber');
+    set('missions', MetaAdapter.missions().filter(m => m.claimable).length + MetaAdapter.achievementBadge(), 'amber');
     set('expeditions', MetaAdapter.expeditions().filter(x => x.status === 'ready').length, 'ice');
     set('store', StoreAdapter.offer() ? true : 0, 'am');
     const ready = MetaAdapter.readyCells().length;
@@ -374,6 +398,8 @@ const UI = {
     }
     const d = MetaAdapter.daily();
     if (d) items.push(d.claimable ? { at: now, icon: 'calendar', label: 'Daily reward ready', go: 'daily', hue: 'amber', ready: true } : { at: now + Fmt.toMidnight(now), icon: 'calendar', label: 'Daily reward', go: 'daily', hue: 'amber' });
+    const pl = MetaAdapter.plot();
+    if (pl && pl.clearing) items.push({ at: pl.clearing.endsAt || now + (pl.clearing.remainingMs || 0), icon: 'territory', label: `Ring ${pl.clearing.ring} cleared`, go: 'plot', hue: 'ice' });
     items.sort((a, b) => a.at - b.at);
     const top = items.slice(0, 3);
     const sig = top.map(i => i.go + i.label + (i.ready ? 'R' : '')).join('|');
@@ -387,6 +413,7 @@ const UI = {
   },
   nextUpGo(go) {
     if (go === 'daily') return this.openDaily();
+    if (go === 'plot') return this.plotConfirm();
     if (go.startsWith('panel:')) return this.openPanel(go.slice(6));
     const m = /^cell:(\d+),(\d+)$/.exec(go); if (m) { this.focusCell(+m[1], +m[2]); this.select(+m[1], +m[2]); }
   },
@@ -429,6 +456,7 @@ const UI = {
     if (m) return `Locked: ${d.name} needs station level ${m[1]}.`;
     if (why === 'Not enough credits') return `Need ${Fmt.n(d.cost - s.credits)} more credits for ${Fmt.aOrAn(d.name)}.`;
     if (why === 'Must touch the station') return 'Not adjacent: modules must touch the station.';
+    if (why === 'plot') return 'Unclaimed space: clear this ring before building here.';
     return why || '';
   },
   hintFor(s, T) {
@@ -439,6 +467,8 @@ const UI = {
       if (hv && has(Sim, 'canPlace')) { const chk = Sim.canPlace(pl, hv.r, hv.c); if (!chk.ok) return this.reasonSentence(chk.why, pl); }
       return `Placing ${MODULES[pl].name}: click a bracketed cell. Right-click or Esc to stop.`;
     }
+    const hov = EngineAdapter.hover();
+    if (hov && !MetaAdapter.inPlot(hov.r, hov.c)) return 'Unclaimed space: click it to clear the next ring.';
     const sel = EngineAdapter.selected(), m = sel && s.grid[sel.r] && s.grid[sel.r][sel.c];
     if (m) {
       const bd = MetaAdapter.build(sel.r, sel.c);
@@ -453,6 +483,9 @@ const UI = {
     for (const { r, c, m: mm } of Sim.cells()) if (mm.id === 'dock' && !Sim.dockUsable(r, c)) return `Berth at ${Fmt.grid(r, c)} is blocked: it has no empty side. Ships cannot pull up to it.`;
     const ready = MetaAdapter.readyCells();
     if (ready.length) return `${ready.length} hopper${ready.length === 1 ? ' is' : 's are'} ready: tap the coin above a module to collect. Shift-click collects every bank nearby.`;
+    if (MetaAdapter.achievementBadge()) return 'An achievement is ready to claim in Missions (J).';
+    const plt = MetaAdapter.plot();
+    if (plt && plt.clearing) { const cl = plt.clearing, left = cl.remainingMs != null ? cl.remainingMs : Math.max(0, (cl.endsAt || 0) - Date.now()); return `Ring ${cl.ring} is being cleared: ${Fmt.ms(left)} left. Skip it for ${cl.skipAM != null ? cl.skipAM : Math.max(1, Math.ceil(left / 480000))} AM in the Station panel.`; }
     if (s.recentAway > 1.5) return 'Ships are diverting. Build another Docking Bay.';
     if (T.flare) return 'Solar flare: solar arrays are dark. Reactors are immune.';
     if (s.stats && s.stats.shipsServed === 0) {
@@ -577,14 +610,16 @@ const UI = {
   },
 
   // ---------------------------------------------------------- speed (0.4)
+  // A1.1: the game runs at one speed; 0 pauses, anything else is 1
   setSpeed(sp) {
     const s = S(); if (!s) return;
-    s.speed = sp; if (sp > 0) this._lastSpeed = sp;
+    sp = sp > 0 ? 1 : 0;
+    s.speed = sp;
     for (const b of $$('#speed button')) { const on = +b.dataset.speed === sp; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
     EngineAdapter.setPaused(sp === 0);
     document.body.toggleAttribute('data-paused', sp === 0);
   },
-  togglePause() { const s = S(); if (s) this.setSpeed(s.speed ? 0 : (this._lastSpeed || 1)); },
+  togglePause() { const s = S(); if (s) this.setSpeed(s.speed ? 0 : 1); },
 
   // ---------------------------------------------------------- keyboard (5.1)
   onKey(e) {
@@ -596,7 +631,7 @@ const UI = {
     const k = e.key.toLowerCase();
     if (e.key === 'Escape') { if (EngineAdapter.placing()) this.place(null); else if (EngineAdapter.selected()) this.deselect(); else if (this.panel) this.closePanel(); }
     else if (e.code === 'Space') { e.preventDefault(); this.togglePause(); }
-    else if (e.key === '1') this.setSpeed(1); else if (e.key === '2') this.setSpeed(2); else if (e.key === '4') this.setSpeed(4);
+    else if (e.key === '1') this.setSpeed(1);
     else if (e.key === '?') Overlays.keys();
     else if (KEY_PANEL[k]) this.openPanel(this.panel === KEY_PANEL[k] ? null : KEY_PANEL[k]);
   },
@@ -640,10 +675,93 @@ const UI = {
       case 'expedition': spec = { kicker: 'Expedition returned', title: MetaAdapter.sectorDef(d.sector).name || d.title || 'Debrief', reward: d.loot || d.reward, hue: 'ice' }; break;
       case 'purchase': spec = { kicker: 'Vault credited', title: d.title || (d.granted && d.granted.am ? `+${Fmt.n(d.granted.am)} Antimatter` : d.name || 'Purchase complete'), reward: d.granted || d.reward, hue: 'am' }; break;
       case 'daily': spec = { kicker: `Day ${(d.dayIndex != null ? d.dayIndex + 1 : d.streak) || 1} of your streak`, title: 'Daily reward', reward: d.reward, hue: 'amber' }; break;
+      case 'achievement': { const tier = tierName(d.tier); spec = { kicker: 'Achievement', title: d.title || 'Achievement', reward: Object.assign({}, d.am ? { am: d.am } : {}, tier ? { tier } : {}), hue: 'amber' }; break; }
+      case 'plot': spec = { kicker: 'Territory expanded', title: `Ring ${d.ring} cleared`, sub: d.cells ? `${Fmt.n(d.cells)} new cells to build on` : 'New cells to build on', hue: 'ice', fx: fxLevel }; break;
       default: spec = { kicker: d.kicker || '', title: d.title || kind, reward: d.reward, hue: d.hue || 'amber' };
     }
     if (d.kicker) spec.kicker = d.kicker; if (d.titleOverride) spec.title = d.titleOverride; if (d.sub) spec.sub = d.sub;
     Overlays.celebrate(kind, spec);
+  },
+
+  // ---------------------------------------------------------- A1.2 territory and A1.3 achievements
+  // Engine 'plot-click' {r, c, ring} and the Territory block's Expand both land here
+  plotConfirm(ring) {
+    const p = MetaAdapter.plot(); if (!p) return;
+    if (p.whole) { this.toast('Territory expansion needs the station link (Meta)', 'warn', { chip: 'Territory' }); return; }
+    const cl = p.clearing;
+    if (cl) {
+      const left = cl.remainingMs != null ? cl.remainingMs : Math.max(0, (cl.endsAt || 0) - Date.now());
+      const am = cl.skipAM != null ? cl.skipAM : Math.max(1, Math.ceil(left / 480000));
+      Overlays.modal({ kind: 'confirm', icon: 'territory', tag: `Territory ${MID2} ring ${cl.ring} of ${p.rings}`, title: `Clearing ring ${cl.ring}`,
+        html: `Crews are clearing the next ring of cells. <b>${Fmt.ms(left)}</b> left.`,
+        actions: [{ label: `Skip ${MID2} ${am} AM`, am: true, icon: 'skip', fn: () => this.skipPlot() }, { label: 'Close', ghost: true }] });
+      return;
+    }
+    const nx = p.next;
+    if (!nx) { this.toast('The whole sector is yours already', 'info', { chip: 'Territory', icon: 'territory' }); return; }
+    const am = nx.skipAM != null ? nx.skipAM : Math.max(1, Math.ceil(nx.ms / 480000));
+    const s = S(), short = s && s.credits < nx.cost ? nx.cost - s.credits : 0;
+    const cannot = !!short || nx.affordable === false;
+    Overlays.modal({ kind: 'confirm', icon: 'territory', tag: `Territory ${MID2} ring ${nx.ring} of ${p.rings}`, title: `Clear ring ${nx.ring}`,
+      html: `<div class="plot-spec"><span>${icon('territory', 14)}${Fmt.n(nx.cells)} cells</span><span>${icon('credits', 14)}${Fmt.n(nx.cost)} cr</span><span>${icon('clock', 14)}${Fmt.dur(nx.ms)}</span></div>` +
+        `<p>Crews clear the debris and the plot grows by one ring. Hoppers and ships carry on meanwhile.</p>` +
+        (ring && ring !== nx.ring ? `<p class="fine">Rings are cleared one at a time: ring ${nx.ring} comes first.</p>` : '') +
+        (cannot ? `<p class="test-note">${GLYPH.sq} ${short ? `Need ${Fmt.n(short)} more credits.` : 'Not affordable yet.'}</p>` : ''),
+      actions: [
+        { label: 'Clear', primary: true, icon: 'territory', disabled: cannot, fn: () => this.expandPlot(false) },
+        { label: `Clear now ${MID2} ${am} AM`, am: true, icon: 'skip', fn: () => this.expandPlot(true) },
+        { label: 'Cancel', ghost: true },
+      ] });
+  },
+  expandPlot(now) {
+    const res = MetaAdapter.expandPlot();
+    const ok = res === true || (res && typeof res === 'object' && res.ok !== false && !res.why);
+    if (!ok) { this.toast((res && res.why) || 'The ring could not be cleared', 'warn', { chip: 'Territory', icon: 'territory' }); Sound.error(); this.refresh(); return; }
+    Sound.click();
+    if (now) this.skipPlot();
+    this.refresh();
+  },
+  skipPlot() {
+    const res = MetaAdapter.skipPlot();
+    const ok = res === true || (res && typeof res === 'object' && res.ok !== false && !res.why);
+    if (!ok) { this.toast((res && res.why) || 'Not enough Antimatter to clear it now', 'bad', { chip: 'Territory', icon: 'territory' }); Sound.error(); }
+    this.refresh();
+  },
+  // Sim 'plot' {state: 'start'|'done'|'skip', ring, bounds, cells?}
+  onPlot(d) {
+    if (!d) return;
+    const p = MetaAdapter.plot();
+    if (d.state === 'start') {
+      const cl = p && p.clearing, left = cl ? (cl.remainingMs != null ? cl.remainingMs : Math.max(0, (cl.endsAt || 0) - Date.now())) : 0;
+      this.toast(`Clearing ring ${d.ring}${left ? ` ${MID2} ready in ${Fmt.dur(left)}` : ''}`, 'info', { chip: 'Territory', icon: 'territory' });
+    } else if ((d.state === 'done' || d.state === 'skip') && this._plotDoneRing !== d.ring) {
+      this._plotDoneRing = d.ring;
+      const cells = d.cells != null ? d.cells : (p && this._plotCells ? Math.max(0, p.cells - this._plotCells) : 0);
+      this.toast(`Ring ${d.ring} cleared${cells ? `: ${Fmt.n(cells)} new cells` : ''}`, 'good', { chip: 'Territory', icon: 'territory' });
+      Sound.built();
+      this.celebrate('plot', { ring: d.ring, cells });
+    }
+    if (p) this._plotCells = p.cells;
+    this.refresh();
+  },
+  // Sim 'achievement' {id, tier, state: 'complete'|'claimed'}
+  onAchievement(d) {
+    if (!d) return;
+    if (d.state === 'complete') {
+      const a = MetaAdapter.achievements().find(x => x.id === d.id);
+      this.toast(`Achievement unlocked: ${a ? a.title : d.id}${tierName(d.tier) ? ` ${MID2} ${tierName(d.tier)}` : ''}`, 'gold', { icon: 'award', chip: 'Achievement', action: { label: 'Claim', fn: () => this.openAchievements() } });
+    }
+    this.refreshBadges(); if (this.panel === 'missions' && this._inst) this._inst.update();
+  },
+  openAchievements() { this.openPanel('missions'); if (this._inst && this._inst.setTab) this._inst.setTab('achievements'); },
+  claimAchievement(id, btn) {
+    const a = MetaAdapter.achievements().find(x => x.id === id);
+    const res = MetaAdapter.claimAchievement(id);
+    if (!res) { this.toast('Claiming needs the station link (Meta)', 'warn'); return; }
+    const am = res.am != null ? res.am : (a && a.nextAM) || 0, tier = res.tier != null ? res.tier : (a ? (a.tier || 0) + 1 : 1);
+    if (am) Overlays.fly(btn || $('#panel'), this.anchor('am'), { n: Math.min(12, Math.max(5, Math.round(am / 4))), icon: 'am', hue: 'am', onHit: () => this.anchorHit('am') });
+    this.celebrate('achievement', { title: a ? a.title : 'Achievement', tier, am });
+    this.refresh();
   },
 
   // ---------------------------------------------------------- bus reactions (0.6)

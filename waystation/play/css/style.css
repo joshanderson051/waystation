@@ -63,8 +63,9 @@
                .dest-grid > .dest(.running) > .planet .dest-main(.dest-name .dest-meta .charts>i(.on)+.charts-lbl) .btn
      Map:      .galaxy-wrap > svg.galaxy > line.route(.lit) g.node(.active .owned .unlockable .locked .picked) > .halo .glow .disc .lock text.node-lbl
                .sector-card[data-status] > .spine .sector-head(.planet .sector-title(.sector-name .chip .sector-grid)) .sector-flavour .sector-bias .kv .sector-lock .actions
-     Missions: .mission(.big .claimable .done) > .spine .mission-main(.mission-title .mission-desc .mission-prog(.meter .num) .mission-reward) .btn|.chip
-               .chapter-body
+     Missions: .ptab missions|achievements  .mission(.big .claimable .done) > .spine .mission-main(.mission-title .mission-desc .mission-prog(.meter .num) .mission-reward) .btn|.chip
+               .chapter-body   .ach(.claimable .done) > .spine .ach-ic .ach-main(.ach-title(.tier-chip) .ach-desc .ach-prog(.tiers>i(.on|.cur)(.bronze|.silver|.gold) .num .rchip)) .btn
+     Territory: .block.terr > .spine (.ring | svg.plot-plan(.pp-grid .pp-next(.clearing) .pp-plot)) .block-main .btn[data-act=expand|skip-plot]   modal: .plot-spec
      Registry: .setbar  .sil-grid > .sil-card(.found) > svg.sil(.found) .sil-name .sil-rarity .sil-count .sil-lore
      Store:    .ribbon  .store-hero > .spine .store-hero-head(.store-hero-ic .store-hero-title) .am-tiles > .am-tile(.lifted .owned) > .spine .am-badge .am-ic .am-amount .am-lbl .am-price
                .sku-list > .sku(.owned) > .spine .sku-ic .sku-main(.sku-name .sku-desc) .btn|.chip   .restore  .legal
@@ -190,6 +191,8 @@
   --glow-bad:0 0 14px rgba(255,79,94,.45);
   --glow-warn:0 0 14px rgba(255,143,61,.45);
   --glow-ivory:0 0 14px rgba(243,233,214,.35);
+  /* A1.3 achievement tiers */
+  --bronze:#D08A4E; --silver:#C9D2DC; --tier-gold:#FFD66B;
 }
 
 /* 2.3 level evolution: the only level-dependent styling */
@@ -867,6 +870,42 @@ table.market { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .mission-prog .num { font-size: 12px; color: var(--ink-2); flex: none; }
 .mission-reward { display: flex; flex-wrap: wrap; gap: 5px; }
 .mission-reward:empty { display: none; }
+
+/* A1.3 achievements: rows with a three-segment tier bar */
+.ach { position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; margin-bottom: 6px; background: var(--glass-2); border: 1px solid var(--edge); border-radius: 3px; --spine: var(--amber); --spine-glow: 0 0 8px rgba(233,162,59,.45); }
+.ach .spine { top: 8px; bottom: 8px; opacity: .6; }
+.ach.claimable { border-color: var(--edge-amber); background: rgba(233,162,59,.08); }
+.ach.claimable .spine { opacity: 1; --spine-glow: var(--glow-amber-2); }
+.ach.done { --spine: var(--tier-gold); opacity: .85; }
+.ach-ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 3px; background: rgba(4,5,10,.5); color: var(--amber); flex: none; box-shadow: inset 0 0 0 1px rgba(233,162,59,.3); }
+.ach-ic .ic { width: 20px; height: 20px; vertical-align: 0; }
+.ach.done .ach-ic { color: var(--tier-gold); box-shadow: inset 0 0 0 1px rgba(255,214,107,.45); }
+.ach-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ach-title { font: 600 16px/20px var(--font-cond); letter-spacing: .01em; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.ach-desc { font: 400 13px/1.4 var(--font-body); color: var(--ink-2); }
+.ach-prog { display: flex; align-items: center; gap: 10px; }
+.ach-prog .num { font-size: 12px; color: var(--ink-2); flex: none; }
+.tiers { display: inline-flex; gap: 3px; flex: 1; max-width: 150px; }
+.tiers i { position: relative; flex: 1; height: 8px; background: rgba(4,5,10,.55); box-shadow: inset 0 0 0 1px var(--hairline-2); overflow: hidden; }
+.tiers i.on { background: var(--t); box-shadow: 0 0 8px var(--t); }
+.tiers i.cur::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: var(--p, 0%); background: var(--t); box-shadow: 0 0 8px var(--t); }
+.tiers i.bronze { --t: var(--bronze); } .tiers i.silver { --t: var(--silver); } .tiers i.gold { --t: var(--tier-gold); }
+.tier-chip { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 3px; font: 600 10px/1 var(--font-cond); letter-spacing: .12em; text-transform: uppercase; color: var(--on-accent); }
+.tier-chip.bronze { background: var(--bronze); } .tier-chip.silver { background: var(--silver); } .tier-chip.gold { background: var(--tier-gold); }
+.rchip.tier { color: var(--on-accent); border-color: transparent; }
+.rchip.tier.bronze { background: var(--bronze); } .rchip.tier.silver { background: var(--silver); } .rchip.tier.gold { background: var(--tier-gold); box-shadow: 0 0 12px rgba(255,214,107,.4); }
+
+/* A1.2 territory: the Station overview block and the plot confirm */
+.block.terr .plot-plan { flex: none; }
+.plot-plan .pp-grid { fill: rgba(4,5,10,.5); stroke: var(--hairline-2); stroke-width: .6; }
+.plot-plan .pp-plot { fill: rgba(143,211,232,.28); stroke: var(--ice); stroke-width: .8; }
+.plot-plan .pp-next { fill: rgba(143,211,232,.08); stroke: var(--ice-dim); stroke-width: .6; stroke-dasharray: 1.5 1.5; }
+.plot-plan .pp-next.clearing { fill: rgba(143,211,232,.16); stroke: var(--ice); }
+.plot-spec { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0 0 12px; font: 600 15px/1 var(--font-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.plot-spec span { display: inline-flex; align-items: center; gap: 6px; }
+.plot-spec .ic { color: var(--ice); }
+.card-meta .m.up { color: var(--ice); }
+.card-meta .m.up .ic { color: var(--ice); }
 
 /* --------------------------------------------------------------------------
    18. Registry (4.10)

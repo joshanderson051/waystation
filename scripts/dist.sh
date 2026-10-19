@@ -6,5 +6,5 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 rm -rf dist && mkdir -p dist
-rsync -a --exclude 'DESIGN.md' --exclude 'README.md' --exclude 'serve.js' --exclude 'tools/' --exclude 'play/dev/' waystation/ dist/
+rsync -a --exclude '*.md' --exclude 'serve.js' --exclude 'tools/' --exclude 'play/dev/' waystation/ dist/
 echo "dist/ assembled:" && find dist -type f | sort

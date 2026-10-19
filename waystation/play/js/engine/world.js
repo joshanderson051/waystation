@@ -6,7 +6,8 @@
 // (dock LEDs, cores, lamps), hero glows, scaffolds with progress rings
 // and timers (Meta.build), bank chips (Meta.hopper), upgrade ticks
 // (Meta.upgrade), hover / selection / placement feedback, floaters
-// hand-off, and Engine.thumbnail.
+// hand-off, Engine.thumbnail, and the plot / territory layer
+// (DESIGN2.md A1.2): unclaimed field, debris, clearing band, reveal.
 //
 // World units: CSS px at zoom 1; cell (r, c) at (c*CELL, r*CELL).
 // Reads Sim.state and the Meta read helpers every frame; never writes them.
@@ -43,7 +44,10 @@ const EngineWorld = (() => {
     placing: null, selected: null, hover: null,
     floaters: new WeakMap(),
     dotsG: null, stationKey: '',
+    // plot / territory (A1.2): bounds from Sim.state.plot, ring list, field graphics, debris pool, clearing band
+    plot: { key: '', bounds: null, rings: [], clearing: null, fieldG: null, bandG: null, sweep: null, label: null, pill: null, debris: [], debrisRoot: null, reveal: null, pulses: [], lastText: '' },
   };
+  const DEBRIS_CAP = 600, DEBRIS_PER_CELL = [1, 1, 3];
 
   const hasMeta = fn => typeof Meta !== 'undefined' && Meta && typeof Meta[fn] === 'function';
   const metaBuild = (r, c) => { if (!hasMeta('build')) return null; try { return Meta.build(r, c); } catch (e) { return null; } };
@@ -701,6 +705,7 @@ const EngineWorld = (() => {
   function mapReason(why, def, s) {
     if (!why) return '';
     if (why === 'Occupied') return 'OCCUPIED';
+    if (why === 'plot') return 'UNCLAIMED SPACE';
     const m = why.match(/level\s+(\d+)/i);
     if (m) return `LOCKED · LEVEL ${m[1]}`;
     if (/credits/i.test(why)) return `NEED ${fmt(Math.max(0, def.cost - s.credits))} MORE CR`;
@@ -737,10 +742,10 @@ const EngineWorld = (() => {
     const dotsTarget = S.placing ? 0.16 : 0;
     S.dotsG.alpha += (dotsTarget - S.dotsG.alpha) * Math.min(1, dt / 0.16);
 
-    // hover: ivory outline 1.5 px + soft halo (not while placing)
+    // hover: ivory outline 1.5 px + soft halo (not while placing, never outside the plot)
     O.hover.clear();
     const hv = S.hover;
-    if (!S.placing && hv && s.grid[hv.r] && s.grid[hv.r][hv.c]) {
+    if (!S.placing && hv && s.grid[hv.r] && s.grid[hv.r][hv.c] && inPlot(hv.r, hv.c)) {
       const key = keyOf(hv.r, hv.c);
       if (key !== S.hoverKey) { S.hoverKey = key; S.hoverT0 = nowM; }
       const k = Math.min(1, (nowM - S.hoverT0) / 140);
@@ -770,7 +775,7 @@ const EngineWorld = (() => {
     for (let r = 0; r < S.rows; r++) for (let c = 0; c < S.cols; c++) {
       if (s.grid[r][c]) continue;
       if (!neighbors(r, c).some(([nr, nc]) => Sim.occupied(nr, nc))) continue;
-      (Sim.canPlace(id, r, c).ok ? legal : illegal).push({ r, c });
+      (inPlot(r, c) && Sim.canPlace(id, r, c).ok ? legal : illegal).push({ r, c });   // unclaimed cells are never legal (A1.2)
     }
     if (legal.length) {
       for (const { r, c } of legal) brackets(O.place, wx(c), wy(r), CELL, 7, 2);
@@ -789,9 +794,9 @@ const EngineWorld = (() => {
     if (!S.ghostPos) S.ghostPos = { x: tx, y: ty };
     else { const k = Math.min(1, dt / 0.08); S.ghostPos.x = U.lerp(S.ghostPos.x, tx, k); S.ghostPos.y = U.lerp(S.ghostPos.y, ty, k); if (Math.abs(S.ghostPos.x - tx) < 0.2) S.ghostPos.x = tx; if (Math.abs(S.ghostPos.y - ty) < 0.2) S.ghostPos.y = ty; }
     const gx = S.ghostPos.x, gy = S.ghostPos.y, cx = gx + CELL / 2, cy = gy + CELL / 2;
-    const occ = !!s.grid[h.r][h.c];
-    const chk = Sim.canPlace(id, h.r, h.c);
-    if (!occ) {
+    const occ = !!s.grid[h.r][h.c], claimed = inPlot(h.r, h.c);
+    const chk = claimed ? Sim.canPlace(id, h.r, h.c) : { ok: false, why: 'plot' };
+    if (!occ && claimed) {
       // preview spars at 40%
       const w = 0.16 * CELL;
       for (const [nr, nc] of neighbors(h.r, h.c)) {
@@ -870,6 +875,223 @@ const EngineWorld = (() => {
     return raw || U.pal('ink');
   }
 
+  // ---------------------------------------------------------------- plot / territory (A1.2)
+  // Ring list for a grid: data2.js plotRings(rows, cols, hub) when present, else the A1.2 rule
+  // (start plot around the hub; each ring grows one cell per side where the grid allows,
+  // width every step and height on odd steps when the grid is wider than tall).
+  function ringsFor(rows, cols, hub) {
+    if (typeof Sim !== 'undefined' && Sim && typeof Sim.plotRingsOf === 'function') {
+      try { const r = Sim.plotRingsOf(); if (Array.isArray(r) && r.length > 1) return r; } catch (e) { /* fall through */ }
+    }
+    if (typeof plotRings === 'function') {
+      try { const r = plotRings(rows, cols, hub); if (Array.isArray(r) && r.length) return r; } catch (e) { /* fall through to the local rule */ }
+    }
+    const start = (typeof PLOT !== 'undefined' && PLOT && PLOT.start) ? PLOT.start : { w: 7, h: 5 };
+    const hw = Math.floor(start.w / 2), hh = Math.floor(start.h / 2);
+    let r0 = U.clamp(hub.r - hh, 0, rows - 1), r1 = U.clamp(hub.r + hh, 0, rows - 1);
+    let c0 = U.clamp(hub.c - hw, 0, cols - 1), c1 = U.clamp(hub.c + hw, 0, cols - 1);
+    const out = [{ r0, c0, r1, c1 }];
+    const wider = cols > rows;
+    for (let k = 1; out.length < 40 && !(r0 === 0 && c0 === 0 && r1 === rows - 1 && c1 === cols - 1); k++) {
+      const canW = c0 > 0 || c1 < cols - 1, canH = r0 > 0 || r1 < rows - 1;
+      const growH = canH && (!wider || k % 2 === 1 || !canW);
+      if (canW) { c0 = Math.max(0, c0 - 1); c1 = Math.min(cols - 1, c1 + 1); }
+      if (growH) { r0 = Math.max(0, r0 - 1); r1 = Math.min(rows - 1, r1 + 1); }
+      out.push({ r0, c0, r1, c1 });
+    }
+    return out;
+  }
+  const inBounds = (b, r, c) => !!b && r >= b.r0 && r <= b.r1 && c >= b.c0 && c <= b.c1;
+  // Claimed test: Sim.inPlot when S provides it, else the plot bounds; without a plot the whole grid is claimed.
+  function inPlot(r, c) {
+    if (typeof Sim !== 'undefined' && Sim && typeof Sim.inPlot === 'function') { try { return !!Sim.inPlot(r, c); } catch (e) { /* fall through */ } }
+    return !S.plot.bounds || inBounds(S.plot.bounds, r, c);
+  }
+  // Ring index (into the ring list) that an unclaimed cell belongs to; -1 when none.
+  function ringOf(r, c) {
+    const rings = S.plot.rings;
+    for (let i = 0; i < rings.length; i++) if (inBounds(rings[i], r, c)) return i;
+    return -1;
+  }
+  function plotTimeText(ms) {
+    const secs = Math.max(0, Math.ceil(ms / 1000)), m = Math.floor(secs / 60), s2 = secs % 60;
+    return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}:${String(s2).padStart(2, '0')}`;
+  }
+  function debrisTexture(i) {
+    return ST.bake('debris|' + i, 14, 14, g => {
+      const rr = U.rng(7000 + i), n = 5 + Math.floor(rr() * 3);
+      g.beginPath();
+      for (let k = 0; k < n; k++) { const a = k / n * TAU, rad = 3.5 + rr() * 2.5; const x = 7 + Math.cos(a) * rad, y = 7 + Math.sin(a) * rad; if (k) g.lineTo(x, y); else g.moveTo(x, y); }
+      g.closePath();
+      const gr = g.createLinearGradient(3, 3, 11, 11);
+      gr.addColorStop(0, '#9AA4B2'); gr.addColorStop(1, '#3A404C');
+      g.fillStyle = gr; g.fill();
+      g.strokeStyle = 'rgba(255,255,255,.3)'; g.lineWidth = 1; g.stroke();
+    }).texture;
+  }
+  function ensurePlotNodes() {
+    const P = S.plot; if (P.fieldG) return;
+    P.fieldG = new PIXI.Graphics(); P.debrisRoot = new PIXI.Container(); P.bandG = new PIXI.Graphics(); P.pill = new PIXI.Graphics();
+    P.label = ST.makeText('', { size: 13, color: U.pal('ice-hi') }); P.label.anchor.set(0.5, 0); P.label.visible = false;
+    P.sweep = ST.sprite(ST.glowTexture(U.pal('ice-hi'), 16, 'core'), { blend: 'add', alpha: 0 });
+    P.sweep.scale.set(2.2, 0.9);
+    for (const n of [P.fieldG, P.debrisRoot, P.bandG, P.pill]) n.eventMode = 'none';
+    ST.layers.world.shadow.addChildAt(P.debrisRoot, 0);
+    ST.layers.world.shadow.addChildAt(P.fieldG, 0);
+    ST.layers.world.scaffold.addChild(P.bandG, P.pill, P.label);
+    ST.layers.world.emissive.addChild(P.sweep);
+  }
+  // General rectangle perimeter walk (clockwise from the top-left), for dashed boundaries and the band.
+  function perimPoint(x, y, w, h, p) {
+    const per = 2 * (w + h); p = ((p % per) + per) % per;
+    if (p < w) return { x: x + p, y };
+    if (p < w + h) return { x: x + w, y: y + (p - w) };
+    if (p < 2 * w + h) return { x: x + w - (p - w - h), y: y + h };
+    return { x, y: y + h - (p - 2 * w - h) };
+  }
+  function dashedRect(g, x, y, w, h, dash, gap) {
+    const per = 2 * (w + h), edges = [w, w + h, 2 * w + h, per];
+    for (let p = 0; p < per; p += dash + gap) {
+      let p1 = Math.min(p + dash, per);
+      for (const e of edges) if (p < e && p1 > e) { p1 = e; break; }      // never round a corner mid-dash
+      const a = perimPoint(x, y, w, h, p), b = perimPoint(x, y, w, h, p1);
+      g.moveTo(a.x, a.y).lineTo(b.x, b.y);
+    }
+  }
+
+  // Rebuild the unclaimed field, boundary and debris pool from the plot state (on any bounds / ring change).
+  function rebuildPlot(s) {
+    ensurePlotNodes();
+    const P = S.plot, p = s.plot;
+    P.bounds = (p && p.r0 != null) ? { r0: p.r0, c0: p.c0, r1: p.r1, c1: p.c1 } : null;
+    P.rings = ringsFor(S.rows, S.cols, s.hub);
+    P.clearing = (p && p.clearing) ? p.clearing : null;
+    const clearRing = P.clearing ? P.rings[P.clearing.ring] : null;
+    const g = P.fieldG; g.clear();
+    const ice = U.int(U.pal('ice')), ivory = U.int(U.pal('ivory'));
+    const unclaimed = [];
+    if (P.bounds) {
+      for (let r = 0; r < S.rows; r++) for (let c = 0; c < S.cols; c++) {
+        if (inPlot(r, c)) continue;
+        const clearing = clearRing && inBounds(clearRing, r, c);
+        unclaimed.push({ r, c, clearing });
+      }
+      // faint fill + hatch; the ring being cleared reads a step brighter
+      for (const pass of [false, true]) {
+        const cells = unclaimed.filter(u => u.clearing === pass);
+        if (!cells.length) continue;
+        for (const u of cells) g.rect(wx(u.c), wy(u.r), CELL, CELL);
+        g.fill({ color: ice, alpha: pass ? 0.05 : 0.025 });
+        for (const u of cells) hatchCell(g, wx(u.c), wy(u.r), CELL / 5, 1);
+        g.stroke({ width: 1, color: ice, alpha: pass ? 0.13 : 0.075 });
+      }
+      // plot edge: faint dashed ivory boundary
+      const b = P.bounds;
+      dashedRect(g, wx(b.c0) + 1, wy(b.r0) + 1, (b.c1 - b.c0 + 1) * CELL - 2, (b.r1 - b.r0 + 1) * CELL - 2, 8, 6);
+      g.stroke({ width: 1.5, color: ivory, alpha: 0.35 });
+    }
+    // debris pool: 1..3 small shards per unclaimed cell by tier, drifting inside their cell
+    const per = DEBRIS_PER_CELL[ST.tier];
+    const want = Math.min(DEBRIS_CAP, unclaimed.length * per);
+    const scale = unclaimed.length ? Math.min(1, DEBRIS_CAP / (unclaimed.length * per)) : 1;
+    let i = 0;
+    for (const u of unclaimed) {
+      const n = Math.max(1, Math.round(per * scale * (0.6 + 0.8 * U.rng(u.r * 131 + u.c * 17)())));
+      for (let k = 0; k < n && i < want; k++, i++) {
+        let d = P.debris[i];
+        if (!d) { d = { sp: ST.sprite(debrisTexture(k % 3)) }; P.debrisRoot.addChild(d.sp); P.debris[i] = d; }
+        const rr = U.rng((u.r * 977 + u.c * 31 + k * 7) >>> 0);
+        d.r = u.r; d.c = u.c;
+        d.x = wx(u.c) + 8 + rr() * (CELL - 16); d.y = wy(u.r) + 8 + rr() * (CELL - 16);
+        d.vx = (rr() - 0.5) * 5; d.vy = (rr() - 0.5) * 5; d.vr = (rr() - 0.5) * 0.4;
+        d.sp.texture = debrisTexture(Math.floor(rr() * 3));
+        d.sp.scale.set(0.45 + rr() * 0.55); d.sp.rotation = rr() * TAU; d.sp.alpha = u.clearing ? 0.5 : 0.28 + rr() * 0.17;
+        d.sp.tint = u.clearing ? 0xBFE8F4 : 0xB8C4D0; d.sp.visible = true; d.sp.position.set(d.x, d.y);
+      }
+    }
+    for (; i < P.debris.length; i++) P.debris[i].sp.visible = false;
+    P.bandG.clear(); P.pill.clear(); P.label.visible = false; P.sweep.alpha = 0; P.lastText = '';
+  }
+
+  function updatePlot(s, dt) {
+    const P = S.plot, p = s.plot;
+    const key = p && p.r0 != null ? [p.ring, p.r0, p.c0, p.r1, p.c1, p.clearing ? p.clearing.ring : '-', S.rows, S.cols, ST.tier].join(',') : 'none|' + S.rows + ',' + S.cols;
+    if (key !== P.key) { P.key = key; rebuildPlot(s); }
+    if (!P.bounds) return;
+    // debris drift (bounce inside the cell); static at tier 0 and under reduced motion
+    if (ST.tier > 0 && !ST.reduced) {
+      for (const d of P.debris) {
+        if (!d.sp.visible) continue;
+        d.x += d.vx * dt; d.y += d.vy * dt; d.sp.rotation += d.vr * dt;
+        const x0 = wx(d.c) + 6, x1 = wx(d.c + 1) - 6, y0 = wy(d.r) + 6, y1 = wy(d.r + 1) - 6;
+        if (d.x < x0 || d.x > x1) { d.vx = -d.vx; d.x = U.clamp(d.x, x0, x1); }
+        if (d.y < y0 || d.y > y1) { d.vy = -d.vy; d.y = U.clamp(d.y, y0, y1); }
+        d.sp.position.set(d.x, d.y);
+      }
+    }
+    // clearing band + timer along the ring being cleared
+    const g = P.bandG; g.clear(); P.pill.clear();
+    const cl = P.clearing, ring = cl ? P.rings[cl.ring] : null;
+    if (ring) {
+      const x = wx(ring.c0) + 3, y = wy(ring.r0) + 3, w = (ring.c1 - ring.c0 + 1) * CELL - 6, h = (ring.r1 - ring.r0 + 1) * CELL - 6, per = 2 * (w + h);
+      const now = Date.now();
+      const prog = cl.totalMs > 0 ? U.clamp(1 - (cl.endsAt - now) / cl.totalMs, 0, 1) : 0;
+      const ice = U.int(U.pal('ice')), hi = U.int(U.pal('ice-hi'));
+      g.rect(x, y, w, h).stroke({ width: 1, color: ice, alpha: 0.22 });
+      // progress portion, clockwise from the top-left, as short segments so corners stay sharp
+      const len = prog * per, step = 10;
+      for (let q = 0; q < len; q += step) { const a = perimPoint(x, y, w, h, q), b = perimPoint(x, y, w, h, Math.min(q + step, len)); g.moveTo(a.x, a.y).lineTo(b.x, b.y); }
+      if (len > 0) g.stroke({ width: 4, color: ice, alpha: 0.55 });
+      // sweeping light: one lap of the perimeter every 4 s (emissive, so it blooms)
+      const sw = ((ST.time / 4) % 1) * per, sp = perimPoint(x, y, w, h, sw), sq = perimPoint(x, y, w, h, sw - 6);
+      P.sweep.position.set(sp.x, sp.y); P.sweep.rotation = Math.atan2(sp.y - sq.y, sp.x - sq.x);
+      P.sweep.alpha = ST.tier > 0 && !ST.reduced ? 0.8 : 0.35;
+      // mono timer in a dark pill under the plot's bottom edge
+      const b = P.bounds, txt = plotTimeText(cl.endsAt - now);
+      if (txt !== P.lastText) { P.lastText = txt; P.label.text = txt; }
+      P.label.visible = true;
+      P.label.position.set((wx(b.c0) + wx(b.c1 + 1)) / 2, wy(b.r1 + 1) + 7);
+      const pw = P.label.width + 12, ph = P.label.height + 6;
+      P.pill.roundRect(P.label.x - pw / 2, P.label.y - 3, pw, ph, 3).fill({ color: 0x04050A, alpha: 0.78 });
+      ST.setTextColor(P.label, hi);
+    } else { P.label.visible = false; P.sweep.alpha = 0; }
+    // reveal flash on the ring just cleared (700 ms) and the staggered pulses
+    if (P.reveal) {
+      const k = (ST.time - P.reveal.t0) / 0.7, rb = P.reveal.bounds;
+      if (k >= 1) P.reveal = null;
+      else {
+        const x = wx(rb.c0) + 2, y = wy(rb.r0) + 2, w = (rb.c1 - rb.c0 + 1) * CELL - 4, h = (rb.r1 - rb.r0 + 1) * CELL - 4;
+        g.rect(x, y, w, h).stroke({ width: 4 + 6 * k, color: U.int(U.pal('ivory')), alpha: (1 - k) * (1 - k) * 0.9 });
+        g.rect(x, y, w, h).fill({ color: U.int(U.pal('ice')), alpha: (1 - k) * 0.08 });
+      }
+    }
+    while (P.pulses.length && P.pulses[0].at <= ST.time) { const q = P.pulses.shift(); EngineFX.facade.pulse(q.r, q.c, U.pal('ice')); }
+  }
+
+  // Sim event `plot {state:'start'|'done'|'skip', ring, bounds}`: the field follows Sim.state.plot every frame;
+  // `done` and `skip` (Meta's paid completion) add the reveal: band flash, debris blown outward, pulses over 400 ms.
+  function onPlot(d) {
+    const P = S.plot;
+    P.key = '';
+    if (!d || (d.state !== 'done' && d.state !== 'skip')) return;
+    const rb = d.bounds && d.bounds.r0 != null ? d.bounds : P.rings[d.ring];
+    if (!rb) return;
+    const prev = P.bounds;
+    const cx = (wx(rb.c0) + wx(rb.c1 + 1)) / 2, cy = (wy(rb.r0) + wy(rb.r1 + 1)) / 2;
+    const fresh = [];
+    for (let r = rb.r0; r <= rb.r1; r++) for (let c = rb.c0; c <= rb.c1; c++) if (!inBounds(prev, r, c)) fresh.push({ r, c, a: Math.atan2(wy(r + 0.5) - cy, wx(c + 0.5) - cx) });
+    if (!ST.reduced) {
+      for (const dbr of P.debris) {
+        if (!dbr.sp.visible || !inBounds(rb, dbr.r, dbr.c) || inBounds(prev, dbr.r, dbr.c)) continue;
+        EngineFX.blow(dbr.x, dbr.y, Math.atan2(dbr.y - cy, dbr.x - cx), U.pal('ice-hi'), 3, 900);
+        dbr.sp.visible = false;
+      }
+    }
+    fresh.sort((a, b) => a.a - b.a);
+    fresh.forEach((f, i) => P.pulses.push({ r: f.r, c: f.c, at: ST.time + (fresh.length > 1 ? i / (fresh.length - 1) : 0) * 0.4 }));
+    P.reveal = { t0: ST.time, bounds: rb };
+  }
+
   // ---------------------------------------------------------------- frame
   function update(dt) {
     const s = simState();
@@ -878,6 +1100,7 @@ const EngineWorld = (() => {
     L.cam.visible = true;
     if (structureStale(s)) rebuild();
     frameShared(s);
+    updatePlot(s, dt);
     const band = ST.bandFor(CAM.zoom);
     if (band !== S.band || !S.cellDev) setBand(band);
     const short = S.T.efficiency < 1, tier = ST.tier, nowM = U.nowMs();
@@ -1028,8 +1251,8 @@ const EngineWorld = (() => {
 
   return {
     init, update, rebuild, thumbnail,
-    cellAt, cellCentre, occupied, bankAt, readyBanksNear, isScaffold, pathToStorage,
-    onBuilt, onDemolished, onBuildDone, onUpgrade, onHopper,
+    cellAt, cellCentre, occupied, bankAt, readyBanksNear, isScaffold, pathToStorage, inPlot, ringOf,
+    onBuilt, onDemolished, onBuildDone, onUpgrade, onHopper, onPlot,
     setPointer(p) { S.pointer = p; },
     get placing() { return S.placing; }, set placing(v) { S.placing = v || null; },
     get selected() { return S.selected; }, set selected(v) { S.selected = v || null; },

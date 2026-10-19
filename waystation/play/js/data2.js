@@ -55,53 +55,77 @@
 //      scaffold shows, but berths and beds stay in service).
 //    - Offline: gaps under 60 s settle timers but emit no `offline` event.
 //
-// 4. PACING: THE GAME SHIPS WITH PACING_PRESET = 'slow' (owner decision,
-//    2026-10-18). Targets (4.13): sable day 2, thessaly by day 6, aurelia by
-//    day 25, for a player who logs in three times a day for 15 minutes.
-//    Measured by the harness bot (play/dev/sim-test.js) with the DESIGN2
-//    numbers (rate = cost/40, caps 60/90/120, sector costs 18k..400k): sable
-//    d1 20h, thessaly d2 08h, aurelia d3 13h, 39M credits banked in 25 days.
-//    The cause is the bank formula itself, not the live economy: a module
-//    repays its cost in 40 minutes of banking, so a 24-module station with
-//    level-3 upgrades banks ~1.5M a day. No +/-30% change reaches the targets
-//    (rates -30% and costs +30% move aurelia from day 3 to day 4), so the
-//    shipped curve is the 'slow' preset:
-//      rate = cost/120 per minute (a module repays itself in 2 h of banking;
-//              dock 7, warehouse 5, reactor 25, gate 100, hub 3)
-//      caps 60 / 75 / 90 minutes of rate by level (spec 60 / 90 / 120)
-//      sector costs sable 30k, kessler 45k, thessaly 240k, marrow 320k,
-//              oros 600k, keth 1.2M, aurelia 3M (spec 18k .. 400k)
-//    Measured with it: sable d1 20h, thessaly d3 20h, marrow d6, oros d11,
-//    keth d15, aurelia d24 20h. That is the retention curve the owner wants:
-//    a new sector within the first two days, the ocean world by day 3-4, the
-//    terminus about day 25. PACING_PRESETS.spec keeps the DESIGN2 numbers for
-//    comparison (the harness asserts the formulas under it and prints both
-//    pacing tables); WAYSTATION_TUNING = { preset: 'spec' } switches a page.
+// 4. PACING: THE GAME SHIPS WITH PACING_PRESET = 'patient' (Addendum A1.1,
+//    owner's brief 2026-10-19: Clash of Clans / DragonVale pacing; people log
+//    back in to check on it; Antimatter is the only accelerator).
+//      build times 90 s / 12 min / 60 min / 4 h (first three builds instant),
+//              far sectors x1.5; upgrades L2 = 2x and L3 = 5x the build time
+//      banks rate = cost/150 per minute (dock 5, warehouse 4, reactor 20,
+//              gate 80, hub 3), caps 180 / 240 / 360 minutes of rate,
+//              offline accrual cap 24 h
+//      expeditions 30 min, 1 h, 2 h, 4 h, 6 h, 8 h, 12 h, 24 h by sector
+//      DAY_MS 48,000 (one game day = 48 s), shipSpeed 40 cells/day,
+//              speed clamped to 0 or 1 (2x / 4x removed)
+//      skip cost unchanged: max(1, ceil(remainingMinutes / 8)) AM
+//      sector costs recalibrated by the pacing bot (3 x 15 min a day; targets
+//              sable d2-3, kessler d4-5, thessaly d8-10, marrow d13-15,
+//              oros d18-22, keth d24-28, aurelia d32-40): shipped
+//              sable 90k, kessler 300k, thessaly 1.1M, marrow 1.2M,
+//              oros 1.5M, keth 3M, aurelia 5.5M. Measured with them (the
+//              table `node play/dev/sim-test.js` prints): sable d2 20h,
+//              kessler d4 08h, thessaly d9 08h, marrow d14 20h, oros d21 20h,
+//              keth d27 08h, aurelia d36 08h; station L4 on d22; the home plot
+//              fully cleared on day 2; ~19M credits gross over 40 days, 89%
+//              of it from banks. Brackets tried on the way: the DESIGN2 costs
+//              (everything by day 3), x2 of the first draft (oros d18, keth
+//              d25, aurelia d38 but kessler d3 / thessaly d6 / marrow d10).
+//    History: the DESIGN2 numbers (PACING_PRESETS.spec: rate cost/40, caps
+//    60/90/120, costs 18k..400k) unlock every sector by day 3 and bank 39M in
+//    25 days; the v2.0 'slow' preset (cost/120, caps 60/75/90, costs 30k..3M)
+//    landed sable d1 20h, thessaly d3 20h, aurelia d24 20h. Both stay
+//    selectable for comparison; the harness asserts the DESIGN2 formulas under
+//    'spec' and prints the pacing table for the shipped preset.
+//
+// 5. v2.1 additions (A1.2, A1.3): PLOT / plotRings (territory), ACHIEVEMENTS
+//    (24, three tiers each). Two missions were added for the plot (50 total):
+//    Commissioning "Clear your first ring" (+5 AM, so the tutorial now pays
+//    35 AM) and Town "Clear ring 4". Achievements: 12 named stat ones, four
+//    station-tier ones tiered by how many sectors reach the tier (1 / 3 / 8),
+//    three rank milestones tiered by rank (2-4, 5-7, 8-10) and five more
+//    lifetime stats, so every entry has bronze / silver / gold.
 // ------------------------------------------------------------
 
-// ------------------------------------------------------------ 4.3 / 4.2 timers and economy knobs
-const PACING_PRESET = 'slow';                 // SHIPPED: 'slow' (tuning record 4). 'spec' = the DESIGN2 numbers, for comparison only.
+// ------------------------------------------------------------ 4.3 / 4.2 timers and economy knobs (A1.1 presets)
+const PACING_PRESET = 'patient';              // SHIPPED: 'patient' (A1.1). 'slow' = v2.0 curve, 'spec' = the DESIGN2 numbers, for comparison.
 const PACING_PRESETS = {
-  spec: {},
-  slow: { rateDivisor: 120, capMinutes: [60, 75, 90], sectorCosts: { sable: 30000, kessler: 45000, thessaly: 240000, marrow: 320000, oros: 600000, keth: 1200000, aurelia: 3000000 } },
+  spec: { rateDivisor: 40, capMinutes: [60, 90, 120], buildMs: { 0: 0, 1: 45e3, 2: 240e3, 3: 900e3, 4: 3600e3 }, upgradeTimeMul: [2, 2], offlineBankCapH: 12,
+    expeditionMinutes: [10, 20, 35, 50, 60, 75, 90, 120], dayMs: 24000, shipSpeed: 60, speeds: [0, 1, 2, 4],
+    sectorCosts: { sable: 18000, kessler: 30000, thessaly: 60000, marrow: 75000, oros: 120000, keth: 200000, aurelia: 400000 } },
+  slow: { rateDivisor: 120, capMinutes: [60, 75, 90], buildMs: { 0: 0, 1: 45e3, 2: 240e3, 3: 900e3, 4: 3600e3 }, upgradeTimeMul: [2, 2], offlineBankCapH: 12,
+    expeditionMinutes: [10, 20, 35, 50, 60, 75, 90, 120], dayMs: 24000, shipSpeed: 60, speeds: [0, 1, 2, 4],
+    sectorCosts: { sable: 30000, kessler: 45000, thessaly: 240000, marrow: 320000, oros: 600000, keth: 1200000, aurelia: 3000000 } },
+  patient: { rateDivisor: 150, capMinutes: [180, 240, 360], buildMs: { 0: 0, 1: 90e3, 2: 720e3, 3: 3600e3, 4: 14400e3 }, upgradeTimeMul: [2, 5], offlineBankCapH: 24,
+    expeditionMinutes: [30, 60, 120, 240, 360, 480, 720, 1440], dayMs: 48000, shipSpeed: 40, speeds: [0, 1],
+    sectorCosts: { sable: 90000, kessler: 300000, thessaly: 1100000, marrow: 1200000, oros: 1500000, keth: 3000000, aurelia: 5500000 } },
 };
 // Override hook for experiments (the harness uses it; a page may define window.WAYSTATION_TUNING before data2.js):
-// { preset, dayMs, live, rateDivisor, capMinutes, sectorCostMul, sectorCosts }.
+// { preset, dayMs, live, rateDivisor, capMinutes, buildMs, upgradeTimeMul, offlineBankCapH, expeditionMinutes, shipSpeed, speeds, sectorCostMul, sectorCosts }.
 const TUNING = (() => {
   const ext = (typeof WAYSTATION_TUNING !== 'undefined' && WAYSTATION_TUNING) || {};
-  return Object.assign({}, PACING_PRESETS[ext.preset || PACING_PRESET] || {}, ext);
+  return Object.assign({}, PACING_PRESETS[ext.preset || PACING_PRESET] || PACING_PRESETS.patient, ext);
 })();
 
 const TIMERS = {
-  DAY_MS: TUNING.dayMs || 24000,               // real ms per game day at speed 1 (see tuning record 1)
-  BUILD_MS: { 0: 0, 1: 45e3, 2: 240e3, 3: 900e3, 4: 3600e3 },
+  DAY_MS: TUNING.dayMs,                        // real ms per game day at speed 1 (tuning records 1 and 4)
+  BUILD_MS: TUNING.buildMs,                    // by tier
   BUILD_MUL_FAR: 1.5,                          // sectors 5-8 (index >= 4)
-  UPGRADE_TIME_MUL: 2,
+  UPGRADE_TIME_MUL: TUNING.upgradeTimeMul,     // [to level 2, to level 3] x build time
   TUTORIAL_INSTANT_BUILDS: 3,                  // first three tier-1 builds of a brand-new profile
   SKIP_MINUTES_PER_AM: 8,                      // skipAM = max(1, ceil(remainingMinutes / 8))
-  CAP_MINUTES: TUNING.capMinutes || [60, 90, 120],   // bank cap in minutes of rate, by level
+  CAP_MINUTES: TUNING.capMinutes,              // bank cap in minutes of rate, by level
   RATE_MUL: [1, 1.6, 2.4],                     // bank rate multiplier by level
-  OFFLINE_BANK_CAP_MS: 12 * 3600e3,            // banks accrue for at most 12 h away
+  SPEEDS: TUNING.speeds,                       // allowed Sim.state.speed values (A1.1: 0 or 1)
+  OFFLINE_BANK_CAP_MS: TUNING.offlineBankCapH * 3600e3,   // banks accrue for at most this long away
   OFFLINE_SIM_CAP_MS: 2 * 3600e3,              // the active sector simulates at most 2 h away
   OFFLINE_MIN_MS: 60e3,                        // shorter absences are a reload, not an "away"
   AUTOSAVE_MS: 10e3,
@@ -119,9 +143,9 @@ const TIMERS = {
 
 const ECON = {
   live: TUNING.live != null ? TUNING.live : 0.06,   // live-economy multiplier (tuning record 1)
-  rateDivisor: TUNING.rateDivisor || 40,       // 4.2 rate = round(cost / 40) per real minute
+  rateDivisor: TUNING.rateDivisor,             // 4.2 rate = round(cost / divisor) per real minute
   sectorCostMul: TUNING.sectorCostMul || 1,    // multiplier on SECTORS[*].unlock.credits
-  shipSpeed: 60,                               // cells per game day
+  shipSpeed: TUNING.shipSpeed,                 // cells per game day
   upgradeModuleWeight: 0.5,                    // 4.3 each upgrade level counts as half a module
   rankRateBonus: 0.05,                         // 4.9 Admiral of the Reach
   xp: { creditsPerXP: 100, served: 5, expedition: 20, discovery: 15, levelUp: 100 },
@@ -233,6 +257,7 @@ const SECTORS = {
   },
 };
 const SECTOR_ORDER = Object.keys(SECTORS);
+for (const id of SECTOR_ORDER) SECTORS[id].expedition.minutes = TUNING.expeditionMinutes[SECTORS[id].index];   // A1.1: durations come from the preset
 if (ECON.sectorCostMul !== 1) for (const id of SECTOR_ORDER) SECTORS[id].unlock.credits = Math.round(SECTORS[id].unlock.credits * ECON.sectorCostMul);
 if (TUNING.sectorCosts) for (const id in TUNING.sectorCosts) if (SECTORS[id]) SECTORS[id].unlock.credits = TUNING.sectorCosts[id];
 
@@ -241,7 +266,7 @@ const EXPEDITIONS = {
   slots: { base: 1, comms: 1, shipyard: 1, max: 3 },
   requires: 'dock',                            // one active Docking Bay
   costBase: 400, costPerIndex: 0.5,            // cost = 400 x (1 + 0.5 x index)
-  minutes: [10, 20, 35, 50, 60, 75, 90, 120],  // by sector order
+  minutes: TUNING.expeditionMinutes,           // by sector order (preset: patient 30 min .. 24 h)
   loot: {
     chart: { p: 0.6, guaranteeEvery: 3 },      // every third claimed run to a sector carries a chart
     goods: { min: 20, max: 80 },               // always; the sector's bias goods into the active station's stock
@@ -251,6 +276,34 @@ const EXPEDITIONS = {
   },
   xp: ECON.xp.expedition,
 };
+
+// ------------------------------------------------------------ A1.2 plot expansion ("territory")
+const PLOT = { start: { w: 7, h: 5 }, baseCost: 4000, baseMs: 15 * 60e3, costMul: 2.2, msMul: 1.9 };
+// Ring bounds for a grid: ring 0 is the start plot around the hub, the last ring is the full grid. A ring grows by
+// one cell on each side where the grid allows; when the grid is wider than tall the width grows every ring and the
+// height every other ring (7x5 -> 9x7 -> 11x7 -> 13x9 -> 15x9 on home), and the other way round for tall grids.
+function plotRings(rows, cols, hub) {
+  const rings = [];
+  const clampBox = (hw, hh) => ({ r0: Math.max(0, hub.r - hh), c0: Math.max(0, hub.c - hw), r1: Math.min(rows - 1, hub.r + hh), c1: Math.min(cols - 1, hub.c + hw) });
+  let hw = Math.floor(PLOT.start.w / 2), hh = Math.floor(PLOT.start.h / 2);
+  const full = b => b.r0 === 0 && b.c0 === 0 && b.r1 === rows - 1 && b.c1 === cols - 1;
+  let box = clampBox(hw, hh);
+  rings.push(box);
+  const wide = cols >= rows;
+  for (let k = 1; !full(box) && k < 64; k++) {
+    const wMax = box.c0 === 0 && box.c1 === cols - 1, hMax = box.r0 === 0 && box.r1 === rows - 1;
+    const growW = !wMax && (wide || k % 2 === 1 || hMax);
+    const growH = !hMax && (!wide || k % 2 === 1 || wMax);
+    if (growW) hw++;
+    if (growH) hh++;
+    box = clampBox(hw, hh);
+    rings.push(box);
+  }
+  return rings;
+}
+function plotCost(ring) { return Math.round(PLOT.baseCost * Math.pow(PLOT.costMul, ring - 1)); }       // ring k (1-based)
+function plotMs(ring, buildMul = 1) { return Math.round(PLOT.baseMs * Math.pow(PLOT.msMul, ring - 1) * buildMul); }
+function boxCells(b) { return (b.r1 - b.r0 + 1) * (b.c1 - b.c0 + 1); }
 
 // ------------------------------------------------------------ 4.8 daily rewards (looping; credits scale with total station rate, never below min)
 const DAILY_REWARDS = [
@@ -401,6 +454,7 @@ const MISSIONS = [
   { id: 'c_collect', chapter: 'Commissioning', title: 'Tap the Bank', desc: 'Every module banks credits while you are away. Click a coin to collect one.', type: 'collect', goal: 1, reward: { credits: 500, am: 5, xp: 20 }, requires: ['c_solar'], pointer: 'bank', track: (s, p) => p.stats.collects },
   { id: 'c_serve3', chapter: 'Commissioning', title: 'Open for Business', desc: 'Serve three ships. Fees and trade pay the moment they dock.', type: 'serve', goal: 3, reward: { credits: 600, am: 5, xp: 30 }, requires: ['c_collect'], pointer: null, track: s => s.stats.shipsServed },
   { id: 'c_transmission', chapter: 'Commissioning', title: 'Incoming Transmission', desc: 'Read a transmission. Events arrive every few days and some ask for a decision.', type: 'event', goal: 1, reward: { credits: 500, am: 5, xp: 30 }, requires: ['c_serve3'], pointer: null, track: (s, p) => p.stats.transmissions },
+  { id: 'c_plot1', chapter: 'Commissioning', title: 'Clear Your First Ring', desc: 'Click the unclaimed space around the station and clear the first ring of your plot.', type: 'plot', goal: 1, reward: { credits: 1500, am: 5, xp: 40 }, requires: ['c_transmission'], pointer: 'plot', track: s => (s.plot ? s.plot.ring : 0) },
 
   // ---- Trade (8)
   { id: 't_fuel', chapter: 'Trade', title: 'Reaction Mass', desc: 'Build a Fuel Depot. Every docked ship buys fuel.', type: 'build', goal: 1, reward: { credits: 600, am: 2, xp: 30 }, requires: ['c_serve3'], track: s => mCount(s, 'fuel') },
@@ -438,6 +492,7 @@ const MISSIONS = [
   { id: 'w_hydro', chapter: 'Town', title: 'Green Deck', desc: 'Build Hydroponics to feed the station from on board.', type: 'build', goal: 1, reward: { credits: 2000, am: 4, xp: 60 }, requires: ['w_residents10'], track: s => mCount(s, 'hydro') },
   { id: 'w_level3', chapter: 'Town', title: 'Town in Space', desc: 'Reach station level 3.', type: 'level', goal: 3, reward: { credits: 5000, am: 10, xp: 150 }, requires: ['w_hydro'], track: s => s.level },
   { id: 'w_school', chapter: 'Town', title: 'Academy', desc: 'Build an Academy. Families follow schools.', type: 'build', goal: 1, reward: { credits: 4000, am: 5, xp: 80 }, requires: ['w_level3'], track: s => mCount(s, 'school') },
+  { id: 'w_plot4', chapter: 'Town', title: 'Room to Grow', desc: 'Clear ring 4 of this station\'s plot. A town needs land.', type: 'plot', goal: 4, reward: { credits: 12000, am: 8, xp: 120 }, requires: ['w_school'], pointer: 'plot', track: s => (s.plot ? s.plot.ring : 0) },
   { id: 'w_plaza', chapter: 'Town', title: 'Promenade', desc: 'Build a Promenade so residents run businesses.', type: 'build', goal: 1, reward: { credits: 5000, am: 5, xp: 80 }, requires: ['w_school'], track: s => mCount(s, 'plaza') },
   { id: 'w_residents50', chapter: 'Town', title: 'A Town', desc: 'House 50 permanent residents.', type: 'residents', goal: 50, reward: { credits: 10000, am: 8, xp: 120 }, requires: ['w_plaza'], track: s => s.residents },
   { id: 'w_bank', chapter: 'Town', title: 'Mercantile', desc: 'Build a Mercantile Bank and lend to the companies.', type: 'build', goal: 1, reward: { credits: 12000, am: 10, xp: 150 }, requires: ['w_residents50'], track: s => mCount(s, 'bank') },
@@ -458,3 +513,34 @@ const MISSIONS = [
 ];
 const MISSION_CHAPTERS = ['Commissioning', 'Trade', 'Crew', 'Reach', 'Town', 'Galactic', 'Collector'];
 const MISSION_SLOTS = { base: 3, commodore: 4 };
+
+// ------------------------------------------------------------ A1.3 achievements (24, lifetime, profile-wide, three tiers each)
+// `stat` names a key of Meta.lifetimeStats(): profile.stats lifetime counters plus derived values.
+const ACH_AM = [5, 15, 40], ACH_AM_GOLD = [5, 15, 60];
+const achDef = (id, title, desc, icon, fam, stat, goals, gold) => ({ id, title, desc, icon, fam, stat, tiers: goals.map((goal, i) => ({ goal, am: (gold ? ACH_AM_GOLD : ACH_AM)[i] })) });
+const ACHIEVEMENTS = [
+  achDef('harbourmaster', 'Harbourmaster', 'Serve ships at your docks.', 'ship', 'trade', 'servedTotal', [50, 500, 5000], true),
+  achDef('banker', 'Banker', 'Collect credits from your banks.', 'credits', 'economy', 'collectedCredits', [50000, 1000000, 20000000], true),
+  achDef('architect', 'Architect', 'Complete module builds.', 'hub', 'station', 'buildsDone', [10, 100, 500]),
+  achDef('foreman', 'Foreman', 'Complete module upgrades.', 'reactor', 'station', 'upgrades', [5, 50, 200]),
+  achDef('surveyor', 'Surveyor', 'Bring expeditions home.', 'dish', 'reach', 'expeditionsClaimed', [3, 25, 150]),
+  achDef('cartographer', 'Cartographer', 'Hold charts of the sectors.', 'map', 'reach', 'chartsTotal', [3, 12, 24]),
+  achDef('collector', 'Collector', 'Fill the Registry.', 'rep', 'registry', 'registryFound', [10, 30, 52], true),
+  achDef('pioneer', 'Pioneer', 'Hold stations across the Expanse.', 'gate', 'reach', 'sectorsOwned', [2, 5, 8], true),
+  achDef('landholder', 'Landholder', 'Clear plot rings across your stations.', 'plot', 'station', 'plotRings', [2, 10, 30]),
+  achDef('regular', 'Regular', 'Claim the daily reward.', 'check', 'profile', 'dailyClaims', [7, 30, 100]),
+  achDef('patron', 'Patron', 'Earn Antimatter in play.', 'am', 'profile', 'amEarned', [50, 500, 5000]),
+  achDef('town_planner', 'Town Planner', 'House permanent residents (peak at one station).', 'people', 'town', 'residentsPeak', [20, 60, 150]),
+  achDef('way_station', 'Way Station Keeper', 'Reach station level 2 in your sectors.', 'dock', 'levels', 'sectorsAtL2', [1, 3, 8]),
+  achDef('trading_hub', 'Trading Hub Director', 'Reach station level 3 in your sectors.', 'market', 'levels', 'sectorsAtL3', [1, 3, 8]),
+  achDef('town_in_space', 'Town Founder', 'Reach station level 4 in your sectors.', 'plaza', 'levels', 'sectorsAtL4', [1, 3, 8], true),
+  achDef('galactic_hub', 'Galactic Hub Governor', 'Reach station level 5 in your sectors.', 'gate', 'levels', 'sectorsAtL5', [1, 3, 8], true),
+  achDef('officer', 'Commissioned Officer', 'Rise through the junior ranks.', 'rep', 'rank', 'rankLevel', [2, 3, 4]),
+  achDef('flag_officer', 'Flag Officer', 'Rise through the senior ranks.', 'rep', 'rank', 'rankLevel', [5, 6, 7]),
+  achDef('legend', 'Legend of the Reach', 'Reach the highest ranks.', 'rep', 'rank', 'rankLevel', [8, 9, 10], true),
+  achDef('quartermaster', 'Quartermaster', 'Trade cargo through your docks (all stations).', 'warehouse', 'trade', 'cargoTraded', [1000, 20000, 200000]),
+  achDef('magnate', 'Magnate', 'Gross income across all stations.', 'credits', 'economy', 'earnedLifetime', [100000, 2000000, 50000000], true),
+  achDef('liner_host', 'Liner Host', 'Serve Aurelian Starways liners.', 'ship', 'trade', 'aurelianServed', [1, 10, 100]),
+  achDef('convoy_master', 'Convoy Master', 'Serve ships during Convoy windows.', 'ship', 'trade', 'convoyServed', [15, 100, 500]),
+  achDef('impatient', 'Impatient', 'Finish timers with Antimatter.', 'am', 'profile', 'skips', [5, 50, 300]),
+];

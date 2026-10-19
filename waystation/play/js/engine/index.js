@@ -7,7 +7,8 @@
 //
 // Additions beyond 0.3 (marked): Engine.emit (used by fx for
 // 'fx-arrive'), Engine.perf.setTier(t|null) (harness / settings
-// override), Engine.ready, the 'fx-arrive' event.
+// override), Engine.ready, the 'fx-arrive' event, and the A1.2
+// 'plot-click' {r, c, ring} event for unclaimed cells.
 // Classic script: exports the global `Engine`.
 // ============================================================
 'use strict';
@@ -67,6 +68,7 @@ const Engine = (() => {
     Sim.on('build-done', d => EngineWorld.onBuildDone(d));
     Sim.on('upgrade', d => EngineWorld.onUpgrade(d));
     Sim.on('hopper', d => EngineWorld.onHopper(d));
+    Sim.on('plot', d => EngineWorld.onPlot(d));            // A1.2: {state:'start'|'done'|'skip', ring, bounds}
     Sim.on('sector', d => { if (d && d.state === 'switched') { const s = Sim.state; setSector((s && s.sector) || d.id || 'home', s); } });
   }
 

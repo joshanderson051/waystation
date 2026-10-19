@@ -47,7 +47,8 @@ node serve.js --port 8788 --base waystation
 
 - **Commission** a station on the title screen. The world fills the screen; the glass console floats over it.
 - **Build** (B): pick a module, click a bracketed cell. The first three builds are instant; after that
-  modules take real time to come online (45 s to an hour by tier). Skip a wait with Antimatter.
+  modules take real time to come online (90 s to four hours by tier; upgrades 2x and 5x that). Skip a wait with Antimatter.
+- **Territory**: a station starts on a 7x5 plot. Click unclaimed space to buy the next ring; crews clear it on a timer.
 - **Banks**: modules earn credits per real minute into a local bank. A bobbing coin means it is ready:
   click it and the credits fly to the counter. Banks fill while you are away (up to their cap).
 - **Ships** dock for fuel, repairs, food and trade, and pay on departure, as before. Residents move in when
@@ -56,11 +57,11 @@ node serve.js --port 8788 --base waystation
   goods, charts, Antimatter and discoveries for the Registry.
 - **Galaxy** (G): eight sectors, each a full station with its own world and bias. Unlock with credits, charts
   and level, or with Antimatter. Credits are one wallet across all sectors; banks fill everywhere.
-- **Missions** (J), **daily rewards**, **Commander rank** and the **Registry** (R) give you reasons to come back.
+- **Missions** (J), **achievements** (bronze, silver, gold), **daily rewards**, **Commander rank** and the **Registry** (R) give you reasons to come back. There is no free speed-up: the game runs at one pace and Antimatter is the only accelerator.
 - **Antimatter** is the premium currency (violet). Earned by missions, dailies and expeditions; sold in the
   **Store**, which runs in sandbox (free, local) until Stripe is connected.
 
-Keys: Space pause, 1/2/4 speed, B Build, S Station, M Market, F Fleet, E Expeditions, G Map, J Missions,
+Keys: Space pause, B Build, S Station, M Market, F Fleet, E Expeditions, G Map, J Missions,
 R Registry, Esc close or cancel, arrows and +/- camera, 0 fit, F focus, ? keys.
 
 ## Design
@@ -73,9 +74,9 @@ GPU-rendered space scene, original in geometry, palette and type.
 ## Saves, economy, tuning
 
 The profile lives in `localStorage['waystation.profile.v2']` (export and import from Settings). A v1 save is
-migrated into the home sector on first load. Timers are wall-clock. The shipped pacing curve is the `slow`
-preset in `data2.js` (sable on day 1 or 2, thessaly by day 4, aurelia around day 25 at three 15-minute
-sessions a day); `node play/dev/sim-test.js` prints the economy and pacing tables and runs 246 checks.
+migrated into the home sector on first load. Timers are wall-clock. The shipped pacing curve is the `patient`
+preset in `data2.js` (sable on day 2 or 3, thessaly around day 9, aurelia after a month at three 15-minute
+sessions a day; see DESIGN2.md Addendum A1); `node play/dev/sim-test.js` prints the economy and pacing tables and runs 246 checks.
 
 ## Store and payments
 

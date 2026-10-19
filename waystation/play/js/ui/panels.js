@@ -46,9 +46,10 @@ const SECTOR_LOOK = {
   keth:     { kind: 'rock',   base: '#4FA86B', dark: '#1E5A3A', rim: '#CBE2C4', bands: true, caps: true },
   aurelia:  { kind: 'nebula', base: '#7A4CC8', dark: '#2A1250', rim: '#DDB8FF', dwarf: true },
 };
-// expedition fallbacks by sector order (4.6) when EXPEDITIONS does not carry them
-const EXPEDITION_MINUTES = [10, 20, 35, 50, 60, 75, 90, 120];
-const TIER_BUILD_MS = { 1: 45e3, 2: 240e3, 3: 900e3, 4: 3600e3 };
+// expedition fallbacks by sector order (A1.1) when EXPEDITIONS does not carry them
+const EXPEDITION_MINUTES = [30, 60, 120, 240, 360, 480, 720, 1440];
+// build times by tier (A1.1) when neither MODULES[id].buildMs nor TIMERS.BUILD_MS exists
+const TIER_BUILD_MS = { 1: 90e3, 2: 720e3, 3: 3600e3, 4: 14400e3 };
 
 // 48x48 silhouettes for the Registry (4.10); ids are the HUD's own, data2
 // entries map by `silhouette`, by id, else by index so no card is blank.
@@ -126,7 +127,14 @@ const MID = GLYPH.mid;
 
 // module meta with 4.2 / 4.3 fallbacks when data.js has not been extended yet
 const modRate = (id, lvl = 1) => { const d = MODULES[id]; const base = d.rate != null ? d.rate : (id === 'hub' ? 10 : Math.round(d.cost / 40)); return Math.round(base * (lvl === 3 ? 2.4 : lvl === 2 ? 1.6 : 1)); };
-const modBuildMs = (id, sectorIdx = 0) => { const d = MODULES[id]; const base = d.buildMs != null ? d.buildMs : (TIER_BUILD_MS[d.tier] || 45e3); return base * (sectorIdx >= 4 ? 1.5 : 1); };
+const modBuildMs = (id, sectorIdx = 0) => {
+  const d = MODULES[id], T = (typeof TIMERS !== 'undefined' && TIMERS && TIMERS.BUILD_MS) || null;
+  const base = d.buildMs != null ? d.buildMs : (T && T[d.tier] != null) ? T[d.tier] : (TIER_BUILD_MS[d.tier] || 90e3);
+  const def = sectorList()[sectorIdx], mul = def && def.buildMul ? def.buildMul : (sectorIdx >= 4 ? 1.5 : 1);
+  return base * mul;
+};
+// upgrades take 2x the build time to level 2 and 5x to level 3 (A1.1)
+const upgradeMs = (id, toLvl, sectorIdx = 0) => modBuildMs(id, sectorIdx) * (toLvl >= 3 ? 5 : 2);
 
 // sectors in order whether SECTORS is an array or an id-keyed object
 function sectorList() {
@@ -262,6 +270,36 @@ function tickTimers(root, meta) {
   }
 }
 
+const TIER_WORDS = ['bronze', 'silver', 'gold'];
+
+// A1.2 Territory block for the Station overview: plot size, ring k of n, Expand or the clearing timer.
+// A compact plan of the grid shows the plot (ice) and the next ring (dashed).
+function territoryBlock(s, ctx) {
+  const p = ctx.meta.plot(); if (!p || p.whole) return '';
+  const rows = s.grid.length, cols = s.grid[0].length, w = p.c1 - p.c0 + 1, hgt = p.r1 - p.r0 + 1, cl = p.clearing, nx = p.next;
+  const g = 4, W = cols * g, H = rows * g;
+  const nb = { r0: Math.max(0, p.r0 - 1), c0: Math.max(0, p.c0 - 1), r1: Math.min(rows - 1, p.r1 + 1), c1: Math.min(cols - 1, p.c1 + 1) };
+  const plan = `<svg class="plot-plan" viewBox="-1 -1 ${W + 2} ${H + 2}" width="${Math.round(W * 1.4)}" height="${Math.round(H * 1.4)}" aria-hidden="true">` +
+    `<rect class="pp-grid" x="0" y="0" width="${W}" height="${H}"/>` +
+    (nx || cl ? `<rect class="pp-next${cl ? ' clearing' : ''}" x="${nb.c0 * g}" y="${nb.r0 * g}" width="${(nb.c1 - nb.c0 + 1) * g}" height="${(nb.r1 - nb.r0 + 1) * g}"/>` : '') +
+    `<rect class="pp-plot" x="${p.c0 * g}" y="${p.r0 * g}" width="${w * g}" height="${hgt * g}"/></svg>`;
+  let h = shelf('Territory', esc(`Ring ${p.ring} of ${p.rings} ${MID} ${w}x${hgt} plot`), { hue: 'var(--ice)' });
+  if (cl) {
+    const left = cl.remainingMs != null ? cl.remainingMs : Math.max(0, (cl.endsAt || 0) - Date.now()), until = cl.endsAt || Date.now() + left, total = Math.max(1, cl.totalMs || left);
+    const am = cl.skipAM != null ? cl.skipAM : Math.max(1, Math.ceil(left / 480000));
+    h += `<div class="block ice terr"><i class="spine"></i>${ring(0, 56, 'var(--ice)', icon('territory', 22), { until, total })}` +
+      `<div class="block-main"><span class="tile-lbl">Clearing ring ${cl.ring}</span><span class="bank-val num c-ice">${countdown(until)}</span><span class="bank-note">Crews are clearing the debris. The plot grows to ring ${cl.ring} when they finish.</span></div>` +
+      `<button type="button" class="btn big am" data-act="skip-plot" title="Finish now">${icon('skip', 16)}<span>Skip ${MID} ${am} AM</span></button></div>`;
+  } else if (nx) {
+    const short = s.credits < nx.cost ? nx.cost - s.credits : 0, cannot = !!short || nx.affordable === false;
+    h += `<div class="block ice terr"><i class="spine"></i>${plan}<div class="block-main"><span class="tile-lbl">Next ring ${nx.ring} ${MID} ${Fmt.n(nx.cells)} cells</span><span class="bank-val num c-ice">${Fmt.n(nx.cost)}<small> cr</small></span><span class="bank-note">${icon('clock', 12)} ${Fmt.dur(nx.ms)} to clear${cannot ? ` ${MID} <span class="c-warn">${short ? `need ${Fmt.n(short)} more` : 'not yet affordable'}</span>` : ''}</span></div>` +
+      `<button type="button" class="btn big${cannot ? '' : ' primary'}" data-act="expand">${icon('territory', 16)}<span>Expand</span></button></div>`;
+  } else {
+    h += `<div class="block ice terr"><i class="spine"></i>${plan}<div class="block-main"><span class="tile-lbl">Whole sector claimed</span><span class="bank-note">${w}x${hgt}, ${Fmt.n(p.cells)} cells. Nothing left to clear here.</span></div></div>`;
+  }
+  return h;
+}
+
 // ------------------------------------------------------------
 // 2. Panel frame: head (Display title + micro subtitle + close), optional
 //    tab strip, scrollable body, optional sticky footer.
@@ -277,7 +315,7 @@ function frame(host, spec, ctx) {
   return {
     body, foot, sub: host.querySelector('.panel-sub'), tabs: host.querySelector('.panel-tabs'),
     setSub(html) { const s = host.querySelector('.panel-sub'); if (s && s.innerHTML !== html) s.innerHTML = html; },
-    setTab(id) { for (const b of $('.ptab', host)) { const on = b.dataset.tab === id; b.classList.toggle('active', on); b.setAttribute('aria-selected', String(on)); } },
+    setTab(id) { for (const b of $$('.ptab', host)) { const on = b.dataset.tab === id; b.classList.toggle('active', on); b.setAttribute('aria-selected', String(on)); } },
   };
 }
 
@@ -298,20 +336,31 @@ const Panels = {
         `<div class="tile"><span class="tile-lbl">Power</span><span class="tile-val num ${over ? 'c-bad' : T.flare ? 'c-warn' : 'c-ice'}">${over ? GLYPH.down + ' ' : T.flare ? GLYPH.sq + ' ' : ''}${T.used} / ${T.produced}</span></div>` +
         `<div class="tile"><span class="tile-lbl">Berths</span><span class="tile-val num c-ice">${T.docks}</span></div></div>`;
       const sIdx = sectorIndex(s.sector || 'home');
+      // A1.2: is there any empty cell inside the plot that touches the station? If not, every tier needs more plot.
+      const plot = ctx.meta.plot();
+      let freeInPlot = !plot;
+      if (plot) {
+        outer: for (let r = plot.r0; r <= plot.r1; r++) for (let c = plot.c0; c <= plot.c1; c++) {
+          if (!s.grid[r] || s.grid[r][c] || !ctx.meta.inPlot(r, c)) continue;
+          if ([[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]].some(([nr, nc]) => s.grid[nr] && s.grid[nr][nc])) { freeInPlot = true; break outer; }
+        }
+      }
+      const selCell = ctx.engine.selected(), selId = selCell && s.grid[selCell.r] && s.grid[selCell.r][selCell.c] ? s.grid[selCell.r][selCell.c].id : null;
       for (const tier of [1, 2, 3, 4]) {
         const ids = MODULE_ORDER.filter(id => MODULES[id].tier === tier);
         const unlocked = Sim.tierUnlocked(tier), th = LEVEL_THRESHOLDS.find(t => t.level === tier);
         const builtKinds = ids.filter(id => T.counts[id]).length;
-        const tag = unlocked ? `${builtKinds}/${ids.length} built` : `${GLYPH.sq} Locked ${MID} ${th.modules} modules ${MID} ${th.rep.toFixed(1)} rep`;
+        const tag = !unlocked ? `${GLYPH.sq} Locked ${MID} ${th.modules} modules ${MID} ${th.rep.toFixed(1)} rep` : !freeInPlot ? `${GLYPH.sq} Needs more plot ${MID} ${builtKinds}/${ids.length} built` : `${builtKinds}/${ids.length} built`;
         const placingTier = placing && MODULES[placing] && MODULES[placing].tier === tier;
-        h += shelf(`Tier ${tier} ${MID} ${TIER_NAMES[tier]}`, esc(tag), { first: tier === 1, cls: 'tier-head' + (unlocked ? '' : ' locked') + (placingTier ? ' placing' : ''), tagCls: unlocked ? '' : 'warn' });
+        h += shelf(`Tier ${tier} ${MID} ${TIER_NAMES[tier]}`, esc(tag), { first: tier === 1, cls: 'tier-head' + (unlocked ? '' : ' locked') + (placingTier ? ' placing' : ''), tagCls: unlocked && freeInPlot ? '' : 'warn' });
         for (const id of ids) {
           const d = MODULES[id], poor = s.credits < d.cost, sel = placing === id, count = T.counts[id] || 0;
           const cls = ['card', 'bcard', sel ? 'selected' : '', !unlocked ? 'locked' : poor ? 'poor' : ''].filter(Boolean).join(' ');
           const desc = sel ? 'Click a bracketed cell. Right-click or Esc to stop.' : d.desc;
           const r = modRate(id);
           const meta = unlocked
-            ? `<span class="m" title="Credits banked per real minute">${icon('credits', 12)}+${r}/min</span><span class="m" title="Build time">${icon('clock', 12)}${Fmt.dur(modBuildMs(id, sIdx))}</span>`
+            ? `<span class="m" title="Credits banked per real minute">${icon('credits', 12)}+${r}/min</span><span class="m" title="Build time">${icon('clock', 12)}${Fmt.dur(modBuildMs(id, sIdx))}</span>` +
+              (id === selId ? `<span class="m up" title="Upgrade times">${icon('upgrade', 12)}L2 ${Fmt.dur(upgradeMs(id, 2, sIdx))} ${MID} L3 ${Fmt.dur(upgradeMs(id, 3, sIdx))}</span>` : '')
             : `<span class="m lock">${icon('lock', 12)}Level ${tier}</span>`;
           h += `<div class="${cls}" data-mod="${id}" data-fam="${famOf(id)}" title="${esc(d.desc)}" role="button" tabindex="0"><i class="spine"></i>${plate(id)}` +
             `<div class="card-main"><div class="name">${esc(d.name)}${sel ? ' <span class="chip ivory">Placing</span>' : count ? ` <span class="tag">${GLYPH.times}${count}</span>` : ''}</div>` +
@@ -360,6 +409,7 @@ const Panels = {
       h += `<div class="bank-card${ready.length ? ' ready' : ''}"><i class="spine"></i><div class="bank-main"><span class="tile-lbl">Banked across the station</span><span class="bank-val num c-amber-hi"><span data-live="banked"></span><small> cr</small></span><span class="bank-note">${ready.length ? `${ready.length} hopper${ready.length === 1 ? '' : 's'} ready to tap` : 'Hoppers fill while you are away'}</span></div>` +
         `<button type="button" class="btn big primary" data-act="collect-all"${(!canAll || !banked) ? ' disabled' : ''} title="${canAll ? 'Collect every hopper' : 'Rank 3 Harbourmaster unlocks Collect all'}">${icon('collect', 16)}<span>Collect all</span></button></div>` +
         (canAll ? '' : `<p class="fine">${icon('lock', 12)} Collect all unlocks at rank 3. Tap hoppers on the station to collect them one by one.</p>`);
+      h += territoryBlock(s, ctx);
       h += shelf('Income', esc(Fmt.signed(s.income.yesterday) + ' yesterday'), { tagCls: s.income.yesterday >= 0 ? 'c-good' : 'c-bad' });
       const cats = Object.entries(s.income.breakdown || {}).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
       h += `<div class="kv"><span>Today so far</span><span class="num ink">${Fmt.signed(s.income.today)}</span>`;
@@ -405,7 +455,7 @@ const Panels = {
       if (!(bd && bd.building) && m.id !== 'hub') {
         if (up && up.next) {
           const n = up.next, poor = s.credits < n.cost;
-          h += shelf(`Upgrade to level ${lvl + 1}`, esc(`${Fmt.n(n.cost)} cr ${MID} ${Fmt.dur(n.ms || modBuildMs(m.id) * 2)}`));
+          h += shelf(`Upgrade to level ${lvl + 1}`, esc(`${Fmt.n(n.cost)} cr ${MID} ${Fmt.dur(n.ms || upgradeMs(m.id, lvl + 1, sectorIndex(s.sector || 'home')))}`));
           h += `<div class="kv tight"><span>Rate</span><span class="num">${Fmt.n(hp ? hp.rate : modRate(m.id, lvl))} ${GLYPH.arrow} <b class="c-amber-hi">${Fmt.n(n.rate)}</b> / min</span><span>Capacity</span><span class="num">${Fmt.n(hp ? hp.cap : 0)} ${GLYPH.arrow} <b class="c-amber-hi">${Fmt.n(n.cap)}</b></span>${n.note ? `<span>Also</span><span class="ink">${esc(n.note)}</span>` : ''}</div>` +
             `<div class="actions"><button type="button" class="btn big primary" data-act="upgrade"${poor ? ' disabled' : ''} title="${poor ? `Need ${Fmt.n(n.cost - s.credits)} more credits` : 'Start the upgrade'}">${icon('upgrade', 16)}<span>Upgrade ${MID} ${Fmt.n(n.cost)}</span></button>${poor ? `<span class="why">Need ${Fmt.n(n.cost - s.credits)} more</span>` : ''}</div>`;
         } else if (up) {
@@ -425,6 +475,8 @@ const Panels = {
       const sel = ctx.engine.selected(), act = b.dataset.act;
       if (act === 'rename') { const inp = host.querySelector('#station-name-input'); if (inp) ctx.ui.rename(inp.value); }
       else if (act === 'collect-all') ctx.ui.collectAll(b);
+      else if (act === 'expand') ctx.ui.plotConfirm();
+      else if (act === 'skip-plot') ctx.ui.skipPlot();
       else if (act === 'back') ctx.ui.deselect();
       else if (!sel) return;
       else if (act === 'collect') ctx.ui.collect(sel.r, sel.c);
@@ -683,9 +735,32 @@ const Panels = {
 
   // ---------------------------------------------------------- Missions (4.7, 5.2)
   missions(host, ctx) {
-    const F = frame(host, { id: 'missions', title: 'Missions', sub: '' }, ctx), sig = {};
+    let tab = 'missions';
+    const F = frame(host, { id: 'missions', title: 'Missions', sub: '', tabs: [{ id: 'missions', label: 'Missions' }, { id: 'achievements', label: 'Achievements' }], tab }, ctx), sig = {};
     const open = new Set();
-    const render = () => {
+    const render = () => { if (tab === 'achievements') renderAch(); else renderMissions(); };
+    // A1.3: lifetime, tiered; claimable first, then in progress, gold last
+    const renderAch = () => {
+      const list = ctx.meta.achievements();
+      const claimable = list.filter(a => a.claimable).length, golds = list.filter(a => a.done).length;
+      F.setSub(`${golds} of ${list.length} gold${claimable ? ` ${MID} <span class="c-amber">${claimable} to claim</span>` : ''}`);
+      const order = a => a.claimable ? 0 : a.done ? 2 : 1;
+      let h = shelf('Career', esc(claimable ? `${claimable} to claim` : 'bronze · silver · gold'), { first: true });
+      if (!list.length) h += `<p class="idle">Achievements track your whole career: ships served, credits collected, rings cleared, sectors opened.</p>`;
+      for (const a of [...list].sort((x, y) => order(x) - order(y))) h += achRow(a);
+      paint(F.body, h, sig, 'ach');
+    };
+    const achRow = a => {
+      const tier = Math.max(0, Math.min(3, a.tier || 0)), goal = Math.max(1, a.goal || 1), p = a.done ? 1 : Math.min(1, (a.progress || 0) / goal);
+      const segs = TIER_WORDS.map((w, i) => `<i class="${i < tier ? 'on ' + w : i === tier && !a.done ? 'cur ' + w : ''}"${i === tier && !a.done ? ` style="--p:${(p * 100).toFixed(1)}%"` : ''}></i>`).join('');
+      const ic = (typeof Icons !== 'undefined' && Icons && typeof Icons.has === 'function' && a.icon && Icons.has(a.icon)) ? a.icon : 'award';
+      return `<div class="ach${a.claimable ? ' claimable' : a.done ? ' done' : ''}" data-ach="${esc(a.id)}"><i class="spine"></i><span class="ach-ic">${icon(ic, 20)}</span>` +
+        `<div class="ach-main"><div class="ach-title">${esc(a.title)}${a.done ? ` <span class="tier-chip gold">Gold</span>` : tier ? ` <span class="tier-chip ${TIER_WORDS[tier - 1]}">${Fmt.cap(TIER_WORDS[tier - 1])}</span>` : ''}</div>` +
+        `<div class="ach-desc">${esc(a.desc || '')}</div>` +
+        `<div class="ach-prog"><span class="tiers" title="Bronze, silver, gold">${segs}</span><span class="num">${a.done ? 'Complete' : `${Fmt.n(Math.min(a.progress || 0, goal))} / ${Fmt.n(goal)}`}</span>${!a.done && a.nextAM ? `<span class="rchip am sm">${icon('am', 12)}<span>${Fmt.n(a.nextAM)} AM</span></span>` : ''}</div></div>` +
+        (a.claimable ? `<button type="button" class="btn big primary" data-claim-ach="${esc(a.id)}">${icon('collect', 16)}<span>Claim</span></button>` : '') + `</div>`;
+    };
+    const renderMissions = () => {
       const all = ctx.meta.missions();
       // three active at a time (4.7): the `active` flag when Meta sets it, else the next open mission in each chapter
       let active;
@@ -717,12 +792,15 @@ const Panels = {
         `<div class="mission-reward">${Overlays.rewardChips(m.reward, 'sm')}</div></div>` +
         (m.claimable ? `<button type="button" class="btn big primary" data-claim="${esc(m.id)}">${icon('collect', 16)}<span>Claim</span></button>` : (m.done || m.claimed) ? `<span class="chip good" data-shape="up">Claimed</span>` : '') + `</div>`;
     };
+    const setTab = id => { tab = id === 'achievements' ? 'achievements' : 'missions'; F.setTab(tab); render(); };
+    if (F.tabs) F.tabs.addEventListener('click', e => { const b = e.target.closest('.ptab'); if (b) { setTab(b.dataset.tab); ctx.sound.click(); } });
     F.body.addEventListener('click', e => {
       const b = e.target.closest('button[data-claim]'); if (b) { ctx.ui.claimMission(b.dataset.claim, b); return; }
+      const ab = e.target.closest('button[data-claim-ach]'); if (ab) { ctx.ui.claimAchievement(ab.dataset.claimAch, ab); return; }
       const ch = e.target.closest('.chapter[data-chapter]'); if (ch) { const n = ch.dataset.chapter; if (open.has(n)) open.delete(n); else open.add(n); ctx.sound.click(); sig.mi = ''; render(); }
     });
     render();
-    return { update: render, destroy() { } };
+    return { update: render, destroy() { }, setTab };
   },
 
   // ---------------------------------------------------------- Registry (4.10, 5.2)

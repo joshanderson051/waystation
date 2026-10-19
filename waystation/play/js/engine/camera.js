@@ -81,10 +81,14 @@ const EngineCamera = (() => {
     S.y = U.clamp(S.y, b.y0, b.y1);
   }
   // station: bbox of occupied cells (world px); grid: whole grid (world px).
+  // Bounds = the station box inflated by 6 cells, widened to the full grid (A1.2: unclaimed space stays reachable).
   function setStation(station, grid) {
     S.station = station; S.gridBox = grid;
-    const inf = 6 * CELL;
-    S.bounds = station ? { x0: station.x0 - inf, y0: station.y0 - inf, x1: station.x1 + inf, y1: station.y1 + inf } : null;
+    const inf = 6 * CELL, g1 = CELL;
+    let b = station ? { x0: station.x0 - inf, y0: station.y0 - inf, x1: station.x1 + inf, y1: station.y1 + inf } : null;
+    if (grid) b = b ? { x0: Math.min(b.x0, grid.x0 - g1), y0: Math.min(b.y0, grid.y0 - g1), x1: Math.max(b.x1, grid.x1 + g1), y1: Math.max(b.y1, grid.y1 + g1) }
+      : { x0: grid.x0 - g1, y0: grid.y0 - g1, x1: grid.x1 + g1, y1: grid.y1 + g1 };
+    S.bounds = b;
     clampToBounds();
     S.changed = true;
   }

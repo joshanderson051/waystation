@@ -65,12 +65,36 @@ const Sim = {
       log: [], stats: { shipsServed: 0, cargoTraded: 0, earned: 0, turnedAway: 0, diverted: 0 },
       sector: def ? def.id : 'home',
       cells: { [`${cr},${cc}`]: { lvl: 1, bank: 0, readyAt: null, builtAt: now, at: now } },
+      plot: null,
     };
+    state.plot = this.plotAt(state, 0);                     // A1.2: every station starts with the 7x5 plot around its hub
     state.log.push({ day: 1, msg: 'Build a Docking Bay, a Warehouse and a Solar Array to start taking traffic.', cls: '' });
     state.log.push({ day: 1, msg: `Station ${name} comes online. One docking collar, a hold full of hope.`, cls: 'good' });
     return state;
   },
 
+  // ---------------------------------------------------------- A1.2 plot ("territory")
+  plotRingsOf(s = this.state) {
+    if (typeof plotRings !== 'function') return [{ r0: 0, c0: 0, r1: this.rows(s) - 1, c1: this.cols(s) - 1 }];   // sim.js alone: the whole grid
+    return plotRings(this.rows(s), this.cols(s), s.hub);
+  },
+  plotAt(s, ring, clearing = null) {
+    const rings = this.plotRingsOf(s), k = clamp(ring, 0, rings.length - 1), b = rings[k];
+    return { ring: k, r0: b.r0, c0: b.c0, r1: b.r1, c1: b.c1, clearing };
+  },
+  // the smallest ring that contains every occupied cell (migration of stations that predate plots)
+  ringContaining(s) {
+    const rings = this.plotRingsOf(s), cells = this.cellsOf(s);
+    for (let k = 0; k < rings.length; k++) {
+      const b = rings[k];
+      if (cells.every(({ r, c }) => r >= b.r0 && r <= b.r1 && c >= b.c0 && c <= b.c1)) return k;
+    }
+    return rings.length - 1;
+  },
+  inPlot(r, c, s = this.state) {
+    const p = s && s.plot; if (!p) return this.inBounds(r, c);
+    return r >= p.r0 && r <= p.r1 && c >= p.c0 && c <= p.c1;
+  },
   newGame(sectorId) {
     const M = (typeof Meta !== 'undefined' && Meta) ? Meta : null;
     if (M && !M.profile) M.init();                         // v1 main.js never calls Meta.init: create or load the profile here
@@ -119,6 +143,9 @@ const Sim = {
       else if (s.cells[k]) delete s.cells[k];
     }
     if (!s.hub) { for (let r = 0; r < s.grid.length; r++) for (let c = 0; c < s.grid[r].length; c++) if (s.grid[r][c] && s.grid[r][c].id === 'hub') s.hub = { r, c }; }
+    // A1.2: stations saved before plots get the smallest ring that holds every module; stale bounds are recomputed from the ring
+    if (!s.plot || typeof s.plot.ring !== 'number') s.plot = this.plotAt(s, this.ringContaining(s));
+    else s.plot = this.plotAt(s, s.plot.ring, s.plot.clearing || null);
     return s;
   },
 
@@ -168,6 +195,7 @@ const Sim = {
   canPlace(id, r, c) {
     const s = this.state, def = MODULES[id];
     if (!def || !this.inBounds(r, c) || s.grid[r][c]) return { ok: false, why: 'Occupied' };
+    if (!this.inPlot(r, c, s)) return { ok: false, why: 'plot' };                 // A1.2: unclaimed space
     if (!this.tierUnlocked(def.tier)) return { ok: false, why: `Needs station level ${def.tier}` };
     if (s.credits < def.cost) return { ok: false, why: 'Not enough credits' };
     const adj = this.neighbors(r, c).some(([nr, nc]) => this.occupied(nr, nc));
@@ -678,6 +706,9 @@ const Sim = {
 
   tick(dtReal) {
     const s = this.state; if (!s || s.pending) return;
+    // A1.1: speed is Pause or 1x (presets may allow more through TIMERS.SPEEDS)
+    const allowed = (typeof TIMERS !== 'undefined' && TIMERS.SPEEDS) || [0, 1];
+    if (!allowed.includes(s.speed)) s.speed = s.speed > 0 ? Math.max(...allowed.filter(v => v > 0)) : 0;
     const dtDays = (dtReal * s.speed) / DAY_SECONDS;
     if (dtDays <= 0) return;
     this.advance(dtDays);

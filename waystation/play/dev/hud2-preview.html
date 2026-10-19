@@ -111,6 +111,10 @@
   <div class="row"><button data-h="cele:rank">rank</button><button data-h="cele:level">level</button><button data-h="cele:unlock">unlock</button><button data-h="cele:mission">mission</button><button data-h="cele:expedition">expedition</button><button data-h="cele:purchase">purchase</button><button data-h="cele:daily">daily</button></div>
   <h4>Events</h4>
   <div class="row"><button data-h="ev:collect">collect</button><button data-h="ev:collect-all">collect all</button><button data-h="ev:build-done">build-done</button><button data-h="ev:am">+25 AM</button><button data-h="ev:mission">mission done</button><button data-h="ev:expedition">exp ready</button><button data-h="ev:discover">discover</button><button data-h="ev:offline">offline</button><button data-h="ev:flare">flare</button><button data-h="ev:alert">pirates</button><button data-h="ev:festival">festival</button><button data-h="ev:clear">clear cond</button></div>
+  <h4>Territory</h4>
+  <div class="row"><button data-h="plot:confirm">plot confirm</button><button data-h="plot:start">start clearing</button><button data-h="plot:done">finish ring</button><button data-h="plot:tight">tight plot</button><button data-h="hover:unclaimed">hover unclaimed</button><button data-h="cele:plot">cele plot</button></div>
+  <h4>Achievements</h4>
+  <div class="row"><button data-h="panel:achievements">Achievements tab</button><button data-h="ev:achievement">complete event</button><button data-h="cele:achievement">cele achievement</button></div>
   <h4>State</h4>
   <div class="row"><button data-h="place:dock">placing dock</button><button data-h="select:hub">select hub</button><button data-h="select:scaffold">select scaffold</button><button data-h="select:bank">select bank</button><button data-h="deselect">deselect</button><button data-h="motion">reduced motion</button><button data-h="title">title screen</button><button data-h="level:4">level 4</button></div>
   <h4>Viewport (new window)</h4>
@@ -173,10 +177,13 @@ const Sim = {
   occupied(r, c) { return this.inBounds(r, c) && !!this.state.grid[r][c]; },
   neighbors(r, c) { return [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]]; },
   tierUnlocked(t) { return t <= this.state.level; },
+  // A1.2: inside the current plot ring; `tight` mode (toolbar) treats every empty cell as outside so the Build heads show "needs more plot"
+  inPlot(r, c) { const b = Meta._plotBounds(); if (!b) return true; const inside = r >= b.r0 && r <= b.r1 && c >= b.c0 && c <= b.c1; return inside && (!Meta._plot.tight || !!this.state.grid[r][c]); },
   canPlace(id, r, c) {
     const d = MODULES[id], s = this.state;
     if (!this.inBounds(r, c)) return { ok: false, why: 'Out of bounds' };
     if (s.grid[r][c]) return { ok: false, why: 'Occupied' };
+    if (!this.inPlot(r, c)) return { ok: false, why: 'plot' };
     if (!this.tierUnlocked(d.tier)) return { ok: false, why: `Needs station level ${d.tier}` };
     if (s.credits < d.cost) return { ok: false, why: 'Not enough credits' };
     if (!this.neighbors(r, c).some(([nr, nc]) => this.occupied(nr, nc))) return { ok: false, why: 'Must touch the station' };
@@ -282,6 +289,54 @@ const Meta = {
   daily() { const d = this.profile.daily; return { streak: d.streak, dayIndex: d.dayIndex, claimable: !d.claimedAt, rewards: DAILY_REWARDS, repairable: false, repairAM: 5 }; },
   collection() { const f = this.profile.collection.found; const map = it => Object.assign({}, it, { found: !!f[it.id], count: f[it.id] || 0 }); return { ships: COLLECTION.ships.map(map), species: COLLECTION.species.map(map), artifacts: COLLECTION.artifacts.map(map) }; },
   canCollectAll() { return this.rank.level >= 3; },
+  // ---- A1.2 territory (rings for the 15x9 home grid around the hub at 4,7)
+  _plot: { ring: 1, clearing: null, tight: false, rings: [{ r0: 2, c0: 4, r1: 6, c1: 10 }, { r0: 1, c0: 3, r1: 7, c1: 11 }, { r0: 1, c0: 2, r1: 7, c1: 12 }, { r0: 0, c0: 1, r1: 8, c1: 13 }, { r0: 0, c0: 0, r1: 8, c1: 14 }] },
+  _plotBounds() { return this._plot.rings[this._plot.ring]; },
+  _area(b) { return (b.r1 - b.r0 + 1) * (b.c1 - b.c0 + 1); },
+  _ringOf(r, c) { const R = this._plot.rings; for (let i = 0; i < R.length; i++) { const b = R[i]; if (r >= b.r0 && r <= b.r1 && c >= b.c0 && c <= b.c1) return i; } return R.length - 1; },
+  plot() {
+    const P = this._plot, last = P.rings.length - 1, b = P.rings[P.ring], now = Date.now();
+    if (P.clearing && P.clearing.endsAt <= now) this._finishPlot('done');
+    const k = P.ring + 1, nb = P.rings[k];
+    const next = nb ? { ring: k, cost: Math.round(4000 * Math.pow(2.2, k - 1)), ms: Math.round(15 * 60e3 * Math.pow(1.9, k - 1)), cells: this._area(nb) - this._area(b), affordable: Sim.state.credits >= Math.round(4000 * Math.pow(2.2, k - 1)) } : null;
+    const cl = P.clearing ? { ring: P.clearing.ring, endsAt: P.clearing.endsAt, remainingMs: Math.max(0, P.clearing.endsAt - now), totalMs: P.clearing.totalMs, skipAM: Math.max(1, Math.ceil(Math.max(0, P.clearing.endsAt - now) / 480000)) } : null;
+    return { ring: P.ring, rings: last, r0: b.r0, c0: b.c0, r1: b.r1, c1: b.c1, cells: this._area(b), next, clearing: cl };
+  },
+  expandPlot() {
+    const p = this.plot(); if (p.clearing) return { ok: false, why: `Ring ${p.clearing.ring} is already being cleared` }; if (!p.next) return { ok: false, why: 'The whole sector is yours' };
+    if (Sim.state.credits < p.next.cost) return { ok: false, why: `Need ${fmt(p.next.cost - Sim.state.credits)} more credits` };
+    Sim.state.credits -= p.next.cost; const now = Date.now();
+    this._plot.clearing = { ring: p.next.ring, startedAt: now, endsAt: now + p.next.ms, totalMs: p.next.ms };
+    hlog('Meta.expandPlot', p.next.ring); Sim.emit('plot', { state: 'start', ring: p.next.ring, bounds: this._plot.rings[p.next.ring] }); Sim.emit('change');
+    return { ok: true, cost: p.next.cost, endsAt: now + p.next.ms };
+  },
+  skipPlot() {
+    const p = this.plot(); if (!p.clearing) return { ok: false, why: 'Nothing is being cleared' };
+    const cost = p.clearing.skipAM; if (this.profile.am < cost) return { ok: false, why: 'Not enough Antimatter' };
+    this.profile.am -= cost; Sim.emit('am', { delta: -cost, reason: 'plot', total: this.profile.am }); hlog('Meta.skipPlot', cost);
+    this._finishPlot('skip'); return { ok: true, cost };
+  },
+  _finishPlot(state) {
+    const P = this._plot, prev = this._area(P.rings[P.ring]); const ring = P.clearing.ring; P.ring = ring; P.clearing = null;
+    Sim.emit('plot', { state, ring, bounds: P.rings[ring], cells: this._area(P.rings[ring]) - prev }); Sim.emit('change');
+  },
+  // ---- A1.3 achievements (six across the tiers)
+  _ach: [
+    { id: 'harbourmaster', title: 'Harbourmaster', desc: 'Serve ships at any station.', icon: 'ship', fam: 'ops', goals: [50, 500, 5000], ams: [5, 15, 40], tier: 1, progress: 63, done: false },
+    { id: 'banker', title: 'Banker', desc: 'Collect credits from hoppers over your career.', icon: 'credits', fam: 'trade', goals: [50000, 1000000, 20000000], ams: [5, 15, 60], tier: 1, progress: 1240000, done: false },
+    { id: 'architect', title: 'Architect', desc: 'Build modules in any sector.', icon: 'build', fam: 'trade', goals: [10, 100, 500], ams: [5, 15, 40], tier: 0, progress: 28, done: false },
+    { id: 'surveyor', title: 'Surveyor', desc: 'Claim returned expeditions.', icon: 'expeditions', fam: 'ops', goals: [3, 25, 150], ams: [5, 15, 40], tier: 0, progress: 1, done: false },
+    { id: 'landholder', title: 'Landholder', desc: 'Clear plot rings across your sectors.', icon: 'territory', fam: 'hub', goals: [2, 10, 30], ams: [5, 15, 40], tier: 0, progress: 1, done: false },
+    { id: 'regular', title: 'Regular', desc: 'Claim daily rewards.', icon: 'calendar', fam: 'life', goals: [7, 30, 100], ams: [5, 15, 40], tier: 3, progress: 104, done: true },
+  ],
+  achievements() { return this._ach.map(a => { const goal = a.done ? a.goals[2] : a.goals[a.tier]; return { id: a.id, title: a.title, desc: a.desc, icon: a.icon, fam: a.fam, tier: a.tier, progress: a.progress, goal, nextAM: a.done ? 0 : a.ams[a.tier], claimable: !a.done && a.progress >= goal, done: a.done }; }); },
+  claimAchievement(id) {
+    const a = this._ach.find(x => x.id === id); if (!a || a.done || a.progress < a.goals[a.tier]) return null;
+    const am = a.ams[a.tier]; a.tier += 1; if (a.tier >= 3) a.done = true; this.profile.am += am;
+    hlog('Meta.claimAchievement', id, a.tier, am); Sim.emit('achievement', { id, tier: a.tier, state: 'claimed' }); Sim.emit('am', { delta: am, reason: 'achievement', total: this.profile.am }); Sim.emit('change');
+    return { am, tier: a.tier };
+  },
+  achievementBadge() { return this.achievements().filter(a => a.claimable).length; },
   // mutators
   collect(r, c) { const h = this.hopper(r, c); if (!h || h.bank < 1) return 0; const amt = Math.floor(h.bank); const cm = this.cell(r, c); cm.bank = 0; cm.at = Date.now(); Sim.state.credits += amt; this.profile.rank.xp += Math.floor(amt / 100); hlog('Meta.collect', r, c, amt); Sim.emit('collect', { r, c, amount: amt }); Sim.emit('change'); return amt; },
   collectAll() { let t = 0; for (const { r, c } of Sim.cells()) { const h = this.hopper(r, c); if (h && h.bank >= 1) { const amt = Math.floor(h.bank); const cm = this.cell(r, c); cm.bank = 0; cm.at = Date.now(); Sim.state.credits += amt; t += amt; } } hlog('Meta.collectAll', t); Sim.emit('change'); return t; },
@@ -339,7 +394,7 @@ const Engine = {
     const cv = this.canvas;
     cv.addEventListener('mousemove', e => { const cell = this.cellAt(e.clientX, e.clientY); const k = cell ? `${cell.r},${cell.c}` : ''; if (k !== this._hk) { this._hk = k; this.hover = cell; this.emit('cell-hover', cell ? { r: cell.r, c: cell.c, x: e.clientX, y: e.clientY } : null); } });
     cv.addEventListener('mouseleave', () => { this._hk = ''; this.hover = null; this.emit('cell-hover', null); });
-    cv.addEventListener('click', e => { const cell = this.cellAt(e.clientX, e.clientY); if (!cell) { this.emit('empty-click', { x: e.clientX, y: e.clientY }); return; } const occ = Sim.occupied(cell.r, cell.c); const hp = occ ? Meta.hopper(cell.r, cell.c) : null; const bd = occ ? Meta.build(cell.r, cell.c) : null; if (occ && !this.placing && hp && hp.ready) this.emit('bank-click', { r: cell.r, c: cell.c }); else if (occ && !this.placing && bd && bd.building) this.emit('scaffold-click', { r: cell.r, c: cell.c }); else this.emit('cell-click', { r: cell.r, c: cell.c, occupied: occ, x: e.clientX, y: e.clientY }); });
+    cv.addEventListener('click', e => { const cell = this.cellAt(e.clientX, e.clientY); if (!cell) { this.emit('empty-click', { x: e.clientX, y: e.clientY }); return; } const occ = Sim.occupied(cell.r, cell.c); if (!occ && !Sim.inPlot(cell.r, cell.c)) { this.emit('plot-click', { r: cell.r, c: cell.c, ring: Meta._ringOf(cell.r, cell.c) }); return; } const hp = occ ? Meta.hopper(cell.r, cell.c) : null; const bd = occ ? Meta.build(cell.r, cell.c) : null; if (occ && !this.placing && hp && hp.ready) this.emit('bank-click', { r: cell.r, c: cell.c }); else if (occ && !this.placing && bd && bd.building) this.emit('scaffold-click', { r: cell.r, c: cell.c }); else this.emit('cell-click', { r: cell.r, c: cell.c, occupied: occ, x: e.clientX, y: e.clientY }); });
     cv.addEventListener('contextmenu', e => { e.preventDefault(); const cell = this.cellAt(e.clientX, e.clientY); this.emit('context', cell || { r: null, c: null }); });
   },
   thumbnail(state, w, h) { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const x = cv.getContext('2d'); x.fillStyle = '#03040A'; x.fillRect(0, 0, w, h); const g = state.grid, cols = g[0].length, rows = g.length, cell = Math.floor(Math.min(w / (cols + 1), h / (rows + 1))), ox = (w - cols * cell) / 2, oy = (h - rows * cell) / 2; for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (g[r][c]) { x.fillStyle = g[r][c].id === 'hub' ? '#F3E9D6' : PAL.family(g[r][c].id); x.globalAlpha = .85; x.fillRect(ox + c * cell + 1, oy + r * cell + 1, cell - 2, cell - 2); } return cv; },
@@ -357,6 +412,15 @@ const Engine = {
     const g = this.geom(), s = Sim.state, cell = g.cell;
     x.strokeStyle = 'rgba(243,233,214,.08)'; x.lineWidth = 1;
     for (let r = 0; r <= g.rows; r++) for (let c = 0; c <= g.cols; c++) { x.fillStyle = 'rgba(243,233,214,.10)'; x.fillRect(g.ox + c * cell - .5, g.oy + r * cell - .5, 1, 1); }
+    // A1.2 unclaimed space: hatched ice outside the plot, dashed ivory plot boundary
+    const pb = Meta._plotBounds();
+    if (pb) {
+      x.save(); x.strokeStyle = 'rgba(143,211,232,.10)'; x.lineWidth = 1;
+      for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) if (!Sim.inPlot(r, c) && !Sim.occupied(r, c)) { const X = g.ox + c * cell, Y = g.oy + r * cell; x.fillStyle = 'rgba(143,211,232,.045)'; x.fillRect(X + 1, Y + 1, cell - 2, cell - 2); x.beginPath(); x.moveTo(X + 3, Y + cell - 3); x.lineTo(X + cell - 3, Y + 3); x.stroke(); }
+      x.setLineDash([6, 5]); x.strokeStyle = 'rgba(243,233,214,.45)'; x.lineWidth = 1; x.strokeRect(g.ox + pb.c0 * cell + .5, g.oy + pb.r0 * cell + .5, (pb.c1 - pb.c0 + 1) * cell - 1, (pb.r1 - pb.r0 + 1) * cell - 1);
+      const cl = Meta._plot.clearing; if (cl) { const nb = Meta._plot.rings[cl.ring]; x.setLineDash([3, 3]); x.strokeStyle = 'rgba(143,211,232,.7)'; x.strokeRect(g.ox + nb.c0 * cell + .5, g.oy + nb.r0 * cell + .5, (nb.c1 - nb.c0 + 1) * cell - 1, (nb.r1 - nb.r0 + 1) * cell - 1); }
+      x.restore();
+    }
     x.lineWidth = Math.max(3, cell * .14); x.strokeStyle = '#232838';
     for (const { r, c } of Sim.cells()) for (const [nr, nc] of [[r + 1, c], [r, c + 1]]) if (Sim.occupied(nr, nc)) { x.beginPath(); x.moveTo(g.ox + (c + .5) * cell, g.oy + (r + .5) * cell); x.lineTo(g.ox + (nc + .5) * cell, g.oy + (nr + .5) * cell); x.stroke(); }
     for (const { r, c, m } of Sim.cells()) {
@@ -486,11 +550,19 @@ const Store = {
     'motion': () => Motion.setOverride(Motion.override === 'reduced' ? 'auto' : 'reduced'),
     'title': () => showTitle(),
     'level:4': () => { S.level = S.level === 4 ? 2 : 4; Sim.emit('levelup', { level: S.level }); },
+    'plot:confirm': () => UI.plotConfirm(2), 'plot:start': () => UI.expandPlot(false),
+    'plot:done': () => { if (Meta._plot.clearing) Meta._plot.clearing.endsAt = Date.now() - 1; else { Meta.expandPlot(); Meta._plot.clearing.endsAt = Date.now() - 1; } Meta.plot(); UI.refresh(); },
+    'plot:tight': () => { Meta._plot.tight = !Meta._plot.tight; UI.refresh(); },
+    'hover:unclaimed': () => { Engine.hover = { r: 0, c: 0 }; UI.refresh(); setTimeout(() => { Engine.hover = null; UI.refresh(); }, 4000); },
+    'cele:plot': () => UI.celebrate('plot', { ring: 2, cells: 14 }),
+    'panel:achievements': () => UI.openAchievements(),
+    'ev:achievement': () => { const a = Meta._ach.find(x => x.id === 'surveyor'); a.progress = 3; Sim.emit('achievement', { id: 'surveyor', tier: 1, state: 'complete' }); },
+    'cele:achievement': () => UI.celebrate('achievement', { title: 'Banker', tier: 2, am: 15 }),
   };
   bar.addEventListener('click', e => {
     const b = e.target.closest('button[data-h]'); if (!b) return;
     const k = b.dataset.h;
-    if (k.startsWith('panel:')) { const id = k.slice(6); if (id === 'close') UI.closePanel(); else UI.openPanel(id); return; }
+    if (k.startsWith('panel:') && k !== 'panel:achievements') { const id = k.slice(6); if (id === 'close') UI.closePanel(); else UI.openPanel(id); return; }
     if (k.startsWith('vp:')) { const [w, h] = k.slice(3).split('x').map(Number); window.open(location.pathname + '?toolbar=0', '_blank', `width=${w},height=${h}`); return; }
     if (H[k]) H[k](); else hlog('no handler', k);
   });

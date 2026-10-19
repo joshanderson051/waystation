@@ -33,11 +33,13 @@ const Meta = {
       missions: { completed: {}, claimed: {}, progress: {} },
       daily: { streak: 0, lastClaimAt: 0, lastClaimKey: null },
       expeditions: { list: [], nextId: 1, charts: {}, runs: {} },
+      achievements: { completed: {}, claimed: {} },           // A1.3: id -> tiers reached / tiers claimed (0..3)
       entitlements: { owned: {}, history: [], liveries: [], titles: [], tokens: { livery: 0 }, sectorPass: false },
       settings: { sound: true, music: true, sfxVolume: 0.8, musicVolume: 0.5, reducedMotion: null, perf: null },
       stats: { collects: 0, collectedCredits: 0, transmissions: 0, expeditionsLaunched: 0, expeditionsClaimed: 0, discoveries: 0,
         buildsPlaced: 0, buildsDone: 0, upgrades: 0, skips: 0, amEarned: 0, amSpent: 0, amBought: 0, convoyServed: 0, servedTotal: 0,
-        instantBuilds: 0, sectorsUnlocked: 0, dailyClaims: 0, missionsClaimed: 0 },
+        instantBuilds: 0, sectorsUnlocked: 0, dailyClaims: 0, missionsClaimed: 0,
+        residentsPeak: 0, aurelianServed: 0, plotRings: 0 },       // A1.3 lifetime stats (migration defaults through _fixup)
       migratedFrom: null,
     };
   },
@@ -53,7 +55,7 @@ const Meta = {
   _fixup(p, now) {
     const fresh = this._newProfile(now);
     for (const k in fresh) if (p[k] === undefined) p[k] = fresh[k];
-    for (const k of ['rank', 'collection', 'missions', 'daily', 'expeditions', 'entitlements', 'settings', 'stats']) {
+    for (const k of ['rank', 'collection', 'missions', 'daily', 'expeditions', 'achievements', 'entitlements', 'settings', 'stats']) {
       p[k] ||= {};
       for (const f in fresh[k]) if (p[k][f] === undefined) p[k][f] = fresh[k][f];
     }
@@ -200,6 +202,7 @@ const Meta = {
       const st = p.sectors[id];
       summary.banked += this._accrue(st, now, TIMERS.OFFLINE_BANK_CAP_MS, false).added;
       for (const b of this._settleBuilds(st, now)) summary.builds.push(b);
+      if (this._settlePlot(st, now)) summary.plots = (summary.plots || 0) + 1;
     }
     summary.expeditions = this._settleExpeditions(now);
     if (elapsed >= TIMERS.OFFLINE_MIN_MS) {
@@ -343,6 +346,8 @@ const Meta = {
   // ---------------------------------------------------------- 4.3 build timers, skips, upgrades
   buildMul(state = Sim.state) { const d = state && SECTORS[state.sector]; return d ? d.buildMul : 1; },
   skipCost(remainingMs) { return Math.max(1, Math.ceil(Math.max(0, remainingMs) / 60000 / TIMERS.SKIP_MINUTES_PER_AM)); },
+  // A1.1: upgrading from `lvl` takes UPGRADE_TIME_MUL[lvl - 1] x the build time (2x to level 2, 5x to level 3 in `patient`)
+  upgradeMs(def, lvl, state = Sim.state) { const M = TIMERS.UPGRADE_TIME_MUL, m = Array.isArray(M) ? M[clamp(lvl, 1, 2) - 1] : M; return Math.round((def.buildMs || 0) * m * this.buildMul(state)); },
 
   // called by Sim.place after the grid cell is set: creates the cell meta and emits build-start (or an instant build-done)
   onPlace(r, c, id) {
@@ -423,7 +428,7 @@ const Meta = {
     const nl = lvl + 1;
     const effectKey = { dock: 'dockTime', capacity: 'capacity', power: 'power' }[def.upgrade.kind] || null;
     out.next = { lvl: nl, cost: def.cost * def.upgrade.costMul[lvl - 1], rate: this._rate(def, nl), cap: this._cap(def, nl),
-      ms: Math.round(def.buildMs * TIMERS.UPGRADE_TIME_MUL * this.buildMul(s)), kind: def.upgrade.kind,
+      ms: this.upgradeMs(def, lvl, s), kind: def.upgrade.kind,
       effect: effectKey ? Sim.upgradeEffect(m.id, effectKey, nl) : null };   // dockTime multiplier, or capacity / power multiplier
     return out;
   },
@@ -437,7 +442,7 @@ const Meta = {
     if (lvl >= 3) return { ok: false, cost: 0, totalMs: 0, why: 'Already at level 3' };
     const cost = def.cost * def.upgrade.costMul[lvl - 1];
     if (s.credits < cost) return { ok: false, cost, totalMs: 0, why: 'Not enough credits' };
-    const now = this.now(), totalMs = Math.round(def.buildMs * TIMERS.UPGRADE_TIME_MUL * this.buildMul(s));
+    const now = this.now(), totalMs = this.upgradeMs(def, lvl, s);
     s.credits -= cost; this._syncWallet();
     cell.up = lvl + 1; cell.readyAt = now + totalMs; cell.startedAt = now; cell.totalMs = totalMs;
     Sim.log(`Upgrading ${def.name} to level ${lvl + 1}.`, '');
@@ -445,6 +450,67 @@ const Meta = {
     Sim.emit('change');
     if (totalMs <= 0) this._finishBuild(s, r, c, cell, 'instant');
     return { ok: true, cost, totalMs };
+  },
+
+  // ---------------------------------------------------------- A1.2 plot expansion ("territory")
+  plot() {
+    const s = Sim.state, p = this.profile; if (!s || !s.plot) return null;
+    const rings = Sim.plotRingsOf(s), P = s.plot, now = this.now();
+    const out = { ring: P.ring, rings: rings.length, r0: P.r0, c0: P.c0, r1: P.r1, c1: P.c1, cells: boxCells(P), next: null, clearing: null };
+    if (P.clearing) {
+      const C = P.clearing, remainingMs = Math.max(0, C.endsAt - now);
+      out.clearing = { ring: C.ring, endsAt: C.endsAt, remainingMs, totalMs: C.totalMs, skipAM: this.skipCost(remainingMs) };
+    } else if (P.ring < rings.length - 1) {
+      const k = P.ring + 1, cost = plotCost(k);
+      out.next = { ring: k, cost, ms: plotMs(k, this.buildMul(s)), cells: boxCells(rings[k]) - boxCells(P), affordable: !!p && s.credits >= cost, bounds: rings[k] };
+    }
+    return out;
+  },
+
+  expandPlot() {
+    const s = Sim.state, p = this.profile; if (!s || !p || !s.plot) return { ok: false, cost: 0, endsAt: null, why: 'No station' };
+    const info = this.plot();
+    if (info.clearing) return { ok: false, cost: 0, endsAt: info.clearing.endsAt, why: `Already clearing ring ${info.clearing.ring}` };
+    if (!info.next) return { ok: false, cost: 0, endsAt: null, why: 'The whole sector is already yours' };
+    const { ring, cost, ms } = info.next;
+    if (s.credits < cost) return { ok: false, cost, endsAt: null, why: `Needs ${fmt(cost)} credits` };
+    const now = this.now();
+    s.credits -= cost; Sim.earn(-cost, 'plot clearing'); this._syncWallet();
+    s.plot.clearing = { ring, startedAt: now, endsAt: now + ms, totalMs: ms };
+    Sim.log(`Clearing ring ${ring} of the plot: ${info.next.cells} cells in ${Math.round(ms / 60000)} minutes.`, '');
+    Sim.emit('plot', { state: 'start', ring, bounds: info.next.bounds, endsAt: now + ms, totalMs: ms, sector: s.sector });
+    Sim.emit('change');
+    this._dirty();
+    if (ms <= 0) this._finishPlot(s, 'instant');
+    return { ok: true, cost, endsAt: now + ms, why: null };
+  },
+
+  skipPlot() {
+    const s = Sim.state, C = s && s.plot && s.plot.clearing;
+    if (!C) return { ok: false, cost: 0, why: 'Nothing is being cleared' };
+    const cost = this.skipCost(C.endsAt - this.now());
+    if (!this.spendAM(cost, 'skip plot')) return { ok: false, cost, why: 'Not enough Antimatter' };
+    this.profile.stats.skips++;
+    this._finishPlot(s, 'skip');
+    return { ok: true, cost };
+  },
+
+  _finishPlot(state, how) {
+    const ring = state.plot.clearing.ring;
+    state.plot = Sim.plotAt(state, ring, null);
+    this.profile.stats.plotRings++;
+    const bounds = { r0: state.plot.r0, c0: state.plot.c0, r1: state.plot.r1, c1: state.plot.c1 };
+    if (state === Sim.state) { Sim.log(`Ring ${ring} cleared. The plot is now ${bounds.c1 - bounds.c0 + 1}x${bounds.r1 - bounds.r0 + 1}.`, 'good'); }
+    Sim.emit('plot', { state: how === 'skip' ? 'skip' : 'done', ring, bounds, sector: state.sector, how });
+    if (state === Sim.state) Sim.emit('change');
+    this._dirty();
+    return { ring, bounds };
+  },
+
+  _settlePlot(state, now) {
+    const C = state && state.plot && state.plot.clearing;
+    if (!C || C.endsAt > now) return null;
+    return this._finishPlot(state, 'timer');
   },
 
   // ---------------------------------------------------------- 4.9 commander rank
@@ -553,6 +619,7 @@ const Meta = {
     this._bindActive();
     this._accrue(Sim.state, now, TIMERS.OFFLINE_BANK_CAP_MS, false);
     this._settleBuilds(Sim.state, now);
+    this._settlePlot(Sim.state, now);
     this._dirty();
     Sim.emit('sector', { id, state: 'switched' });
     Sim.emit('change'); Sim.emit('log');
@@ -731,6 +798,7 @@ const Meta = {
   _onDock(ship) {
     const p = this.profile, s = Sim.state; if (!p || !s) return;
     p.stats.servedTotal++;
+    if (ship.company === 'aurelian') p.stats.aurelianServed++;
     if (this.convoyActive()) p.stats.convoyServed++;
     this._addXP(ECON.xp.served, 'served');
     const co = s.companies[ship.company], served = co ? co.served : 0;
@@ -790,6 +858,7 @@ const Meta = {
       }
       if (!completed) break;              // a completion can open the next chapter: look again
     }
+    this._evalAchievements(now);          // A1.3: same triggers and throttle as missions
   },
 
   missions() {
@@ -817,6 +886,76 @@ const Meta = {
     this.evalMissions(this.now(), true);
     this.save();
     return reward;
+  },
+
+  // ---------------------------------------------------------- A1.3 achievements (lifetime, profile-wide, three tiers each)
+  // lifetime counters from profile.stats plus derived values; keys are what ACHIEVEMENTS[*].stat names
+  lifetimeStats() {
+    const p = this.profile, S = p ? p.stats : {}, out = Object.assign({}, S);
+    if (!p) return out;
+    out.chartsTotal = 0; for (const id in p.expeditions.charts) out.chartsTotal += p.expeditions.charts[id];
+    out.registryFound = Object.keys(p.collection.found).length;
+    out.sectorsOwned = p.unlocked.length;                     // home included (Pioneer 2 / 5 / 8)
+    out.rankLevel = this.rank.level;
+    out.bestLevel = this.bestLevel();
+    out.sectorsAtL2 = 0; out.sectorsAtL3 = 0; out.sectorsAtL4 = 0; out.sectorsAtL5 = 0;
+    out.cargoTraded = 0; out.earnedLifetime = 0; out.residentsNow = 0;
+    for (const id in p.sectors) {
+      const st = p.sectors[id], L = st.level || 1;
+      if (L >= 2) out.sectorsAtL2++; if (L >= 3) out.sectorsAtL3++; if (L >= 4) out.sectorsAtL4++; if (L >= 5) out.sectorsAtL5++;
+      out.cargoTraded += st.stats.cargoTraded || 0; out.earnedLifetime += st.stats.earned || 0;
+      out.residentsNow = Math.max(out.residentsNow, st.residents || 0);
+    }
+    out.residentsPeak = Math.max(S.residentsPeak || 0, out.residentsNow);
+    out.bankedLifetime = S.collectedCredits || 0;
+    return out;
+  },
+
+  _tierOf(def, value) { let t = 0; for (const tier of def.tiers) if (value >= tier.goal) t++; return t; },
+
+  _evalAchievements(now) {
+    const p = this.profile; if (!p) return;
+    const S = this.lifetimeStats(), A = p.achievements;
+    for (const def of ACHIEVEMENTS) {
+      const reached = this._tierOf(def, Number(S[def.stat]) || 0), had = A.completed[def.id] || 0;
+      if (reached > had) {
+        A.completed[def.id] = reached;
+        for (let t = had + 1; t <= reached; t++) {
+          if (Sim.state) Sim.log(`Achievement: ${def.title} ${['', 'bronze', 'silver', 'gold'][t]}. Claim it in Missions.`, 'good');
+          Sim.emit('achievement', { id: def.id, tier: t, state: 'complete' });
+        }
+      }
+    }
+  },
+
+  achievements() {
+    const p = this.profile, S = this.lifetimeStats();
+    return ACHIEVEMENTS.map(def => {
+      const value = Number(S[def.stat]) || 0, done = p ? (p.achievements.completed[def.id] || 0) : 0, claimed = p ? (p.achievements.claimed[def.id] || 0) : 0;
+      const next = def.tiers[Math.min(claimed, def.tiers.length - 1)];
+      return { id: def.id, title: def.title, desc: def.desc, icon: def.icon, fam: def.fam, tier: claimed, reached: done, progress: Math.min(value, next.goal), value,
+        goal: next.goal, nextAM: claimed >= def.tiers.length ? 0 : next.am, tiers: def.tiers, claimable: done > claimed, done: claimed >= def.tiers.length };
+    });
+  },
+
+  // claims the next unclaimed tier (one tier per call) and pays its Antimatter
+  claimAchievement(id) {
+    const p = this.profile, def = ACHIEVEMENTS.find(a => a.id === id); if (!p || !def) return null;
+    const done = p.achievements.completed[id] || 0, claimed = p.achievements.claimed[id] || 0;
+    if (done <= claimed) return null;
+    const tier = claimed + 1, am = def.tiers[tier - 1].am;
+    p.achievements.claimed[id] = tier;
+    this.addAM(am, `achievement ${id}`);
+    Sim.emit('achievement', { id, tier, state: 'claimed', am });
+    this._dirty();
+    this.save();
+    return { am, tier };
+  },
+
+  achievementBadge() {
+    const p = this.profile; if (!p) return 0;
+    let n = 0; for (const def of ACHIEVEMENTS) if ((p.achievements.completed[def.id] || 0) > (p.achievements.claimed[def.id] || 0)) n++;
+    return n;
   },
 
   // ---------------------------------------------------------- 4.8 daily reward and streak (local calendar days)
@@ -942,6 +1081,7 @@ const Meta = {
       out.push({ kind: 'build', label: `${MODULES[m.id].name}${cell.up ? ` · level ${cell.up}` : ''}`, endsAt: cell.readyAt, r, c, id: m.id });
     }
     for (const e of p.expeditions.list) if (e.status === 'out') out.push({ kind: 'expedition', label: `Expedition · ${SECTORS[e.sector].name}`, endsAt: e.endsAt, r: null, c: null, id: e.id });
+    if (s.plot && s.plot.clearing) out.push({ kind: 'plot', label: `Clearing ring ${s.plot.clearing.ring}`, endsAt: s.plot.clearing.endsAt, r: null, c: null, id: s.plot.clearing.ring });
     const d = this.daily();
     out.push({ kind: 'daily', label: 'Daily reward', endsAt: d.nextAt, r: null, c: null, id: 'daily' });
     out.sort((a, b) => a.endsAt - b.endsAt);
@@ -963,10 +1103,12 @@ const Meta = {
     for (const x of r.crossings) Sim.emit('hopper', x);
     if (now - a.lastInactive >= 5000) {
       a.lastInactive = now;
-      for (const id in p.sectors) if (id !== p.activeSector) { this._accrue(p.sectors[id], now, TIMERS.OFFLINE_BANK_CAP_MS, false); this._settleBuilds(p.sectors[id], now); }
+      for (const id in p.sectors) if (id !== p.activeSector) { this._accrue(p.sectors[id], now, TIMERS.OFFLINE_BANK_CAP_MS, false); this._settleBuilds(p.sectors[id], now); this._settlePlot(p.sectors[id], now); }
     }
     this._settleBuilds(s, now);
+    this._settlePlot(s, now);
     this._settleExpeditions(now);
+    if (s.residents > (p.stats.residentsPeak || 0)) { p.stats.residentsPeak = s.residents; this._dirty(); }
     const ca = this.convoyActive();
     if (ca !== this._convoyWas) { this._convoyWas = ca; Sim.emit('convoy', { active: ca, endsAt: this.convoy().endsAt }); }
     this.evalMissions(now);

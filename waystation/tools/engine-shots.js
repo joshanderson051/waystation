@@ -104,6 +104,24 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       console.log('fps tier', tier, 'samples', samples.join(' '), JSON.stringify(info));
     }
   }
+  if (want('plot')) {
+    // A1.2: 9x7 plot on the 15x9 grid with ring 2 clearing (staged by the harness)
+    await open('sector=home&panel=0');
+    await sleep(2500);
+    await shot('plot-field');
+    const un = await page.evaluate(() => { const s = Sim.state; for (let r = 0; r < s.grid.length; r++) for (let c = 0; c < s.grid[0].length; c++) if (!EngineWorld.inPlot(r, c) && Math.abs(r - s.hub.r) <= 3) return Engine.cellToScreen(r, c); return null; });
+    await page.evaluate(() => { Engine.placing = 'dock'; });
+    await page.mouse.move(un.x, un.y);
+    await sleep(900);
+    await shot('plot-placing');
+    await page.evaluate(() => { Engine.placing = null; });
+    await page.mouse.move(W / 2, 40);
+    await page.evaluate(() => harness.fire('plot done'));
+    await sleep(120);
+    await shot('plot-done');
+    await sleep(1600);
+    await shot('plot-after');
+  }
   if (want('idle')) {
     await open('sector=home&panel=0&drift=1');
     await sleep(14000);

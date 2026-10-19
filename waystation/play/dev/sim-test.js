@@ -3,7 +3,7 @@
 // WAYSTATION v2 — simulation and meta-game harness (DESIGN2.md 4.13)
 //   node play/dev/sim-test.js            run every check, print the economy and pacing tables, exit 0 on success
 //   node play/dev/sim-test.js --quick    skip the 25-day pacing bot
-//   node play/dev/sim-test.js --days 10  pacing bot horizon (default 25); --no-compare prints only the shipped-preset table
+//   node play/dev/sim-test.js --days 10  pacing bot horizon (default 40); --no-compare prints only the shipped-preset table
 //   node play/dev/sim-test.js --tuning '{"rateDivisor":120,"sectorCosts":{"aurelia":2000000}}'   pacing bot under a WAYSTATION_TUNING override
 // Loads data.js, data2.js, sim.js, meta.js inside a vm context with a localStorage shim and a
 // controllable clock (Date.now is replaced; Math.random can be seeded), then walks the journey:
@@ -22,7 +22,7 @@ const FILES = ['data.js', 'data2.js', 'sim.js', 'meta.js'];
 const SOURCES = FILES.map(f => ({ f, code: fs.readFileSync(path.join(ROOT, f), 'utf8') }));
 const ARGS = process.argv.slice(2);
 const QUICK = ARGS.includes('--quick');
-const DAYS = (() => { const i = ARGS.indexOf('--days'); return i >= 0 ? Math.max(1, +ARGS[i + 1] || 25) : 25; })();
+const DAYS = (() => { const i = ARGS.indexOf('--days'); return i >= 0 ? Math.max(1, +ARGS[i + 1] || 40) : 40; })();
 const TUNING_ARG = (() => { const i = ARGS.indexOf('--tuning'); return i >= 0 ? JSON.parse(ARGS[i + 1]) : null; })();   // e.g. --tuning '{"rateDivisor":120}'
 // tuning selectors: the numeric sections assert the DESIGN2 formulas under SPEC; the shipped curve is the data2.js file default
 const SPEC = { preset: 'spec' };            // the DESIGN2 numbers; makeWorld() applies it unless told otherwise
@@ -60,7 +60,8 @@ function makeWorld(opts = {}) {
   const G = name => vm.runInContext(name, ctx);
   const W = { ctx, G, storage, clock, Sim: G('Sim'), Meta: G('Meta'), MODULES: G('MODULES'), SECTORS: G('SECTORS'), TIMERS: G('TIMERS'), ECON: G('ECON'),
     MISSIONS: G('MISSIONS'), COLLECTION: G('COLLECTION'), RANKS: G('RANKS'), STORE_CATALOG: G('STORE_CATALOG'), EXPEDITIONS: G('EXPEDITIONS'), DAILY_REWARDS: G('DAILY_REWARDS'),
-    MODULE_ORDER: G('MODULE_ORDER'), GOOD_IDS: G('GOOD_IDS'), PACING_PRESET: G('PACING_PRESET'), PACING_PRESETS: G('PACING_PRESETS'), TUNING: G('TUNING'), events: [] };
+    MODULE_ORDER: G('MODULE_ORDER'), GOOD_IDS: G('GOOD_IDS'), PACING_PRESET: G('PACING_PRESET'), PACING_PRESETS: G('PACING_PRESETS'), TUNING: G('TUNING'),
+    PLOT: G('PLOT'), plotRings: G('plotRings'), plotCost: G('plotCost'), plotMs: G('plotMs'), ACHIEVEMENTS: G('ACHIEVEMENTS'), events: [] };
   W.record = (...names) => { for (const n of names) W.Sim.on(n, d => W.events.push({ evt: n, data: d })); };
   W.count = evt => W.events.filter(e => e.evt === evt).length;
   W.last = evt => { const l = W.events.filter(e => e.evt === evt); return l.length ? l[l.length - 1].data : null; };
@@ -323,10 +324,10 @@ function testMissions() {
   check('reading a transmission completes Incoming Transmission', !!rw, { tx: M.profile.stats.transmissions });
   check('tutorial paid 30 AM in total (20 + 30 = 50 on hand)', M.am === 50, M.am);
   const ms = M.missions();
-  check('all six Commissioning missions claimed', ms.filter(m => m.chapter === 'Commissioning').every(m => m.claimed));
+  check('the six original Commissioning missions claimed; Clear Your First Ring is now active', ms.filter(m => m.chapter === 'Commissioning' && m.id !== 'c_plot1').every(m => m.claimed) && active().includes('c_plot1'));
   check('mission events: progress, complete and claimed all fired', W.events.some(e => e.evt === 'mission' && e.data.state === 'complete') && W.events.some(e => e.evt === 'mission' && e.data.state === 'claimed'));
   check('Trade and Reach chapters are open now', active().includes('t_fuel') && active().includes('k_quarters'));
-  check('48 missions in 7 chapters', W.MISSIONS.length === 48 && new Set(W.MISSIONS.map(m => m.chapter)).size === 7);
+  check('50 missions in 7 chapters (48 + the two plot missions)', W.MISSIONS.length === 50 && new Set(W.MISSIONS.map(m => m.chapter)).size === 7 && W.MISSIONS.some(m => m.id === 'c_plot1') && W.MISSIONS.some(m => m.id === 'w_plot4'));
   check('every mission has a working tracker', W.MISSIONS.every(m => typeof m.track(S.state, M.profile) === 'number'));
   check('every requires id exists', W.MISSIONS.every(m => m.requires.every(id => W.MISSIONS.some(x => x.id === id))));
   // throttle: evaluation at most once per 250 ms
@@ -514,7 +515,7 @@ function testV1Sim() {
   check('newGame(sectorId) sizes the grid from the sector', (() => { M.unlockAllSectors('test'); S.newGame('oros'); return S.state.sector === 'oros' && S.state.grid.length === 11 && S.state.grid[0].length === 17 && M.profile.sectors.oros === S.state; })());
   S.newGame('home');
   check('newGame(home) resets the home station and keeps the profile', S.state.sector === 'home' && M.profile.sectors.home === S.state);
-  check('canPlace reasons', S.canPlace('dock', 0, 0).why === 'Must touch the station' && S.canPlace('gate', S.state.hub.r, S.state.hub.c + 1).why === 'Needs station level 4' && S.canPlace('dock', S.state.hub.r, S.state.hub.c).why === 'Occupied' && (() => { const c = S.state.credits; S.state.credits = 0; const w = S.canPlace('dock', S.state.hub.r, S.state.hub.c + 1).why; S.state.credits = c; return w === 'Not enough credits'; })());
+  check('canPlace reasons', S.canPlace('dock', 0, 0).why === 'plot' && S.canPlace('dock', S.state.plot.r0, S.state.plot.c0).why === 'Must touch the station' && S.canPlace('gate', S.state.hub.r, S.state.hub.c + 1).why === 'Needs station level 4' && S.canPlace('dock', S.state.hub.r, S.state.hub.c).why === 'Occupied' && (() => { const c = S.state.credits; S.state.credits = 0; const w = S.canPlace('dock', S.state.hub.r, S.state.hub.c + 1).why; S.state.credits = c; return w === 'Not enough credits'; })());
   for (const id of ['dock', 'warehouse', 'solar', 'fuel', 'quarters', 'cantina']) W.placeNear(id);
   check('six modules placed, built events', W.modules() === 6 && W.count('built') === 6);
   const q = W.cellOf('quarters');
@@ -613,30 +614,163 @@ function testConvoyAndMisc() {
   check('ranks: 10 with Harbourmaster at 900 and Commodore at 2,000', W.RANKS.length === 10 && W.RANKS[2].xp === 900 && W.RANKS[3].xp === 2000 && W.RANKS[4].xp === 4500);
   check('daily rewards: 7, day 3/6/7 AM 5/10/25', W.DAILY_REWARDS.length === 7 && W.DAILY_REWARDS[2].amount === 5 && W.DAILY_REWARDS[5].amount === 10 && W.DAILY_REWARDS[6].amount === 25);
   check('data.js untouched globals still exported', ['MODULES', 'GOODS', 'GOOD_IDS', 'PLANETS', 'COMPANIES', 'SHIP_CLASSES', 'EVENTS', 'TIER_NAMES', 'STATION_NAMES', 'GRID_COLS', 'GRID_ROWS', 'pick', 'rnd', 'irnd', 'fmt', 'SAVE_KEY'].every(n => W.G(`typeof ${n}`) !== 'undefined'));
-  check('Meta public API present', ['init', 'tick', 'save', 'load', 'export', 'import', 'collect', 'collectAll', 'skipBuild', 'upgradeModule', 'launchExpedition', 'claimExpedition', 'skipExpedition', 'claimMission', 'claimDaily', 'repairStreak', 'unlockSector', 'switchSector', 'spendAM', 'renameStation', 'newStationHere', 'resetProfile', 'hopper', 'build', 'upgrade', 'sectors', 'expeditions', 'missions', 'daily', 'collection', 'nextUp', 'addAM', 'addCredits', 'unlockAllSectors', 'grantEntitlement', 'hasEntitlement', 'totalRate'].every(n => typeof M[n] === 'function') && typeof M.am === 'number' && typeof M.rank === 'object');
+  check('Meta public API present', ['init', 'tick', 'save', 'load', 'export', 'import', 'collect', 'collectAll', 'skipBuild', 'upgradeModule', 'launchExpedition', 'claimExpedition', 'skipExpedition', 'claimMission', 'claimDaily', 'repairStreak', 'unlockSector', 'switchSector', 'spendAM', 'renameStation', 'newStationHere', 'resetProfile', 'hopper', 'build', 'upgrade', 'sectors', 'expeditions', 'missions', 'daily', 'collection', 'nextUp', 'addAM', 'addCredits', 'unlockAllSectors', 'grantEntitlement', 'hasEntitlement', 'totalRate', 'plot', 'expandPlot', 'skipPlot', 'achievements', 'claimAchievement', 'achievementBadge', 'lifetimeStats'].every(n => typeof M[n] === 'function') && typeof M.am === 'number' && typeof M.rank === 'object');
 }
 
 function testShippedPreset() {
-  sec('14. Shipped pacing preset: the file default is slow (tuning record 4)');
+  sec('14. Shipped pacing preset: the file default is patient (A1.1)');
   const W = makeWorld({ tuning: FILE_DEFAULT, seed: 21 });
-  const slow = W.PACING_PRESETS.slow;
-  check("data2.js ships with PACING_PRESET = 'slow'", W.PACING_PRESET === 'slow', W.PACING_PRESET);
-  check('no override: TUNING is the slow preset', W.TUNING.rateDivisor === 120 && JSON.stringify(W.TUNING.capMinutes) === JSON.stringify([60, 75, 90]) && !!W.TUNING.sectorCosts, W.TUNING);
-  check('rate = cost/120: dock 7, warehouse 5, reactor 25, gate 100, hub 3', W.MODULES.dock.rate === 7 && W.MODULES.warehouse.rate === 5 && W.MODULES.reactor.rate === 25 && W.MODULES.gate.rate === 100 && W.MODULES.hub.rate === 3);
-  check('caps 60/75/90 minutes of rate', JSON.stringify(W.TIMERS.CAP_MINUTES) === JSON.stringify([60, 75, 90]) && W.MODULES.dock.cap === 420);
-  check('sector costs: sable 30k .. aurelia 3M', Object.keys(slow.sectorCosts).every(id => W.SECTORS[id].unlock.credits === slow.sectorCosts[id]) && W.SECTORS.aurelia.unlock.credits === 3000000 && W.SECTORS.home.unlock.credits === 0);
-  check('everything else at spec: build times, skip, upgrade multipliers, expedition costs, AM shortcut', W.TIMERS.BUILD_MS[2] === 240000 && W.TIMERS.SKIP_MINUTES_PER_AM === 8 && JSON.stringify(W.TIMERS.RATE_MUL) === JSON.stringify([1, 1.6, 2.4]) && W.Meta.expeditionCost(W.SECTORS.aurelia) === 1800 && W.SECTORS.sable.unlock.am === 60);
-  check('the live-economy knobs are unchanged by the preset', W.ECON.live === 0.06 && W.TIMERS.DAY_MS === 24000 && W.ECON.shipSpeed === 60);
-  // the shipped numbers flow through the live game: a dock banks 7/min to a 420 cap and sable needs 30,000
+  const P = W.PACING_PRESETS.patient;
+  check("data2.js ships with PACING_PRESET = 'patient'", W.PACING_PRESET === 'patient', W.PACING_PRESET);
+  check("'slow' and 'spec' stay selectable", makeWorld({ tuning: { preset: 'slow' }, seed: 22 }).MODULES.dock.rate === 7 && makeWorld({ tuning: SPEC, seed: 23 }).MODULES.dock.rate === 20);
+  check('build times 90 s / 12 min / 60 min / 4 h', W.TIMERS.BUILD_MS[1] === 90e3 && W.TIMERS.BUILD_MS[2] === 720e3 && W.TIMERS.BUILD_MS[3] === 3600e3 && W.TIMERS.BUILD_MS[4] === 14400e3 && W.MODULES.gate.buildMs === 14400e3);
+  check('upgrades: level 2 = 2x, level 3 = 5x the build time', JSON.stringify(W.TIMERS.UPGRADE_TIME_MUL) === JSON.stringify([2, 5]));
+  check('rate = cost/150: dock 5, warehouse 4, reactor 20, gate 80, hub 3', W.MODULES.dock.rate === 5 && W.MODULES.warehouse.rate === 4 && W.MODULES.reactor.rate === 20 && W.MODULES.gate.rate === 80 && W.MODULES.hub.rate === 3);
+  check('caps 180/240/360 minutes of rate (dock cap 900)', JSON.stringify(W.TIMERS.CAP_MINUTES) === JSON.stringify([180, 240, 360]) && W.MODULES.dock.cap === 900);
+  check('offline accrual cap 24 h', W.TIMERS.OFFLINE_BANK_CAP_MS === 24 * HOUR);
+  check('expeditions 30 min .. 24 h by sector, costs unchanged', JSON.stringify(W.EXPEDITIONS.minutes) === JSON.stringify([30, 60, 120, 240, 360, 480, 720, 1440]) && W.SECTORS.aurelia.expedition.minutes === 1440 && W.Meta.expeditionCost(W.SECTORS.aurelia) === 1800);
+  check('DAY_MS 48,000, shipSpeed 40, speeds 0 | 1, live 0.06', W.TIMERS.DAY_MS === 48000 && W.ECON.shipSpeed === 40 && JSON.stringify(W.TIMERS.SPEEDS) === JSON.stringify([0, 1]) && W.ECON.live === 0.06);
+  check('sector costs come from the preset', Object.keys(P.sectorCosts).every(id => W.SECTORS[id].unlock.credits === P.sectorCosts[id]) && W.SECTORS.home.unlock.credits === 0);
+  check('skip formula unchanged: a 4 h build costs 30 AM', W.Meta.skipCost(4 * HOUR) === 30 && W.TIMERS.SKIP_MINUTES_PER_AM === 8);
+  // the shipped numbers flow through the live game
   const M = W.Meta, S = W.Sim; M.init();
-  const d = W.placeNear('dock'); W.advance(2 * HOUR);
-  check('shipped curve in play: dock bank caps at 420 (60 min of 7)', M.hopper(d.r, d.c).bank === 420 && M.hopper(d.r, d.c).rate === 7);
-  S.state.level = 2; M.addCredits(24000, 'test');                       // wallet 29,200
-  check('shipped curve in play: sable needs 30,000 credits', M.sectors().find(x => x.id === 'sable').status === 'locked' && /30,000/.test(M.sectors().find(x => x.id === 'sable').why), M.sectors().find(x => x.id === 'sable').why);
-  M.addCredits(1000, 'test');                                            // wallet 30,200
-  const before = S.state.credits;
-  check('shipped curve in play: unlock deducts 30,000', M.sectors().find(x => x.id === 'sable').status === 'unlockable' && M.unlockSector('sable').ok && S.state.credits === before - 30000, S.state.credits);
-  check('spec override still available for comparison', makeWorld({ tuning: SPEC, seed: 22 }).MODULES.dock.rate === 20);
+  S.state.speed = 4; S.tick(0.1);
+  check('Sim.tick clamps speed to 0 or 1 (2x / 4x gone)', S.state.speed === 1 && (() => { S.state.speed = 0; S.tick(0.1); return S.state.speed === 0; })());
+  S.state.speed = 1;
+  const d = W.placeNear('dock'); W.placeNear('warehouse'); W.placeNear('solar');
+  check('first three builds still instant', !M.build(d.r, d.c).building);
+  const f = W.placeNear('fuel');
+  check('fourth tier-1 build takes 90 s and costs 1 AM to skip', M.build(f.r, f.c).totalMs === 90000 && M.build(f.r, f.c).skipAM === 1);
+  const u = M.upgrade(d.r, d.c);
+  check('dock to level 2 takes 3 min, to level 3 7.5 min (2x / 5x of 90 s)', u.next.ms === 180000 && (() => { const k = d.r + ',' + d.c; S.state.cells[k].lvl = 2; const u3 = M.upgrade(d.r, d.c); S.state.cells[k].lvl = 1; return u3.next.ms === 450000; })(), u.next.ms);
+  check('a tier-3 module at level 3 is a five-hour project; the Jump Gate twenty hours', M.upgradeMs(W.MODULES.bank, 2) === 5 * HOUR && M.upgradeMs(W.MODULES.gate, 2) === 20 * HOUR);
+  W.advance(5 * HOUR);
+  check('dock bank caps at 900 (180 min of 5)', M.hopper(d.r, d.c).bank === 900);
+  M.save(); const c0 = W.clock.now; W.clock.now += 30 * HOUR;
+  const W2 = makeWorld({ storage: W.storage, clock: W.clock, tuning: FILE_DEFAULT, seed: 24 }); W2.Meta.init();
+  check('offline: hub bank after 30 h away is the 24 h-capped rate (hub 3/min -> cap 540)', W2.Meta.hopper(S.state.hub.r, S.state.hub.c).bank === 540, W2.Meta.hopper(S.state.hub.r, S.state.hub.c).bank);
+  W.clock.now = c0;
+}
+
+function testPlots() {
+  sec('15. Plot expansion (A1.2): rings, costs, timers, skip, migration, canPlace outside the plot');
+  const W = makeWorld({ seed: 25 });
+  const dims = b => (b.c1 - b.c0 + 1) + 'x' + (b.r1 - b.r0 + 1);
+  const seq = (rows, cols) => W.plotRings(rows, cols, { r: Math.floor(rows / 2), c: Math.floor(cols / 2) }).map(dims);
+  check('home 15x9: 7x5 -> 9x7 -> 11x7 -> 13x9 -> 15x9', JSON.stringify(seq(9, 15)) === JSON.stringify(['7x5', '9x7', '11x7', '13x9', '15x9']), seq(9, 15));
+  for (const [rows, cols] of [[9, 17], [11, 15], [11, 17], [11, 19]]) {
+    const q = seq(rows, cols);
+    check(cols + 'x' + rows + ': starts 7x5, ends at the full grid, grows monotonically (' + q.join(' -> ') + ')', q[0] === '7x5' && q[q.length - 1] === cols + 'x' + rows && q.every((d, i) => i === 0 || (+d.split('x')[0] >= +q[i - 1].split('x')[0] && +d.split('x')[1] >= +q[i - 1].split('x')[1])));
+  }
+  check('ring costs 4,000 x 2.2^(k-1): 4,000 / 8,800 / 19,360 / 42,592', W.plotCost(1) === 4000 && W.plotCost(2) === 8800 && W.plotCost(3) === 19360 && W.plotCost(4) === 42592);
+  check('ring times 15 min x 1.9^(k-1); far sectors x1.5', W.plotMs(1) === 15 * MIN && W.plotMs(2) === Math.round(28.5 * MIN) && W.plotMs(1, 1.5) === Math.round(22.5 * MIN));
+  W.record('plot');
+  const M = W.Meta, S = W.Sim; M.init();
+  const hub = S.state.hub;
+  check('a new station starts at ring 0, 7x5 around the hub', S.state.plot.ring === 0 && S.state.plot.r0 === hub.r - 2 && S.state.plot.r1 === hub.r + 2 && S.state.plot.c0 === hub.c - 3 && S.state.plot.c1 === hub.c + 3 && !S.state.plot.clearing);
+  let info = M.plot();
+  check('Meta.plot(): 35 cells, 5 rings, next ring 1 costs 4,000 for 28 cells in 15 min', info.cells === 35 && info.rings === 5 && info.next && info.next.ring === 1 && info.next.cost === 4000 && info.next.cells === 28 && info.next.ms === 15 * MIN && info.next.affordable && info.clearing === null, info);
+  check('Sim.inPlot', S.inPlot(hub.r, hub.c + 3) && !S.inPlot(hub.r, hub.c + 4) && !S.inPlot(0, 0));
+  check("canPlace outside the plot -> why 'plot' and place refuses", S.canPlace('dock', hub.r, hub.c + 4).why === 'plot' && !S.place('dock', hub.r, hub.c + 4) && !S.state.grid[hub.r][hub.c + 4]);
+  // the tutorial inside 7x5: three instant builds, a dock on the plot edge still has an open side (ships berth from unclaimed space)
+  check('dock on the plot edge is usable (open side toward unclaimed space)', S.place('dock', hub.r, hub.c + 1) && S.place('dock', hub.r, hub.c + 2) && S.place('dock', hub.r, hub.c + 3) && S.dockUsable(hub.r, hub.c + 3) && S.findBerth() !== null);
+  check('31 free cells left in the start plot: enough for the tutorial and the first chapters', (() => { let n = 0; for (let r = S.state.plot.r0; r <= S.state.plot.r1; r++) for (let c = S.state.plot.c0; c <= S.state.plot.c1; c++) if (!S.state.grid[r][c]) n++; return n === 31; })());
+  // expand
+  M.addCredits(100000, 'test');
+  const wallet = S.state.credits;
+  const e = M.expandPlot();
+  check('expandPlot deducts 4,000 and starts a 15 min clearing', e.ok && e.cost === 4000 && S.state.credits === wallet - 4000 && near(e.endsAt - W.clock.now, 15 * MIN, 1), e);
+  check("plot event 'start' with ring and bounds", W.last('plot') && W.last('plot').state === 'start' && W.last('plot').ring === 1 && W.last('plot').bounds.c1 - W.last('plot').bounds.c0 + 1 === 9);
+  info = M.plot();
+  check('Meta.plot() while clearing: clearing block, no next', info.clearing && info.clearing.ring === 1 && near(info.clearing.remainingMs, 15 * MIN, 1) && info.clearing.totalMs === 15 * MIN && info.clearing.skipAM === 2 && info.next === null);
+  check('a second expandPlot is refused while clearing', !M.expandPlot().ok);
+  check("nextUp lists the clearing (kind 'plot')", M.nextUp().some(x => x.kind === 'plot' && x.endsAt === info.clearing.endsAt));
+  check('still outside the plot until the timer passes', S.canPlace('dock', hub.r, hub.c + 4).why === 'plot');
+  W.advance(15 * MIN);
+  check("ring 1 cleared on time: 9x7, event 'done'", S.state.plot.ring === 1 && dims(S.state.plot) === '9x7' && !S.state.plot.clearing && W.last('plot').state === 'done' && W.last('plot').ring === 1);
+  check('the new cells accept modules', S.canPlace('dock', hub.r, hub.c + 4).ok && S.place('warehouse', hub.r, hub.c + 4));
+  // skip
+  const e2 = M.expandPlot();
+  check('ring 2 costs 8,800 and takes 28.5 min', e2.ok && e2.cost === 8800 && near(e2.endsAt - W.clock.now, 28.5 * MIN, 1));
+  const am0 = M.am;
+  const sk = M.skipPlot();
+  check('skipPlot costs ceil(28.5/8) = 4 AM and clears at once', sk.ok && sk.cost === 4 && M.am === am0 - 4 && S.state.plot.ring === 2 && dims(S.state.plot) === '11x7' && W.last('plot').state === 'skip');
+  check('skip refused with nothing clearing', !M.skipPlot().ok);
+  check('plotRings stat counts rings across the profile', M.profile.stats.plotRings === 2);
+  // clear the rest and run out of rings
+  while (M.plot().next) { M.expandPlot(); W.advance(M.plot().clearing.totalMs); }
+  check('after the last ring the plot is the full grid and next is null', S.state.plot.ring === 4 && dims(S.state.plot) === '15x9' && M.plot().next === null && !M.expandPlot().ok);
+  // migration: a station saved without a plot gets the smallest ring holding every module
+  const v1 = S.makeState('home'); delete v1.plot;
+  v1.grid[v1.hub.r][v1.hub.c + 5] = { id: 'dock', built: 2 };          // two cells beyond the 7x5 edge -> ring 2 (11x7)
+  const mig = S.sanitize(v1);
+  check('migration ring = smallest ring containing every module (11x7 -> ring 2)', mig.plot.ring === 2 && dims(mig.plot) === '11x7');
+  const v0 = S.makeState('home'); delete v0.plot; v0.grid[v0.hub.r][v0.hub.c + 1] = { id: 'dock', built: 2 };
+  check('a compact station migrates to ring 0', S.sanitize(v0).plot.ring === 0);
+  // far sectors: timers x1.5; inactive sectors settle their clearing in tick
+  M.unlockAllSectors('test'); M.switchSector('marrow');
+  check('marrow ring 1 takes 22.5 min', M.plot().next.ms === Math.round(22.5 * MIN));
+  M.addCredits(10000, 'test'); M.expandPlot(); M.switchSector('home');
+  W.advance(6000); W.advance(23 * MIN);
+  check('an inactive sector finishes its clearing while you are elsewhere', M.profile.sectors.marrow.plot.ring === 1 && !M.profile.sectors.marrow.plot.clearing);
+  // missions
+  const W2 = makeWorld({ seed: 26 }); W2.Meta.init(); W2.Meta.addCredits(5000, 'test');
+  for (const id of ['c_dock', 'c_warehouse', 'c_solar', 'c_collect', 'c_serve3', 'c_transmission']) { W2.Meta.profile.missions.completed[id] = 1; W2.Meta.profile.missions.claimed[id] = 1; }
+  W2.Meta.evalMissions(W2.clock.now, true);
+  check('Clear Your First Ring is the next Commissioning mission', W2.Meta.missions().find(m => m.id === 'c_plot1').active);
+  W2.Meta.expandPlot(); W2.advance(15 * MIN); W2.advance(300);
+  check('...and completes when ring 1 is cleared (+5 AM on claim)', W2.Meta.missions().find(m => m.id === 'c_plot1').claimable && W2.Meta.claimMission('c_plot1').am === 5);
+  check('Room to Grow tracks ring 4 in Town', W2.MISSIONS.find(m => m.id === 'w_plot4').goal === 4 && W2.MISSIONS.find(m => m.id === 'w_plot4').chapter === 'Town');
+  // offline: a clearing that ended while away is settled on load and counted
+  W2.Meta.addCredits(10000, 'test'); W2.Meta.expandPlot(); W2.Meta.save(); W2.clock.now += 2 * HOUR;
+  const W3 = makeWorld({ storage: W2.storage, clock: W2.clock, seed: 27 }); W3.record('offline'); W3.Meta.init();
+  check('offline: the ring finished while away', W3.Sim.state.plot.ring === 2 && W3.last('offline').summary.plots === 1);
+}
+
+function testAchievements() {
+  sec('16. Achievements (A1.3): 24 x 3 tiers, progression, claim once, badge');
+  const W = makeWorld({ seed: 28 });
+  W.record('achievement', 'am');
+  const A = W.ACHIEVEMENTS;
+  check('24 achievements, three tiers each, ascending goals', A.length === 24 && A.every(a => a.tiers.length === 3 && a.tiers[0].goal < a.tiers[1].goal && a.tiers[1].goal < a.tiers[2].goal && a.id && a.title && a.desc && a.icon && a.fam && a.stat));
+  check('tiers pay 5 / 15 / 40 AM, gold 60 on the hardest', A.every(a => a.tiers[0].am === 5 && a.tiers[1].am === 15 && (a.tiers[2].am === 40 || a.tiers[2].am === 60)) && A.filter(a => a.tiers[2].am === 60).length >= 6);
+  check('the named ones from the addendum exist with their goals', [['harbourmaster', 50, 500, 5000], ['banker', 50000, 1000000, 20000000], ['architect', 10, 100, 500], ['foreman', 5, 50, 200], ['surveyor', 3, 25, 150], ['cartographer', 3, 12, 24], ['collector', 10, 30, 52], ['pioneer', 2, 5, 8], ['landholder', 2, 10, 30], ['regular', 7, 30, 100], ['patron', 50, 500, 5000], ['town_planner', 20, 60, 150]].every(([id, ...g]) => { const a = A.find(x => x.id === id); return a && a.tiers.map(t => t.goal).join() === g.join(); }));
+  check('one per station tier and the rank milestones', ['way_station', 'trading_hub', 'town_in_space', 'galactic_hub', 'officer', 'flag_officer', 'legend'].every(id => A.some(a => a.id === id)));
+  const M = W.Meta, S = W.Sim; M.init();
+  check('every stat key resolves in Meta.lifetimeStats()', (() => { const L = M.lifetimeStats(); return A.every(a => typeof L[a.stat] === 'number'); })(), Object.keys(M.lifetimeStats()));
+  check('fresh profile: nothing claimable, badge 0, all tier 0', M.achievements().every(a => !a.claimable && a.tier === 0 && !a.done) && M.achievementBadge() === 0);
+  const row = id => M.achievements().find(a => a.id === id);
+  check('progress and goal point at the next tier', row('harbourmaster').goal === 50 && row('harbourmaster').nextAM === 5 && row('harbourmaster').progress === 0);
+  M.profile.stats.servedTotal = 50; M.evalMissions(W.clock.now, true);
+  check("tier 1 reached: event 'complete', claimable, badge 1", W.events.some(e => e.evt === 'achievement' && e.data.id === 'harbourmaster' && e.data.tier === 1 && e.data.state === 'complete') && row('harbourmaster').claimable && M.achievementBadge() === 1);
+  const am0 = M.am;
+  let c = M.claimAchievement('harbourmaster');
+  check('claim pays 5 AM for bronze', c && c.am === 5 && c.tier === 1 && M.am === am0 + 5 && W.events.some(e => e.evt === 'achievement' && e.data.state === 'claimed' && e.data.tier === 1));
+  check('claim once: a second claim returns null, badge 0', M.claimAchievement('harbourmaster') === null && M.achievementBadge() === 0 && row('harbourmaster').tier === 1 && row('harbourmaster').goal === 500);
+  M.profile.stats.servedTotal = 5000; M.evalMissions(W.clock.now, true);
+  check('jumping two tiers completes both; claims go one tier at a time', row('harbourmaster').reached === 3 && row('harbourmaster').claimable && M.claimAchievement('harbourmaster').am === 15 && M.claimAchievement('harbourmaster').am === 60 && M.claimAchievement('harbourmaster') === null);
+  check('done after gold', row('harbourmaster').done && row('harbourmaster').tier === 3 && row('harbourmaster').nextAM === 0);
+  check('unknown id -> null', M.claimAchievement('nope') === null);
+  // derived stats
+  M.profile.sectors.home.level = 3; M.unlockAllSectors('test'); M.profile.sectors.sable.level = 2;
+  M.profile.rank.xp = 2000; M.profile.rank.level = 4;
+  M.profile.expeditions.charts = { sable: 2, oros: 1 };
+  M.profile.collection.found = { a: { count: 1 }, b: { count: 1 } };
+  M.evalMissions(W.clock.now, true);
+  const L = M.lifetimeStats();
+  check('derived: sectorsAtL2 2, sectorsAtL3 1, rankLevel 4, chartsTotal 3, registryFound 2, sectorsUnlocked 7', L.sectorsAtL2 === 2 && L.sectorsAtL3 === 1 && L.rankLevel === 4 && L.chartsTotal === 3 && L.registryFound === 2 && M.profile.stats.sectorsUnlocked === 7);
+  check('Way Station Keeper bronze, Trading Hub Director bronze, Commissioned Officer gold (rank 4), Pioneer gold (8 sectors)', row('way_station').reached === 1 && row('trading_hub').reached === 1 && row('officer').reached === 3 && row('pioneer').reached === 3);
+  check('residents peak tracked by tick', (() => { S.state.residents = 25; M.tick(W.clock.now + 1); return M.profile.stats.residentsPeak === 25 && M.lifetimeStats().residentsPeak === 25; })());
+  check('Aurelian liners counted on dock', (() => { S.state.companies.aurelian.served = 1; M._onDock({ company: 'aurelian', cls: 'liner' }); return M.profile.stats.aurelianServed === 1; })());
+  // migration defaults: an older profile without the new fields
+  M.save(); const raw = JSON.parse(W.storage.getItem('waystation.profile.v2')); delete raw.stats.residentsPeak; delete raw.stats.aurelianServed; delete raw.stats.plotRings;
+  const noAch = JSON.parse(JSON.stringify(raw)); delete noAch.achievements;
+  W.storage.setItem('waystation.profile.v2', JSON.stringify(raw));
+  const W2 = makeWorld({ storage: W.storage, clock: W.clock, seed: 29 }); W2.Meta.init();
+  check('older profiles get the new stats with defaults; claims survive save/load', W2.Meta.profile.stats.residentsPeak === 0 && W2.Meta.profile.stats.plotRings === 0 && W2.Meta.profile.achievements.claimed.harbourmaster === 3 && W2.Meta.achievements().length === 24);
+  W.storage.setItem('waystation.profile.v2', JSON.stringify(noAch));
+  const W3 = makeWorld({ storage: W.storage, clock: W.clock, seed: 30 }); W3.Meta.init();
+  check('a profile without the achievements block gets it and re-derives reached tiers from its stats', !!W3.Meta.profile.achievements && W3.Meta.achievements().find(a => a.id === 'harbourmaster').reached === 3 && W3.Meta.achievementBadge() >= 1);
 }
 
 // ============================================================ economy table
@@ -653,7 +787,9 @@ function economyTable() {
   }
   const widths = rows[0].map((_, i) => Math.max(...rows.map(r => r[i].length)));
   for (const r of rows) console.log('  ' + r.map((c, i) => c.padEnd(widths[i])).join('  '));
-  console.log(`\n  live economy: ECON.live = ${W.ECON.live}, TIMERS.DAY_MS = ${W.TIMERS.DAY_MS} (one game day = ${W.TIMERS.DAY_MS / 1000} s at speed 1), ship speed ${W.ECON.shipSpeed} cells/day`);
+  console.log(`\n  live economy: ECON.live = ${W.ECON.live}, TIMERS.DAY_MS = ${W.TIMERS.DAY_MS} (one game day = ${W.TIMERS.DAY_MS / 1000} s at speed 1), ship speed ${W.ECON.shipSpeed} cells/day, speeds ${W.TIMERS.SPEEDS.join('/')}`);
+  console.log(`  upgrades: level 2 = ${W.TIMERS.UPGRADE_TIME_MUL[0]}x build time, level 3 = ${W.TIMERS.UPGRADE_TIME_MUL[1]}x; offline bank cap ${W.TIMERS.OFFLINE_BANK_CAP_MS / 3600e3} h`);
+  console.log('  plot rings (home 15x9): ' + W.plotRings(9, 15, { r: 4, c: 7 }).map((b, k) => `ring ${k} ${b.c1 - b.c0 + 1}x${b.r1 - b.r0 + 1}${k ? ` ${W.plotCost(k).toLocaleString('en-US')} cr / ${Math.round(W.plotMs(k) / 60e3)} min` : ''}`).join('; '));
   console.log('  sector unlocks: ' + Object.values(W.SECTORS).map(s => `${s.id} L${s.unlock.level} ${s.unlock.credits.toLocaleString('en-US')}${s.unlock.charts ? ` +${s.unlock.charts} chart` : ''}${s.unlock.am ? ` | ${s.unlock.am} AM` : ''}${s.unlock.pass ? ' | pass' : ''}`).join('; '));
   console.log('  expeditions: ' + Object.values(W.SECTORS).map(s => `${s.id} ${s.expedition.minutes} min / ${W.Meta.expeditionCost(s)} cr`).join('; '));
 }
@@ -676,7 +812,7 @@ function pacingBot(days, tuning, label) {
     'warehouse', 'security', 'school', 'plaza', 'bank', 'shipyard', 'hydro', 'dock', 'habitat', 'menagerie',
     'observatory', 'gate', 'refinery', 'quarters', 'solar', 'dock', 'habitat', 'warehouse'];
   const SESSIONS = [8, 13, 20];
-  const firstUnlockable = {}, firstUnlocked = {}, firstLevel = {}, firstRank = {};
+  const firstUnlockable = {}, firstUnlocked = {}, firstLevel = {}, firstRank = {}, firstRing = {};
   const income = { live: 0, banks: 0, catchup: 0, missions: 0, daily: 0, expeditions: 0 };
   let seed = 100, built = 0, totalEarned = 0, lastCredits = null;
   const t0 = Date.now();
@@ -711,6 +847,9 @@ function pacingBot(days, tuning, label) {
         // save for a sector whose level + chart gates are met
         const next = locked.find(x => M.bestLevel() >= x.def.unlock.level && M.charts(x.id) >= x.def.unlock.charts);
         const reserve = next ? next.def.unlock.credits : 0;
+        // territory: clear the next ring when it is affordable after the reserve (players expand; the plot missions need it)
+        const pl = M.plot();
+        if (pl && pl.next && !pl.clearing && s.credits - pl.next.cost >= Math.min(reserve, 2000) + 2500) { if (M.expandPlot().ok && !firstRing[pl.next.ring]) firstRing[pl.next.ring] = label; }
         // build the next module in order if affordable (after the reserve) and its tier is open
         const counts = {}; for (const { m } of S.cells()) counts[m.id] = (counts[m.id] || 0) + 1;
         const want = {}; let nextId = null;
@@ -745,9 +884,11 @@ function pacingBot(days, tuning, label) {
   }
   console.log(`\n  pacing table (first session when each sector became unlockable / was unlocked by the bot):`);
   const W = makeWorld({ storage, clock, seed: 1, tuning });
-  const targets = { sable: 'day 2', thessaly: 'day 6', aurelia: 'day 25' };
+  const targets = { sable: 'day 2-3', kessler: 'day 4-5', thessaly: 'day 8-10', marrow: 'day 13-15', oros: 'day 18-22', keth: 'day 24-28', aurelia: 'day 32-40' };
   for (const id of Object.keys(W.SECTORS)) if (id !== 'home') console.log(`    ${id.padEnd(9)} unlockable ${String(firstUnlockable[id] || `not within ${days} days`).padEnd(22)} unlocked ${String(firstUnlocked[id] || '-').padEnd(10)} ${targets[id] ? `(target ${targets[id]})` : ''}`);
   console.log(`  station level reached: ${Object.entries(firstLevel).map(([l, d]) => `L${l} ${d}`).join(', ')}`);
+  console.log(`  plot rings cleared (home): ${Object.entries(firstRing).map(([k, d]) => `ring ${k} ${d}`).join(', ') || 'none'}`);
+  console.log(`  sector costs: ${Object.values(W.SECTORS).filter(x => x.unlock.credits).map(x => `${x.id} ${x.unlock.credits.toLocaleString('en-US')}`).join(', ')}`);
   console.log(`  commander rank reached: ${Object.entries(firstRank).map(([l, d]) => `R${l} ${d}`).join(', ')}`);
   const total = income.live + income.banks + income.catchup + income.missions + income.daily + income.expeditions;
   console.log(`  income over ${days} days (gross, credits): live play ${Math.round(income.live).toLocaleString('en-US')} | banks collected ${Math.round(income.banks).toLocaleString('en-US')} | offline catch-up ${Math.round(income.catchup).toLocaleString('en-US')} | missions ${income.missions.toLocaleString('en-US')} | daily ${income.daily.toLocaleString('en-US')} | expeditions ${Math.round(income.expeditions).toLocaleString('en-US')} | total ${Math.round(total).toLocaleString('en-US')}`);
@@ -758,7 +899,7 @@ function pacingBot(days, tuning, label) {
 // ============================================================ run
 (function main() {
   console.log(`Waystation v2 sim-test  (${FILES.join(', ')})`);
-  const tests = [testNewProfileAndTutorial, testHoppers, testOffline, testExpeditions, testMissions, testDaily, testRanks, testSectors, testExportImportAndReset, testMigration, testV1Sim, testStore, testConvoyAndMisc, testShippedPreset];
+  const tests = [testNewProfileAndTutorial, testHoppers, testOffline, testExpeditions, testMissions, testDaily, testRanks, testSectors, testExportImportAndReset, testMigration, testV1Sim, testStore, testConvoyAndMisc, testShippedPreset, testPlots, testAchievements];
   for (const t of tests) {
     try { t(); } catch (e) { results.fail++; results.failures.push(`${t.name}: threw ${e && e.stack}`); console.log(`  THREW ${e && e.stack}`); }
   }

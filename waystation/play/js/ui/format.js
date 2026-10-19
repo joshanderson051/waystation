@@ -59,6 +59,9 @@ const UI_ICONS = {
   artifact:    { d: 'M12 3.5 20.5 10 12 20.5 3.5 10Z M3.5 10h17 M8 10l4 10.5L16 10 M8 10l4-6.5 4 6.5' },
   'chevron-right': { d: 'M9 6l6 6-6 6' },
   xp:          { d: 'M12 20V6 M6 12l6-6 6 6' },
+  // A1: territory (plot corners) and achievement rosette
+  territory:   { d: 'M4 8V4h4 M16 4h4v4 M20 16v4h-4 M8 20H4v-4 M9 12h6 M12 9v6' },
+  award:       { d: 'M12 3.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11Z M8.5 13.5 7 21l5-2.5 5 2.5-1.5-7.5 M12 7.75v.5' },
 };
 if (typeof ICONS !== 'undefined' && ICONS) {
   for (const k of Object.keys(UI_ICONS)) if (!Object.prototype.hasOwnProperty.call(ICONS, k)) ICONS[k] = UI_ICONS[k];
@@ -83,23 +86,27 @@ const Fmt = {
   pad3(n) { return String(n).padStart(3, '0'); },
   day(n) { return 'Day ' + Fmt.pad3(n); },
   grid(r, c) { return `${r + 1}:${Fmt.pad2(c + 1)}`; },
-  // countdown: 4:12 under an hour, 1h 05m under a day, 2d 3h beyond
+  // live countdown (A1.1): "0:45" and "4:12" under ten minutes, "28 min" under an hour, "4 h 12 m" under a day, "1 d 3 h" beyond
   ms(ms) {
     ms = Math.max(0, Number(ms) || 0);
     const s = Math.round(ms / 1000);
-    if (s < 3600) return `${Math.floor(s / 60)}:${Fmt.pad2(s % 60)}`;
-    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
-    if (h < 24) return `${h}h ${Fmt.pad2(m)}m`;
-    return `${Math.floor(h / 24)}d ${h % 24}h`;
+    if (s < 600) return `${Math.floor(s / 60)}:${Fmt.pad2(s % 60)}`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h} h ${Fmt.pad2(m % 60)} m`;
+    return `${Math.floor(h / 24)} d ${h % 24} h`;
   },
-  // "4 min", "1 h 10 min", "2 days": durations in copy
+  // durations in copy (A1.1): "45 s", "28 min", "4 h 12 min", "4 h", "1 d 3 h", "2 d"
   dur(ms) {
-    if (ms < 59500) return `${Math.round(ms / 1000)} s`;
-    const m = Math.round(ms / 60000);
+    const sec = Math.round(Math.max(0, ms) / 1000);
+    if (sec < 60) return `${sec} s`;
+    const m = Math.floor(sec / 60), sr = sec % 60;
+    if (m < 10) return sr ? `${m} min ${sr} s` : `${m} min`;
     if (m < 60) return `${m} min`;
     const h = Math.floor(m / 60), r = m % 60;
     if (h < 24) return r ? `${h} h ${r} min` : `${h} h`;
-    const d = Math.floor(h / 24); return `${d} day${d === 1 ? '' : 's'}`;
+    const d = Math.floor(h / 24), hr = h % 24; return hr ? `${d} d ${hr} h` : `${d} d`;
   },
   ago(ms) {
     const m = Math.round(ms / 60000);

@@ -52,6 +52,8 @@ const EngineInput = (() => {
       if (ship) { S.emit('ship-click', { ship, x: sx, y: sy }); return; }
     }
     if (cell) {
+      // unclaimed space (A1.2): the ring that cell belongs to, so the HUD can offer to clear it
+      if (!EngineWorld.inPlot(cell.r, cell.c)) { S.emit('plot-click', { r: cell.r, c: cell.c, ring: EngineWorld.ringOf(cell.r, cell.c) }); return; }
       if (EngineWorld.isScaffold(cell.r, cell.c)) { S.emit('scaffold-click', { r: cell.r, c: cell.c }); return; }
       const occupied = EngineWorld.occupied(cell.r, cell.c);
       // double-click a module: focus at zoom 1.6
@@ -179,7 +181,8 @@ const EngineInput = (() => {
     const key = cellKey(cell);
     if (key !== S.hoverKey) { S.hoverKey = key; S.emit('cell-hover', cell ? { r: cell.r, c: cell.c } : null); }
     const overChip = !EngineWorld.placing && pointerWorld && (ship || EngineWorld.bankAt(pointerWorld.x, pointerWorld.y));
-    S.canvas.style.cursor = S.dragging ? 'grabbing' : overChip ? 'pointer' : EngineWorld.placing ? 'crosshair' : 'default';
+    const overUnclaimed = cell && !EngineWorld.inPlot(cell.r, cell.c);
+    S.canvas.style.cursor = S.dragging ? 'grabbing' : (overChip || overUnclaimed) ? 'pointer' : EngineWorld.placing ? 'crosshair' : 'default';
   }
 
   function init(emit) {

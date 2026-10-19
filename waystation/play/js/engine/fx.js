@@ -81,6 +81,16 @@ const EngineFX = (() => {
       p.size = 0.22 + (Math.random() < 0.4 ? 0.12 : 0); p.sp.tint = tint;
     }
   }
+  // Directional sparks (debris blown outward on a plot reveal): a cone of ±0.5 rad around `angle`.
+  function blow(x, y, angle, color, count, ms) {
+    const T = textures(), n = count > 0 ? count | 0 : 3, life = (ms > 0 ? ms : 800) / 1000, tint = U.int(color);
+    for (let i = 0; i < n; i++) {
+      const p = acquire(K_SPARK, T.dot, false); if (!p) return;
+      const a = angle + (Math.random() - 0.5), sp = 50 + Math.random() * 110;
+      p.x = x; p.y = y; p.vx = Math.cos(a) * sp; p.vy = Math.sin(a) * sp; p.t0 = ST.time + Math.random() * 0.12; p.life = life * (0.7 + Math.random() * 0.6); p.drag = 1.6;
+      p.size = 0.25 + Math.random() * 0.2; p.sp.tint = tint;
+    }
+  }
   function motes(points, color, count, ms, ease) {
     if (!points || points.length < 2) return;
     const T = textures(), n = count > 0 ? count | 0 : 3, life = (ms > 0 ? ms : 600) / 1000, tint = U.int(color);
@@ -316,7 +326,7 @@ const EngineFX = (() => {
 
   return {
     init, update, clear,
-    sparks, motes, exhaust, ring, burst, floaterWorld,
+    sparks, blow, motes, exhaust, ring, burst, floaterWorld,
     facade: { collect, buildStart, buildDone, floater, pulse, shock, levelUp, flash, warp },
     get count() { return S.live.length; }, get cap() { return cap(); },
   };
