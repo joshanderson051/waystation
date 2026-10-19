@@ -1,13 +1,17 @@
 // ============================================================
 // WAYSTATION — simulation: state, economy, ships, residents
+// v2 (DESIGN2.md section 6): sector-sized grids, cell meta for banks and
+// build timers, upgrade multipliers, sector bias, offline catch-up, and
+// save/load as thin wrappers over Meta. Every v1 method and event stays.
 // ============================================================
 'use strict';
 
-const DAY_SECONDS = 6;          // real seconds per game day at 1x
-const SHIP_SPEED = 22;          // cells per game day
-const QUEUE_RADIUS = GRID_COLS / 2 + 1.6;
+// Real seconds per game day at 1x. v1 used 6; v2 reads TIMERS.DAY_MS (data2.js tuning record 1).
+const DAY_SECONDS = (typeof TIMERS !== 'undefined' && TIMERS.DAY_MS) ? TIMERS.DAY_MS / 1000 : 6;
+const SHIP_SPEED = (typeof ECON !== 'undefined' && ECON.shipSpeed) ? ECON.shipSpeed : 22;   // cells per game day
+const LIVE = (typeof ECON !== 'undefined' && ECON.live != null) ? ECON.live : 1;             // live-economy multiplier (6 / tuning record 1)
 const MAX_WAIT_DAYS = 3;
-const SAVE_KEY = 'waystation-save-v1';
+const SAVE_KEY = 'waystation-save-v1';          // v1 save; v2 reads it only to migrate (4.12)
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const irnd = (a, b) => Math.floor(rnd(a, b + 1));
@@ -15,19 +19,30 @@ const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const fmt = n => Math.round(n).toLocaleString('en-US');
 
+const NO_BIAS = { goods: {}, events: {}, companies: {}, residents: 1, rent: 1, refinery: 1, fuel: 1, gate: 1, traffic: 1 };
+
 const Sim = {
   state: null,
   floaters: [],          // transient: {x,y,text,color,ttl}
   listeners: {},
 
+  _muted: false,         // catchUp() runs hundreds of game days: only 'dock' (Meta's XP and discoveries) passes while muted
   on(evt, fn) { (this.listeners[evt] ||= []).push(fn); },
-  emit(evt, data) { (this.listeners[evt] || []).forEach(fn => fn(data)); },
+  off(evt, fn) { const l = this.listeners[evt]; if (l) { const i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); } },
+  emit(evt, data) { if (this._muted && evt !== 'dock') return; (this.listeners[evt] || []).forEach(fn => fn(data)); },
 
-  // ---------------------------------------------------------- setup
-  newGame() {
+  // Meta is loaded after sim.js (0.1); every call into it is guarded so the sim also runs alone.
+  meta() { return (typeof Meta !== 'undefined' && Meta && Meta.profile) ? Meta : null; },
+  sectorDef(id) { return (typeof SECTORS !== 'undefined' && SECTORS[id]) || null; },
+  bias(state = this.state) { const d = state && this.sectorDef(state.sector); return d && d.bias ? d.bias : NO_BIAS; },
+
+  // ---------------------------------------------------------- setup (6: newGame sizes the grid from the sector def)
+  makeState(sectorId = 'home') {
+    const def = this.sectorDef(sectorId);
+    const cols = def ? def.grid.cols : GRID_COLS, rows = def ? def.grid.rows : GRID_ROWS;
     const grid = [];
-    for (let r = 0; r < GRID_ROWS; r++) grid.push(new Array(GRID_COLS).fill(null));
-    const cr = Math.floor(GRID_ROWS / 2), cc = Math.floor(GRID_COLS / 2);
+    for (let r = 0; r < rows; r++) grid.push(new Array(cols).fill(null));
+    const cr = Math.floor(rows / 2), cc = Math.floor(cols / 2);
     grid[cr][cc] = { id: 'hub' };
 
     const stock = {}, prices = {}, policy = {};
@@ -36,8 +51,11 @@ const Sim = {
     const companies = {};
     for (const c of COMPANIES) companies[c.id] = { trust: 40, served: 0, contractUntil: 0, loan: null, office: false };
 
-    this.state = {
-      name: pick(STATION_NAMES), day: 1, t: 0, credits: 6000, speed: 1,
+    const now = Date.now();
+    const name = pick(def && def.names && def.names.length ? def.names : STATION_NAMES);
+    const credits = (typeof TIMERS !== 'undefined' && TIMERS.START_CREDITS != null) ? TIMERS.START_CREDITS : 6000;
+    const state = {
+      name, day: 1, t: 0, credits, speed: 1,
       grid, hub: { r: cr, c: cc }, stock, prices, policy, companies,
       ships: [], nextShipId: 1, shipTimer: 0.4,
       residents: 0, rep: 0.3, level: 1,
@@ -45,52 +63,105 @@ const Sim = {
       pending: null, nextEventDay: irnd(4, 7),
       income: { today: 0, yesterday: 0, breakdown: {} }, recentAway: 0,
       log: [], stats: { shipsServed: 0, cargoTraded: 0, earned: 0, turnedAway: 0, diverted: 0 },
+      sector: def ? def.id : 'home',
+      cells: { [`${cr},${cc}`]: { lvl: 1, bank: 0, readyAt: null, builtAt: now, at: now } },
     };
+    state.log.push({ day: 1, msg: 'Build a Docking Bay, a Warehouse and a Solar Array to start taking traffic.', cls: '' });
+    state.log.push({ day: 1, msg: `Station ${name} comes online. One docking collar, a hold full of hope.`, cls: 'good' });
+    return state;
+  },
+
+  newGame(sectorId) {
+    const M = (typeof Meta !== 'undefined' && Meta) ? Meta : null;
+    if (M && !M.profile) M.init();                         // v1 main.js never calls Meta.init: create or load the profile here
+    sectorId = sectorId || (M && M.profile ? M.profile.activeSector : 'home');
+    this.state = this.makeState(sectorId);
     this.floaters = [];
-    this.log(`Station ${this.state.name} comes online. One docking collar, a hold full of hope.`, 'good');
-    this.log('Build a Docking Bay, a Warehouse and a Solar Array to start taking traffic.', '');
+    if (M && M.profile) M.onNewGame(this.state);           // registers the station as the active sector and applies the wallet
+    this.emit('log');
     this.emit('change');
   },
 
+  // 6: thin wrappers over Meta (the v1 key is only read for migration)
   save() {
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.state)); } catch (e) { /* ignore */ }
+    const M = this.meta();
+    if (!M) return false;
+    M.save();
+    return true;
   },
   load() {
-    try {
-      const raw = localStorage.getItem(SAVE_KEY);
-      if (!raw) return false;
-      const s = JSON.parse(raw);
-      if (!s || !s.grid || !s.companies) return false;
-      for (const c of COMPANIES) s.companies[c.id] ||= { trust: 40, served: 0, contractUntil: 0, loan: null, office: false };
-      for (const g of GOOD_IDS) { s.stock[g] ??= 0; s.prices[g] ??= GOODS[g].base; s.policy[g] ||= { buy: true, sell: true }; }
-      s.recentAway ??= 0; s.stats.diverted ??= 0;
-      this.state = s; this.floaters = [];
-      return true;
-    } catch (e) { return false; }
+    if (typeof Meta === 'undefined' || !Meta) return false;
+    if (!Meta.profile) Meta.init();
+    return !!this.state;
   },
-  reset() { localStorage.removeItem(SAVE_KEY); this.newGame(); },
+  reset() {
+    try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ }
+    const M = this.meta();
+    if (M) M.newStationHere(); else this.newGame();
+  },
 
-  log(msg, cls = '') {
-    const s = this.state;
+  // v1 load fix-ups plus the v2 fields (sector, cells); safe to run on any saved station
+  sanitize(s) {
+    if (!s || !s.grid || !s.companies) return null;
+    for (const c of COMPANIES) s.companies[c.id] ||= { trust: 40, served: 0, contractUntil: 0, loan: null, office: false };
+    s.stock ||= {}; s.prices ||= {}; s.policy ||= {};
+    for (const g of GOOD_IDS) { s.stock[g] ??= 0; s.prices[g] ??= GOODS[g].base; s.policy[g] ||= { buy: true, sell: true }; }
+    s.recentAway ??= 0; s.stats ||= { shipsServed: 0, cargoTraded: 0, earned: 0, turnedAway: 0, diverted: 0 }; s.stats.diverted ??= 0;
+    s.ships ||= []; s.log ||= []; s.fx ||= { flareUntil: 0, boom: null, glut: null, festivalUntil: 0 };
+    s.income ||= { today: 0, yesterday: 0, breakdown: {} };
+    s.speed ??= 1; s.level ??= 1; s.residents ??= 0; s.rep ??= 0.3; s.t ??= 0; s.day ??= 1;
+    s.sector = this.sectorDef(s.sector) ? s.sector : 'home';
+    s.cells ||= {};
+    const now = Date.now();
+    for (let r = 0; r < s.grid.length; r++) for (let c = 0; c < s.grid[r].length; c++) {
+      const k = `${r},${c}`;
+      if (s.grid[r][c]) { s.cells[k] ||= { lvl: 1, bank: 0, readyAt: null, builtAt: now, at: now }; s.cells[k].at ??= now; s.cells[k].lvl ??= 1; s.cells[k].bank ??= 0; }
+      else if (s.cells[k]) delete s.cells[k];
+    }
+    if (!s.hub) { for (let r = 0; r < s.grid.length; r++) for (let c = 0; c < s.grid[r].length; c++) if (s.grid[r][c] && s.grid[r][c].id === 'hub') s.hub = { r, c }; }
+    return s;
+  },
+
+  log(msg, cls = '') { this.logTo(this.state, msg, cls); },
+  logTo(s, msg, cls = '') {
+    if (!s) return;
     s.log.unshift({ day: s.day, msg, cls });
     if (s.log.length > 120) s.log.length = 120;
-    this.emit('log');
+    if (s === this.state) this.emit('log');
   },
   toast(msg, cls = '') { this.emit('toast', { msg, cls }); },
   floater(x, y, text, color = '#7ee787') { this.floaters.push({ x, y, text, color, ttl: 1.6 }); },
 
   now() { return this.state.day + this.state.t; },
 
-  // ---------------------------------------------------------- grid helpers
-  cells() {
-    const out = [];
-    const g = this.state.grid;
-    for (let r = 0; r < GRID_ROWS; r++) for (let c = 0; c < GRID_COLS; c++) if (g[r][c]) out.push({ r, c, m: g[r][c] });
+  // ---------------------------------------------------------- grid helpers (grids are sized per sector, 4.5)
+  rows(s = this.state) { return s.grid.length; },
+  cols(s = this.state) { return s.grid[0].length; },
+  queueRadius(s = this.state) { return this.cols(s) / 2 + 1.6; },
+  cells() { return this.cellsOf(this.state); },
+  cellsOf(s) {
+    const out = [], g = s.grid;
+    for (let r = 0; r < g.length; r++) for (let c = 0; c < g[r].length; c++) if (g[r][c]) out.push({ r, c, m: g[r][c] });
     return out;
   },
-  inBounds(r, c) { return r >= 0 && r < GRID_ROWS && c >= 0 && c < GRID_COLS; },
+  inBounds(r, c) { return r >= 0 && r < this.rows() && c >= 0 && c < this.cols(); },
   occupied(r, c) { return this.inBounds(r, c) && !!this.state.grid[r][c]; },
   neighbors(r, c) { return [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]]; },
+
+  // 4.3 cell meta: { lvl, bank, readyAt, builtAt, at, up? }. A cell is "building" while readyAt is set and it is
+  // not an upgrade (upgrading modules keep running at their current level, see data2.js note 3).
+  cellMeta(r, c, s = this.state) { return s && s.cells ? s.cells[`${r},${c}`] || null : null; },
+  isBuilding(r, c, s = this.state) { const m = this.cellMeta(r, c, s); return !!(m && m.readyAt != null && !m.up); },
+  active(r, c, s = this.state) { return !!(s.grid[r] && s.grid[r][c]) && !this.isBuilding(r, c, s); },
+  levelOf(r, c, s = this.state) { const m = this.cellMeta(r, c, s); return m && m.lvl ? m.lvl : 1; },
+  upgradeEffect(id, kind, lvl) {
+    const d = MODULES[id];
+    if (typeof UPGRADE_EFFECTS === 'undefined' || !d.upgrade || !d.upgrade.kind) return 1;
+    const E = UPGRADE_EFFECTS[d.upgrade.kind];
+    return E && E[kind] ? E[kind][clamp(lvl, 1, 3) - 1] : 1;
+  },
+  dockTimeMul(dock, s = this.state) { return dock ? this.upgradeEffect('dock', 'dockTime', this.levelOf(dock.r, dock.c, s)) : 1; },
+  bankRate(id, lvl) { const d = MODULES[id]; const mul = (typeof TIMERS !== 'undefined' ? TIMERS.RATE_MUL : [1, 1.6, 2.4])[clamp(lvl, 1, 3) - 1]; return (d.rate || 0) * mul; },
 
   tierUnlocked(tier) { return tier <= this.state.level; },
 
@@ -104,6 +175,7 @@ const Sim = {
     return { ok: true };
   },
 
+  // 6: place deducts credits, creates the cell meta through Meta.onPlace (which emits build-start), emits built
   place(id, r, c) {
     const chk = this.canPlace(id, r, c);
     if (!chk.ok) { this.toast(chk.why, 'bad'); return false; }
@@ -111,7 +183,10 @@ const Sim = {
     this.state.credits -= def.cost;
     this.state.grid[r][c] = { id, built: this.state.day };
     this.floater(c + 0.5, r + 0.5, `-${fmt(def.cost)}`, '#ff9d5a');
-    this.log(`Built ${def.name}.`, '');
+    const M = this.meta();
+    const started = M ? M.onPlace(r, c, id) : null;
+    if (started && !started.instant) this.log(`Construction of ${def.name} begins.`, '');
+    else this.log(`Built ${def.name}.`, '');
     this.recomputeLevel();
     this.emit('built', { r, c, id });
     this.emit('change');
@@ -136,13 +211,17 @@ const Sim = {
     return { ok: true };
   },
 
+  // 6: demolish clears the cell meta (the bank is lost; the UI says so in its confirm)
   demolish(r, c) {
     const chk = this.canDemolish(r, c);
     if (!chk.ok) { this.toast(chk.why, 'bad'); return false; }
     const id = this.state.grid[r][c].id, def = MODULES[id];
     const refund = Math.round(def.cost * 0.5);
+    const M = this.meta();
+    if (M) M.onDemolish(r, c, id);
     this.state.credits += refund;
     this.state.grid[r][c] = null;
+    if (this.state.cells) delete this.state.cells[`${r},${c}`];
     this.floater(c + 0.5, r + 0.5, `+${fmt(refund)}`);
     this.log(`Scrapped ${def.name} for ${fmt(refund)} credits.`, 'warn');
     this.recomputeLevel();
@@ -152,31 +231,40 @@ const Sim = {
   },
 
   // ---------------------------------------------------------- derived totals
-  totals() {
-    const s = this.state;
+  // 6: cells under construction count for power draw only; upgrade multipliers and the sector bias apply.
+  totals() { return this.totalsOf(this.state); },
+  totalsOf(s) {
+    const B = this.bias(s);
     const T = { produced: 0, used: 0, docks: 0, storage: 0, beds: 0, food: 0, homes: 0, fun: 0,
-      counts: {}, modules: 0, security: 0, tariff: 0, margin: 0, traffic: 0, business: 0,
+      counts: {}, modules: 0, building: 0, security: 0, tariff: 0, margin: 0, traffic: 0, business: 0,
       repairIncome: 0, fuelIncome: 0, repBonus: 0, galactic: false, hasBank: false, hasClinic: false,
-      hasSchool: false, hasMarket: false, produces: {}, converts: [], flare: s.day < s.fx.flareUntil };
-    for (const { m } of this.cells()) {
+      hasSchool: false, hasMarket: false, produces: {}, converts: [], flare: s.day < s.fx.flareUntil,
+      rate: 0, bias: B };
+    const W = (typeof ECON !== 'undefined' && ECON.upgradeModuleWeight != null) ? ECON.upgradeModuleWeight : 0.5;
+    for (const { r, c, m } of this.cellsOf(s)) {
       const d = MODULES[m.id];
+      if (d.power < 0) T.used += -d.power;                       // draw counts even under construction
+      if (this.isBuilding(r, c, s)) { T.building++; continue; }
+      const lvl = this.levelOf(r, c, s);
+      const capMul = this.upgradeEffect(m.id, 'capacity', lvl), powMul = this.upgradeEffect(m.id, 'power', lvl);
       T.counts[m.id] = (T.counts[m.id] || 0) + 1;
-      if (m.id !== 'hub') T.modules++;
-      if (d.power > 0) { if (!(m.id === 'solar' && T.flare)) T.produced += d.power; }
-      else T.used += -d.power;
-      T.docks += d.docks || 0; T.storage += d.storage || 0; T.beds += d.beds || 0;
-      T.food += d.food || 0; T.homes += d.homes || 0; T.fun += d.fun || 0;
+      if (m.id !== 'hub') T.modules += 1 + (lvl - 1) * W;
+      if (d.power > 0 && !(m.id === 'solar' && T.flare)) T.produced += d.power * powMul;
+      T.docks += d.docks || 0; T.storage += d.storage || 0; T.beds += (d.beds || 0) * capMul;
+      T.food += d.food || 0; T.homes += (d.homes || 0) * capMul; T.fun += d.fun || 0;
       T.security += d.security || 0; T.tariff += d.tariff || 0; T.margin += d.margin || 0;
       T.traffic += d.traffic || 0; T.business += d.business || 0;
-      T.repairIncome += d.repairIncome || 0; T.fuelIncome += d.fuelIncome || 0; T.repBonus += d.rep || 0;
+      T.repairIncome += d.repairIncome || 0; T.fuelIncome += (d.fuelIncome || 0) * B.fuel; T.repBonus += d.rep || 0;
+      T.rate += this.bankRate(m.id, lvl);
       if (d.galactic) T.galactic = true;
       if (d.bank) T.hasBank = true;
       if (m.id === 'clinic') T.hasClinic = true;
       if (m.id === 'school') T.hasSchool = true;
       if (m.id === 'market') T.hasMarket = true;
       if (d.produces) for (const g in d.produces) T.produces[g] = (T.produces[g] || 0) + d.produces[g];
-      if (d.converts) T.converts.push(d.converts);
+      if (d.converts) T.converts.push(B.refinery === 1 ? d.converts : Object.assign({}, d.converts, { outAmt: Math.round(d.converts.outAmt * B.refinery) }));
     }
+    T.beds = Math.round(T.beds); T.homes = Math.round(T.homes); T.produced = Math.round(T.produced);
     T.efficiency = T.used > T.produced ? clamp(T.produced / Math.max(1, T.used), 0.3, 1) : 1;
     T.stockTotal = GOOD_IDS.reduce((a, g) => a + s.stock[g], 0);
     T.visitors = s.ships.filter(sh => sh.state === 'docked').reduce((a, sh) => a + sh.crew, 0);
@@ -185,8 +273,7 @@ const Sim = {
   },
 
   // amenity coverage 0..1 across food, beds, fun, health
-  amenity(T) {
-    const s = this.state;
+  amenity(T, s = this.state) {
     const people = T.visitors + s.residents;
     const food = people ? clamp(T.food / people, 0, 1) : 1;
     const beds = T.visitors ? clamp(T.beds / T.visitors, 0, 1) : 1;
@@ -196,23 +283,23 @@ const Sim = {
     return { food, beds, fun, health, score };
   },
 
-  recomputeLevel() {
-    const s = this.state, T = this.totals();
+  recomputeLevel(s = this.state) {
+    const T = this.totalsOf(s);
     let lvl = 1;
     for (const th of LEVEL_THRESHOLDS) if (T.modules >= th.modules && s.rep >= th.rep) lvl = th.level;
     if (lvl > s.level) {
       s.level = lvl;
-      if (lvl === 5) this.log(`${s.name} is now a true galactic hub: a city between the stars, built from one docking collar. Keep growing.`, 'good');
-      else this.log(`Station reaches level ${lvl}: ${TIER_NAMES[lvl]}. New modules unlocked.`, 'good');
-      this.toast(`Level ${lvl} — ${TIER_NAMES[lvl]}`, 'gold');
-      this.emit('levelup', lvl);
+      if (lvl === 5) this.logTo(s, `${s.name} is now a true galactic hub: a city between the stars, built from one docking collar. Keep growing.`, 'good');
+      else this.logTo(s, `Station reaches level ${lvl}: ${TIER_NAMES[lvl]}. New modules unlocked.`, 'good');
+      if (s === this.state) { this.toast(`Level ${lvl} — ${TIER_NAMES[lvl]}`, 'gold'); this.emit('levelup', lvl); }
+      const M = this.meta(); if (M) M.onLevelUp(s, lvl);
     }
     s.level = Math.max(s.level, lvl);
   },
 
-  // ---------------------------------------------------------- prices
+  // ---------------------------------------------------------- prices (6: sector bias on goods)
   effPrice(g) {
-    const s = this.state; let p = s.prices[g];
+    const s = this.state; let p = s.prices[g] * (this.bias(s).goods[g] || 1);
     if (s.fx.boom && s.fx.boom.good === g && s.day < s.fx.boom.until) p *= 3;
     if (s.fx.glut && s.fx.glut.good === g && s.day < s.fx.glut.until) p *= 0.5;
     return p;
@@ -239,28 +326,30 @@ const Sim = {
   },
 
   // ---------------------------------------------------------- ships
+  holdOf(cls) { return Math.max(1, Math.round(cls.cargo * LIVE)); },   // units a ship actually carries (tuning record 1)
+
   spawnShip(forceCompany) {
-    const s = this.state, T = this.totals();
+    const s = this.state, T = this.totals(), B = this.bias(s);
     let pool = COMPANIES.filter(c => !c.galactic || T.galactic);
     let co = forceCompany ? COMPANIES.find(c => c.id === forceCompany) : null;
     if (!co) {
-      // weight by trust: trusted companies send more ships
-      const w = pool.map(c => 1 + s.companies[c.id].trust / 50);
+      // weight by trust: trusted companies send more ships; the sector bias favours its home lines
+      const w = pool.map(c => (1 + s.companies[c.id].trust / 50) * (B.companies[c.id] || 1));
       let r = Math.random() * w.reduce((a, b) => a + b, 0);
       co = pool[0];
       for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r <= 0) { co = pool[i]; break; } }
     }
     const clsId = pick(co.ships), cls = SHIP_CLASSES[clsId], planet = PLANETS[co.home];
-    const cargo = {};
+    const cargo = {}, hold = this.holdOf(cls);
     const goods = [...planet.exports].sort(() => Math.random() - 0.5).slice(0, irnd(1, 2));
-    let left = cls.cargo;
+    let left = hold;
     goods.forEach((g, i) => { const q = i === goods.length - 1 ? left : Math.round(left * rnd(0.4, 0.7)); cargo[g] = q; left -= q; });
-    const side = irnd(0, 3);
-    const x = side === 0 ? -3 : side === 1 ? GRID_COLS + 3 : rnd(-1, GRID_COLS + 1);
-    const y = side === 2 ? -3 : side === 3 ? GRID_ROWS + 3 : rnd(-1, GRID_ROWS + 1);
+    const cols = this.cols(), rows = this.rows(), side = irnd(0, 3);
+    const x = side === 0 ? -3 : side === 1 ? cols + 3 : rnd(-1, cols + 1);
+    const y = side === 2 ? -3 : side === 3 ? rows + 3 : rnd(-1, rows + 1);
     const ship = {
       id: s.nextShipId++, company: co.id, cls: clsId, captain: `Capt. ${pick(CAPTAIN_NAMES)}`,
-      cargo, wants: [...planet.imports], crew: cls.crew + (cls.passengers || 0),
+      cargo, hold, wants: [...planet.imports], crew: cls.crew + (cls.passengers || 0),
       state: 'approach', x, y, angle: Math.random() * Math.PI * 2, dock: null, target: null,
       dockedUntil: 0, waitStart: this.now(), arrived: this.now(), trades: [], earned: 0,
     };
@@ -270,12 +359,12 @@ const Sim = {
     return ship;
   },
 
-  // find dock cell with a free berth point; returns {dock:{r,c}, berth:{x,y}} or null
+  // find dock cell with a free berth point; returns {dock:{r,c}, berth:{x,y}} or null (docks under construction do not count)
   findBerth() {
     const s = this.state, taken = new Set(s.ships.filter(sh => sh.dock).map(sh => `${sh.dock.r},${sh.dock.c}`));
     const best = [];
     for (const { r, c, m } of this.cells()) {
-      if (!(MODULES[m.id].docks > 0) || taken.has(`${r},${c}`)) continue;
+      if (!(MODULES[m.id].docks > 0) || taken.has(`${r},${c}`) || !this.active(r, c)) continue;
       const bp = this.berthPoint(r, c);
       if (bp) best.push({ dock: { r, c }, berth: bp });
     }
@@ -303,12 +392,13 @@ const Sim = {
     const s = this.state, co = s.companies[ship.company], coDef = COMPANIES.find(c => c.id === ship.company);
     const cls = SHIP_CLASSES[ship.cls];
     const discount = s.day < co.contractUntil ? 0.85 : 1;
+    const size = cls.cargo / 80;                                  // class size ratio for fuel and repairs
     let earned = 0;
-    // fees
-    const fee = Math.round(cls.dockFee * discount * T.efficiency);
+    // fees (live-scaled)
+    const fee = Math.max(1, Math.round(cls.dockFee * discount * T.efficiency * LIVE));
     earned += fee; ship.trades.push(`Docking fee +${fmt(fee)}`);
-    if (T.fuelIncome) { const f = Math.round(T.fuelIncome * (cls.cargo / 80) * (T.counts.fuel > 1 ? 1.3 : 1)); earned += f; ship.trades.push(`Fuel +${fmt(f)}`); }
-    if (T.repairIncome && Math.random() < 0.6) { const rp = Math.round(T.repairIncome * (cls.cargo / 80)); earned += rp; ship.trades.push(`Repairs +${fmt(rp)}`); }
+    if (T.fuelIncome) { const f = Math.max(1, Math.round(T.fuelIncome * size * (T.counts.fuel > 1 ? 1.3 : 1) * LIVE)); earned += f; ship.trades.push(`Fuel +${fmt(f)}`); }
+    if (T.repairIncome && Math.random() < 0.6) { const rp = Math.max(1, Math.round(T.repairIncome * size * LIVE)); earned += rp; ship.trades.push(`Repairs +${fmt(rp)}`); }
     s.credits += earned; this.earn(earned, 'docking & services');
 
     // ship sells cargo to station
@@ -327,9 +417,9 @@ const Sim = {
       ship.trades.push(`Bought ${q} ${GOODS[g].name} -${fmt(cost)}`);
     }
     // ship buys what its home world wants, at full price
-    let capacity = cls.cargo;
+    let capacity = ship.hold || this.holdOf(cls);
     const wantList = ship.wants.filter(g => s.policy[g].sell && s.stock[g] > 0);
-    const perGood = Math.floor(capacity / Math.max(1, wantList.length));
+    const perGood = Math.max(1, Math.floor(capacity / Math.max(1, wantList.length)));
     for (const g of wantList) {
       const q = Math.min(s.stock[g], perGood, capacity);
       if (q <= 0) continue;
@@ -350,10 +440,10 @@ const Sim = {
       this.earn(got, 'cargo sold');
       ship.trades.push(`Took ${q} ${GOODS[g].name} on spec +${fmt(got)}`);
     }
-    if (T.tariff && traded) { const t = Math.round(T.tariff * traded); s.credits += t; earned += t; this.earn(t, 'tariffs'); ship.trades.push(`Tariff +${fmt(t)}`); }
+    if (T.tariff && traded) { const t = Math.round(T.tariff * traded); if (t > 0) { s.credits += t; earned += t; this.earn(t, 'tariffs'); ship.trades.push(`Tariff +${fmt(t)}`); } }
     s.stats.cargoTraded += traded;
     ship.earned = earned;
-    ship.dockedUntil = this.now() + cls.dockDays;
+    ship.dockedUntil = this.now() + cls.dockDays * this.dockTimeMul(ship.dock);   // 4.3 dock upgrades shorten service
     if (earned > 0) this.floater(ship.x, ship.y - 0.3, `+${fmt(earned)}`, coDef.color);
     // trust: penalise long waits
     const waited = this.now() - ship.waitStart;
@@ -368,24 +458,27 @@ const Sim = {
   onDepart(ship) {
     const s = this.state, cr = s.hub.r + 0.5, cc = s.hub.c + 0.5;
     const dx = ship.x - cc, dy = ship.y - cr, L = Math.hypot(dx, dy) || 1;
-    ship.target = { x: cc + dx / L * (GRID_COLS + 6), y: cr + dy / L * (GRID_ROWS + 6) };
+    ship.target = { x: cc + dx / L * (this.cols() + 6), y: cr + dy / L * (this.rows() + 6) };
     ship.dock = null; ship.state = 'depart';
     this.emit('depart', ship);
   },
 
   tickShips(dtDays, T) {
-    const s = this.state, now = this.now();
+    const s = this.state, now = this.now(), B = T.bias || this.bias(s);
     // spawn
     s.shipTimer -= dtDays;
     if (s.shipTimer <= 0) {
       const offices = Object.values(s.companies).filter(c => c.office).length;
       const contracts = Object.values(s.companies).filter(c => s.day < c.contractUntil).length;
-      const rate = (0.9 + s.rep * 0.6 + T.traffic * 4 + offices * 0.4 + contracts * 0.5) * (T.galactic ? 1.25 : 1);
+      const M = this.meta();
+      const convoy = (M && M.convoyActive()) ? ((typeof TIMERS !== 'undefined' && TIMERS.CONVOY_TRAFFIC) || 1.5) : 1;   // 4.11
+      const rate = (0.9 + s.rep * 0.6 + T.traffic * 4 + offices * 0.4 + contracts * 0.5) * (T.galactic ? 1.25 * B.gate : 1) * B.traffic * convoy;
       s.shipTimer = rnd(0.6, 1.4) / rate;
       const queued = s.ships.filter(sh => sh.state === 'queue').length;
       if (queued >= 2) { s.stats.diverted++; s.recentAway += 0.5; }   // captains see the queue and divert elsewhere
       else if (s.ships.length < 16) this.spawnShip();
     }
+    const QR = this.queueRadius(s);
     for (const ship of [...s.ships]) {
       if (ship.state === 'approach' || ship.state === 'depart') {
         const dx = ship.target.x - ship.x, dy = ship.target.y - ship.y, d = Math.hypot(dx, dy);
@@ -398,7 +491,7 @@ const Sim = {
         } else { ship.x += dx / d * step; ship.y += dy / d * step; }
       } else if (ship.state === 'queue') {
         ship.orbit = (ship.orbit ?? Math.atan2(ship.y - s.hub.r - 0.5, ship.x - s.hub.c - 0.5)) + 0.7 * dtDays;
-        const tx = s.hub.c + 0.5 + Math.cos(ship.orbit) * QUEUE_RADIUS, ty = s.hub.r + 0.5 + Math.sin(ship.orbit) * QUEUE_RADIUS * 0.75;
+        const tx = s.hub.c + 0.5 + Math.cos(ship.orbit) * QR, ty = s.hub.r + 0.5 + Math.sin(ship.orbit) * QR * 0.75;
         ship.angle = Math.atan2(ty - ship.y, tx - ship.x);
         ship.x += (tx - ship.x) * Math.min(1, dtDays * 6); ship.y += (ty - ship.y) * Math.min(1, dtDays * 6);
         if (now - ship.waitStart > MAX_WAIT_DAYS) {
@@ -416,9 +509,9 @@ const Sim = {
     }
   },
 
-  // ---------------------------------------------------------- daily tick
+  // ---------------------------------------------------------- daily tick (live flows scaled by LIVE; residents and rent by the sector bias)
   dailyTick() {
-    const s = this.state, T = this.totals(), A = this.amenity(T);
+    const s = this.state, T = this.totals(), A = this.amenity(T), B = T.bias || this.bias(s);
     let delta = 0;
     // production
     for (const g in T.produces) { const room = T.storage - T.stockTotal; const q = Math.min(T.produces[g], Math.max(0, room)); s.stock[g] += q; }
@@ -428,15 +521,15 @@ const Sim = {
     }
     // residents: rent, business, growth
     if (s.residents > 0) {
-      const rent = Math.round(s.residents * 6 * T.efficiency); delta += rent; this.earn(rent, 'resident rent');
-      if (T.business) { const b = Math.round(s.residents * T.business * (s.day < s.fx.festivalUntil ? 2 : 1)); delta += b; this.earn(b, 'promenade business'); }
+      const rent = Math.round(s.residents * 6 * T.efficiency * B.rent * LIVE); delta += rent; this.earn(rent, 'resident rent');
+      if (T.business) { const b = Math.round(s.residents * T.business * (s.day < s.fx.festivalUntil ? 2 : 1) * LIVE); delta += b; this.earn(b, 'promenade business'); }
       const eat = Math.round(s.residents * 0.15);
       if (s.stock.grain >= eat) s.stock.grain -= eat;
       else if (s.stock.fruit >= eat) s.stock.fruit -= eat;
     }
     const freeHomes = T.homes - s.residents;
-    if (freeHomes > 0 && A.score > 0.55) {
-      const growth = Math.max(1, Math.round(T.visitors * 0.08 * (T.hasSchool ? 2 : 1) * A.score));
+    if (B.residents > 0 && freeHomes > 0 && A.score > 0.55) {
+      const growth = Math.max(1, Math.round(T.visitors * 0.08 * (T.hasSchool ? 2 : 1) * A.score * B.residents));
       const add = Math.min(freeHomes, growth);
       if (add > 0 && Math.random() < 0.7) { s.residents += add; if (s.residents === add) this.log('The first permanent residents move in.', 'good'); }
     } else if (A.score < 0.35 && s.residents > 0) {
@@ -445,17 +538,17 @@ const Sim = {
     }
     // visitors spending
     if (T.visitors) {
-      const perHead = 6 * (0.5 + A.food * 0.6 + A.beds * 0.4 + A.fun * 0.9) * (s.day < s.fx.festivalUntil ? 2 : 1) * T.efficiency;
+      const perHead = 6 * (0.5 + A.food * 0.6 + A.beds * 0.4 + A.fun * 0.9) * (s.day < s.fx.festivalUntil ? 2 : 1) * T.efficiency * LIVE;
       const spend = Math.round(T.visitors * perHead); delta += spend; this.earn(spend, 'crew spending');
     }
     // menagerie exhibits
     if (T.counts.menagerie && s.stock.xenofauna > 0) {
-      const ex = Math.round(Math.min(s.stock.xenofauna, 30 * T.counts.menagerie) * 4 * (1 + s.residents / 50)); delta += ex; this.earn(ex, 'menagerie tickets');
+      const ex = Math.round(Math.min(s.stock.xenofauna, 30 * T.counts.menagerie) * 4 * (1 + s.residents / 50) * LIVE); delta += ex; this.earn(ex, 'menagerie tickets');
     }
     // offices pay rent
     const offices = Object.values(s.companies).filter(c => c.office).length;
-    if (offices) { const r = offices * 80; delta += r; this.earn(r, 'office leases'); }
-    // bank: loan repayments
+    if (offices) { const r = Math.round(offices * 80 * LIVE); delta += r; this.earn(r, 'office leases'); }
+    // bank: loan repayments (player money, never scaled)
     for (const c of COMPANIES) {
       const co = s.companies[c.id];
       if (!co.loan) continue;
@@ -468,7 +561,7 @@ const Sim = {
     // upkeep
     let upkeep = 0;
     for (const { m } of this.cells()) upkeep += MODULES[m.id].cost * 0.004;
-    upkeep = Math.round(upkeep + s.residents * 1); delta -= upkeep; this.earn(-upkeep, 'upkeep');
+    upkeep = Math.round((upkeep + s.residents * 1) * LIVE); delta -= upkeep; this.earn(-upkeep, 'upkeep');
     s.credits += delta;
 
     // prices drift & mean-revert
@@ -497,13 +590,14 @@ const Sim = {
     this.emit('change');
   },
 
-  // ---------------------------------------------------------- events
+  // ---------------------------------------------------------- events (6: sector bias on event weights)
   rollEvent() {
-    const s = this.state;
+    const s = this.state, B = this.bias(s);
     const pool = EVENTS.filter(e => !e.minLevel || s.level >= e.minLevel);
-    const total = pool.reduce((a, e) => a + e.weight, 0);
+    const weights = pool.map(e => e.weight * (B.events[e.id] || 1));
+    const total = weights.reduce((a, w) => a + w, 0);
     let r = Math.random() * total, ev = pool[0];
-    for (const e of pool) { r -= e.weight; if (r <= 0) { ev = e; break; } }
+    for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) { ev = pool[i]; break; } }
     const data = {};
     if (ev.id === 'boom' || ev.id === 'glut') data.good = pick(GOOD_IDS);
     if (ev.id === 'contract') data.company = pick(COMPANIES.filter(c => !c.galactic || this.totals().galactic)).id;
@@ -552,6 +646,7 @@ const Sim = {
         break;
       case 'festival': s.fx.festivalUntil = s.day + 3; this.log('Station festival! Visitor spending doubled for 3 days.', 'good'); break;
     }
+    const M = this.meta(); if (M) M.onResolve(ev, accepted);
     this.emit('change');
   },
 
@@ -572,15 +667,47 @@ const Sim = {
   },
 
   // ---------------------------------------------------------- main tick
-  tick(dtReal) {
-    const s = this.state; if (!s || s.pending) return;
-    const dtDays = (dtReal * s.speed) / DAY_SECONDS;
-    if (dtDays <= 0) return;
+  // advance the world by dtDays of game time (shared by the frame tick and the offline catch-up)
+  advance(dtDays) {
+    const s = this.state; if (!s || s.pending || !(dtDays > 0)) return;
     const T = this.totals();
     this.tickShips(dtDays, T);
     s.t += dtDays;
     while (s.t >= 1) { s.t -= 1; s.day++; this.dailyTick(); }
-    for (const f of this.floaters) { f.ttl -= dtDays * DAY_SECONDS / s.speed; f.y -= 0.6 * dtDays * DAY_SECONDS / s.speed; }
+  },
+
+  tick(dtReal) {
+    const s = this.state; if (!s || s.pending) return;
+    const dtDays = (dtReal * s.speed) / DAY_SECONDS;
+    if (dtDays <= 0) return;
+    this.advance(dtDays);
+    for (const f of this.floaters) { f.ttl -= dtReal; f.y -= 0.6 * dtReal; }
     this.floaters = this.floaters.filter(f => f.ttl > 0);
+  },
+
+  // 4.2 / 6: fast-forward the active sector by `ms` of real time at speed 1 (capped at TIMERS.OFFLINE_SIM_CAP_MS).
+  // Transmissions without a choice resolve themselves; one that needs a decision stays pending and ends the loop.
+  catchUp(ms) {
+    const s = this.state, out = { ms: 0, days: 0, credits: 0, served: 0, events: 0, pending: false };
+    if (!s || !(ms > 0)) return out;
+    const cap = (typeof TIMERS !== 'undefined' && TIMERS.OFFLINE_SIM_CAP_MS) || 2 * 3600e3;
+    ms = Math.min(ms, cap);
+    const credits0 = s.credits, served0 = s.stats.shipsServed, STEP = 0.25;
+    let left = ms / (DAY_SECONDS * 1000), guard = Math.ceil(left / STEP) + 10;
+    this._muted = true;
+    try {
+      while (left > 1e-9 && guard-- > 0) {
+        if (s.pending) { if (s.pending.choice) break; this.resolveEvent(true); out.events++; }
+        const d = Math.min(STEP, left);
+        this.advance(d); left -= d; out.days += d;
+      }
+    } finally { this._muted = false; }
+    if (s.pending) { out.pending = true; out.events++; }
+    this.floaters = [];
+    out.ms = ms; out.days = Math.round(out.days * 100) / 100;
+    out.credits = Math.round(s.credits - credits0); out.served = s.stats.shipsServed - served0;
+    this.emit('log'); this.emit('change');
+    if (s.pending) this.emit('event');
+    return out;
   },
 };

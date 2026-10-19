@@ -17,186 +17,123 @@
 <meta property="og:title" content="Waystation">
 <meta property="og:description" content="A space station builder for the browser. Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate.">
 <meta property="og:url" content="https://joshanderson051.github.io/waystation/play/">
-<meta property="og:image" content="https://joshanderson051.github.io/waystation/assets/og.png">
+<meta property="og:image" content="https://joshanderson051.github.io/waystation/assets/og.jpg">
 <meta property="og:image:width" content="1440">
 <meta property="og:image:height" content="756">
 <meta property="og:image:alt" content="The Waystation bridge console: a station in plan view beside the build panel">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Waystation">
 <meta name="twitter:description" content="A space station builder for the browser. Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate.">
-<meta name="twitter:image" content="https://joshanderson051.github.io/waystation/assets/og.png">
+<meta name="twitter:image" content="https://joshanderson051.github.io/waystation/assets/og.jpg">
+<!-- 7.2 store configuration: sandbox until Stripe is connected -->
+<meta name="waystation-store" content='{"mode":"sandbox"}'>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Barlow:wght@400;500&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body data-level="1" data-screen="title">
+
+<!-- 0.8 / 2.4 the world: the engine's full-bleed host behind every piece of glass -->
+<div id="world" aria-hidden="true"></div>
+
+<!-- 2.4 the bridge: status bar · rail + panel host + notices · context bar (hud.js fills each shell) -->
 <div id="app">
-
-  <!-- ================= 4.3 Top rail ================= -->
-  <header id="topbar">
-    <div class="brand" style="--i:0">
-      <div class="brand-row">
-        <span class="wordmark">Waystation</span>
-        <span id="station-name" class="label">&mdash;</span>
-      </div>
-      <div class="registry-line micro"><span id="registry">WS-0000</span><span class="sep">&middot;</span><span>Day <span id="s-day">001</span></span></div>
-    </div>
-
-    <div class="stat credits" style="--i:1">
-      <span class="lbl">Credits</span>
-      <span class="val num-hero" id="s-credits">0</span>
-    </div>
-    <div class="stat income" style="--i:2">
-      <span class="lbl">Income</span>
-      <span class="val"><i id="s-income-delta" class="tri up c-good"></i><span class="num" id="s-income">+0</span></span>
-    </div>
-    <div class="stat power" style="--i:3">
-      <span class="lbl">Power</span>
-      <span class="val"><span class="num c-ice" id="s-power">0 / 0</span><span id="power-pips"></span><span id="power-chip" class="chip warn" data-shape="sq" hidden>Flare</span></span>
-    </div>
-    <div class="stat visitors" style="--i:4" title="Visitors / beds">
-      <span class="lbl">Visitors</span>
-      <span class="val num c-sage" id="s-visitors">0 / 0</span>
-    </div>
-    <div class="stat residents" style="--i:5" title="Residents / homes">
-      <span class="lbl">Residents</span>
-      <span class="val num c-sage" id="s-residents">0 / 0</span>
-    </div>
-    <div class="stat rep" style="--i:6" title="Reputation 0.00 / 5">
-      <span class="lbl">Reputation</span>
-      <span class="val" id="stars"><span class="pip"><i></i></span><span class="pip"><i></i></span><span class="pip"><i></i></span><span class="pip"><i></i></span><span class="pip"><i></i></span></span>
-    </div>
-    <div class="stat level" style="--i:7">
-      <span id="s-level" class="chip amber level">L1 &middot; Way Station</span>
-    </div>
-
-    <div class="rail-right">
-      <div id="speed" class="seg" role="group" aria-label="Game speed">
-        <button type="button" data-speed="0" title="Pause (Space)" aria-label="Pause"><i class="pause-ic"></i></button>
-        <button type="button" data-speed="1" class="on" title="Normal speed (1)">1&times;</button>
-        <button type="button" data-speed="2" title="Double speed (2)">2&times;</button>
-        <button type="button" data-speed="4" title="Quadruple speed (4)">4&times;</button>
-      </div>
-      <button type="button" class="btn" id="btn-save" title="Save (the game also auto-saves every few seconds)"><span class="ic-slot" data-icon="save"></span><span class="btn-label">Save</span></button>
-      <button type="button" class="btn danger" id="btn-new" title="New station"><span class="ic-slot" data-icon="new"></span><span class="btn-label">New</span></button>
-    </div>
-  </header>
-
-  <!-- ================= 4.1 Main: canvas + sidebar ================= -->
+  <header id="statusbar" class="glass bar" data-hue="amber"><i class="spine"></i></header>
+  <div id="condition" role="status" aria-live="polite"></div>
   <div id="main">
-    <div id="canvas-wrap">
-      <canvas id="bg"></canvas><canvas id="station"></canvas>
-
-      <!-- 5.10 condition banner: text set by ui.js, state by body[data-condition] -->
-      <div id="condition" role="status" aria-live="polite"></div>
-
-      <!-- 12.3 objective strip -->
-      <div id="orders" hidden>
-        <div class="order" data-order="dock" title="Ships need a berth. One bay, one ship at a time."><i></i><span>Build a Docking Bay</span></div>
-        <div class="order" data-order="solar" title="Every module draws power. Arrays are cheap; flares dim them."><i></i><span>Build a Solar Array</span></div>
-        <div class="order" data-order="serve" title="Served ships pay fees and raise company trust."><i></i><span>Serve 3 ships</span></div>
-      </div>
-
-      <!-- 12.4 level-up banner -->
-      <div id="level-banner" aria-live="polite"></div>
-
-      <!-- 6.7 tooltip, 6.10 toasts -->
-      <div id="tooltip" role="tooltip"></div>
-      <div id="toasts"></div>
+    <nav id="rail" class="glass" aria-label="Command rail"></nav>
+    <div id="panel-host" hidden>
+      <section id="panel" class="glass cut" role="region" aria-label="Panel"></section>
     </div>
-
-    <aside id="sidebar">
-      <nav id="tabs" role="tablist" aria-label="Console sections">
-        <button type="button" class="tab active" data-tab="build" role="tab" aria-selected="true" aria-controls="panel-build" title="Build (B)" style="--i:0"><i class="tab-tick"></i><span class="tab-idx">01</span><span class="tab-label">Build</span><span class="tab-key">B</span></button>
-        <button type="button" class="tab" data-tab="station" role="tab" aria-selected="false" aria-controls="panel-station" title="Station" style="--i:1"><i class="tab-tick"></i><span class="tab-idx">02</span><span class="tab-label">Station</span><span class="tab-key"></span></button>
-        <button type="button" class="tab" data-tab="market" role="tab" aria-selected="false" aria-controls="panel-market" title="Market (M)" style="--i:2"><i class="tab-tick"></i><span class="tab-idx">03</span><span class="tab-label">Market</span><span class="tab-key">M</span></button>
-        <button type="button" class="tab" data-tab="companies" role="tab" aria-selected="false" aria-controls="panel-companies" title="Companies" style="--i:3"><i class="tab-tick"></i><span class="tab-idx">04</span><span class="tab-label">Companies</span><span class="tab-key"></span></button>
-        <button type="button" class="tab" data-tab="log" role="tab" aria-selected="false" aria-controls="panel-log" title="Log" style="--i:4"><i class="tab-tick"></i><span class="tab-idx">05</span><span class="tab-label">Log</span><span class="tab-key"></span></button>
-        <i id="tab-indicator" aria-hidden="true"></i>
-      </nav>
-
-      <section class="panel active" id="panel-build" role="tabpanel" aria-label="Build"></section>
-      <section class="panel" id="panel-station" role="tabpanel" aria-label="Station"></section>
-      <section class="panel" id="panel-market" role="tabpanel" aria-label="Market"></section>
-      <section class="panel" id="panel-companies" role="tabpanel" aria-label="Companies"></section>
-      <section class="panel" id="panel-log" role="tabpanel" aria-label="Log">
-        <h3 class="shelf" style="--i:0"><span class="shelf-label">Station log</span><span class="shelf-tag" id="log-tag"></span></h3>
-        <div id="log-list"></div>
-      </section>
-
-      <footer id="sidebar-foot" class="micro"></footer>
+    <aside id="notices" aria-label="Notices">
+      <div id="toasts" aria-live="polite"></div>
+      <div id="nextup" class="glass cut-sm" hidden><i class="spine"></i><div class="nu-head"><span class="nu-title">Next up</span></div><div class="nu-rows"></div></div>
     </aside>
   </div>
-
-  <!-- ================= 6.11 Status bar ================= -->
-  <footer id="statusbar">
-    <span id="hint">Pick a module in 01 BUILD, then click a bracketed cell. Click a module to inspect it.</span>
-    <span id="queue-info"></span>
-    <span id="perf-tag" class="micro" hidden></span>
-  </footer>
+  <footer id="contextbar" class="glass bar" data-hue="ice"><i class="spine"></i></footer>
 </div>
 
-<!-- ================= 6.8 Modal: incoming transmission ================= -->
+<!-- 5.3 overlays (overlays.js owns their content) -->
 <div id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-  <div class="box" data-kind="event">
-    <div class="modal-head"><span class="ic-slot" data-icon="dish"></span><span id="modal-tag" class="micro"></span></div>
-    <div class="modal-body">
-      <h2 id="modal-title"></h2>
-      <p id="modal-text"></p>
-      <div id="modal-extra"></div>
-    </div>
+  <div class="box glass cut" data-kind="event"><i class="spine"></i>
+    <div class="modal-head"><span class="modal-ic"></span><span id="modal-tag" class="micro"></span></div>
+    <div class="modal-body"><h2 id="modal-title"></h2><div id="modal-text" class="body-lg"></div><div id="modal-extra"></div></div>
     <div id="modal-actions"></div>
   </div>
 </div>
+<div id="sheet" role="dialog" aria-modal="true"><div class="sheet-box glass cut"><i class="spine"></i><div class="sheet-content"></div></div></div>
+<div id="celebrate" aria-live="polite"></div>
+<div id="tooltip" role="tooltip" class="glass"></div>
+<div id="flights" aria-hidden="true"></div>
 
-<!-- ================= 12.1 Title screen ================= -->
+<!-- 5.4 title screen v2 (main.js wires the buttons; ids are the v1 contract plus resume-rank / resume-name) -->
 <div id="title">
-  <div class="title-col">
+  <div class="title-band glass"><i class="sweep"></i>
     <h1 class="wordmark hero">Waystation</h1>
-    <div class="title-sub section">Station commissioning</div>
-
-    <div class="commission">
-      <!-- with a save: resume card first -->
-      <div id="title-resume" hidden>
-        <button type="button" id="btn-resume" class="card-button">
-          <span class="resume-main">
-            <span class="resume-head"><span class="ic-slot" data-icon="ship"></span><span class="label">Resume</span></span>
-            <span class="resume-meta" id="resume-meta">&mdash;</span>
-          </span>
-          <canvas id="title-thumb" width="120" height="72" aria-hidden="true"></canvas>
-        </button>
-        <div class="title-actions"><button type="button" id="btn-newstation" class="btn danger">New station</button></div>
+    <div class="title-sub">Station commissioning</div>
+  </div>
+  <div class="commission glass cut" data-hue="amber"><i class="spine"></i>
+    <div id="title-resume" hidden>
+      <button type="button" id="btn-resume" class="resume-card">
+        <canvas id="title-thumb" width="200" height="120" aria-hidden="true"></canvas>
+        <span class="resume-main">
+          <span id="resume-rank" class="resume-rank">Commander</span>
+          <span id="resume-name" class="resume-name">&mdash;</span>
+          <span id="resume-meta" class="resume-meta"></span>
+          <span class="resume-cta">Resume <span class="ic-slot" data-icon="chevron-right"></span></span>
+        </span>
+      </button>
+      <div class="title-actions"><button type="button" id="btn-newstation" class="btn ghost">New profile</button></div>
+    </div>
+    <div id="title-form">
+      <label class="field" for="title-name">Station name</label>
+      <div class="name-row">
+        <input id="title-name" type="text" class="input" maxlength="28" autocomplete="off" spellcheck="false" aria-describedby="title-registry">
+        <button type="button" id="btn-reroll" class="btn icon ghost" title="Another name" aria-label="Another name"><span class="ic-slot" data-icon="reroll"></span></button>
       </div>
-
-      <!-- without a save (or after NEW STATION): commissioning form -->
-      <div id="title-form">
-        <label class="field label" for="title-name">Station name</label>
-        <div class="name-row">
-          <input id="title-name" type="text" maxlength="28" autocomplete="off" spellcheck="false" aria-describedby="title-registry">
-          <button type="button" id="btn-reroll" class="btn icon ghost" title="Another name"><span class="ic-slot" data-icon="reroll"></span></button>
-        </div>
-        <div id="title-registry" class="micro">Registry WS-0000 will be assigned on commission</div>
-        <div id="title-confirm" class="title-confirm" hidden>
-          <p class="confirm-text body">Your current station will be scrapped.</p>
-          <div class="title-actions" style="margin-top:0"><button type="button" id="btn-title-back" class="btn ghost">Back</button></div>
-        </div>
-        <div class="title-actions"><button type="button" id="btn-commission" class="btn primary">Commission station</button></div>
+      <div id="title-registry" class="micro">Registry WS-0000 will be assigned on commission</div>
+      <div id="title-confirm" class="title-confirm" hidden>
+        <p class="confirm-text">Your current profile will be replaced. Every sector, rank and reward goes with it.</p>
+        <div class="title-actions"><button type="button" id="btn-title-back" class="btn ghost">Back</button></div>
       </div>
+      <div class="title-actions"><button type="button" id="btn-commission" class="btn big primary">Commission station</button></div>
     </div>
   </div>
 </div>
 
-<!-- 0.1 load order: data, sim, art, art-mod-a, art-mod-b, fx, ships, render, ui, main -->
+<!-- 2.4 phones get a message, not a broken bridge -->
+<div id="phone" class="glass cut" data-hue="amber"><i class="spine"></i>
+  <span class="wordmark">Waystation</span>
+  <p class="body-lg">Waystation is a desktop and tablet game. Open it on a screen at least 1024 pixels wide and the bridge will be waiting.</p>
+</div>
+
+<!-- 0.1 load order -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.6.6/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi-filters@6.1.5/dist/pixi-filters.min.js"></script>
 <script src="js/data.js"></script>
+<script src="js/data2.js"></script>
 <script src="js/sim.js"></script>
+<script src="js/meta.js"></script>
 <script src="js/art.js"></script>
 <script src="js/art-mod-a.js"></script>
 <script src="js/art-mod-b.js"></script>
-<script src="js/fx.js"></script>
 <script src="js/ships.js"></script>
-<script src="js/render.js"></script>
-<script src="js/ui.js"></script>
+<script src="js/engine/stage.js"></script>
+<script src="js/engine/camera.js"></script>
+<script src="js/engine/space.js"></script>
+<script src="js/engine/world.js"></script>
+<script src="js/engine/traffic.js"></script>
+<script src="js/engine/fx.js"></script>
+<script src="js/engine/post.js"></script>
+<script src="js/engine/input.js"></script>
+<script src="js/engine/index.js"></script>
+<script src="js/ui/sound.js"></script>
+<script src="js/ui/format.js"></script>
+<script src="js/ui/overlays.js"></script>
+<script src="js/ui/panels.js"></script>
+<script src="js/ui/hud.js"></script>
+<script src="js/store.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waystation engine preview</title>
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#04050A; --bg:#090B12; --surface-1:#0F1119; --surface-2:#161A25; --surface-3:#1E2432; --hairline:#262C3A; --hairline-2:#343B4C;
+    --hull:#1B2030; --hull-edge:#2A3142; --hull-rim:rgba(243,233,214,.25); --truss:#232838;
+    --amber:#E9A23B; --amber-hi:#FFC46A; --amber-dim:rgba(233,162,59,.55); --amber-ghost:rgba(233,162,59,.14);
+    --ice:#8FD3E8; --ice-hi:#BFE8F4; --ice-dim:rgba(143,211,232,.55); --ice-ghost:rgba(143,211,232,.14);
+    --sage:#A8C8A0; --sage-hi:#CBE2C4; --rose:#E58BB8; --rose-hi:#F2B6D3; --gold:#FFE28A;
+    --ivory:#F3E9D6; --ivory-dim:rgba(243,233,214,.6); --lamp:#FFE9B8;
+    --good:#6FD3A3; --warn:#FF8F3D; --bad:#FF4F5E; --ink:#E6E8EC; --ink-2:#A3A7B0; --ink-3:#6B707C; --on-accent:#140C00;
+    --space-0:#03040A; --space-1:#070B18; --space-2:#0B1226;
+    --glass:rgba(10,15,30,.72); --glass-2:rgba(16,23,44,.78); --edge:rgba(143,211,232,.22); --edge-2:rgba(143,211,232,.42); --blur:14px;
+    --glow-amber-2:0 0 18px rgba(233,162,59,.45), 0 0 2px rgba(255,196,106,.8);
+    --am:#C084FF; --cut:10px; --cut-sm:6px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--space-0);color:var(--ink);font:400 14px/1.5 'Barlow','Segoe UI',system-ui,sans-serif;overflow:hidden}
+  #world{position:fixed;inset:0;z-index:0}
+  #world canvas{display:block}
+  .glass{background:var(--glass);backdrop-filter:blur(var(--blur));border:1px solid var(--edge);clip-path:polygon(var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%,0 var(--cut))}
+  #panel{position:fixed;right:16px;top:16px;width:300px;max-height:calc(100vh - 32px);overflow:auto;z-index:2;padding:14px 16px 16px;display:flex;flex-direction:column;gap:10px}
+  #panel.hidden{display:none}
+  h1{margin:0;font:600 13px 'Barlow Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--ivory)}
+  .sec{font:600 12px 'Barlow Condensed',sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);margin:4px 0 0;display:flex;align-items:center;gap:8px}
+  .sec::after{content:'';flex:1;height:1px;background:var(--hairline)}
+  .row{display:flex;flex-wrap:wrap;gap:6px}
+  button{min-height:32px;padding:0 12px;background:var(--glass-2);color:var(--ink);border:1px solid var(--edge);border-radius:3px;font:600 13px 'Barlow Condensed',sans-serif;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;position:relative}
+  button::before{content:'';position:absolute;left:4px;top:6px;bottom:6px;width:2px;background:var(--amber)}
+  button:hover{background:var(--surface-3);border-color:var(--edge-2)}
+  button.on{box-shadow:inset 0 0 0 1px var(--amber), var(--glow-amber-2)}
+  button.am{color:var(--am)} button.am::before{background:var(--am)}
+  #readout{position:fixed;left:16px;bottom:16px;z-index:2;padding:10px 14px;font:500 12px 'JetBrains Mono','Cascadia Mono',Consolas,monospace;letter-spacing:.06em;color:var(--ink-2);display:grid;grid-template-columns:auto auto;gap:2px 14px}
+  #readout b{color:var(--ivory);font-weight:600}
+  #status{position:fixed;left:16px;top:16px;z-index:2;display:flex;gap:10px;align-items:center;padding:8px 14px}
+  .chip{display:flex;align-items:center;gap:8px;font:600 16px 'JetBrains Mono',monospace;color:var(--amber-hi);text-shadow:var(--glow-amber-2)}
+  .chip .ic{color:var(--amber)}
+  .chip.am{color:var(--am);text-shadow:0 0 16px rgba(192,132,255,.55)}
+  .chip.pulse{animation:pulse 260ms ease-out}
+  @keyframes pulse{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
+  .word{font:600 14px 'Barlow Condensed',sans-serif;letter-spacing:.3em;text-transform:uppercase;color:var(--ivory);margin-right:6px}
+  #log{position:fixed;left:16px;bottom:120px;z-index:2;font:500 11px 'JetBrains Mono',monospace;color:var(--ink-3);max-width:420px;pointer-events:none}
+  #log div{padding:2px 0}
+  #toggle{position:fixed;right:16px;bottom:16px;z-index:3}
+</style>
+</head>
+<body data-level="4" data-screen="bridge">
+<div id="world"></div>
+
+<div id="status" class="glass">
+  <span class="word">Waystation</span>
+  <span class="chip" id="anchor-credits"><span class="ic" id="ic-credits"></span><span id="credits">0</span></span>
+  <span class="chip am" id="anchor-am"><span>⚛</span><span id="am">20</span></span>
+</div>
+
+<div id="panel" class="glass">
+  <h1>Engine preview</h1>
+  <div class="sec">Sector</div><div class="row" id="sectors"></div>
+  <div class="sec">Effects</div><div class="row" id="fx"></div>
+  <div class="sec">Perf tier</div><div class="row" id="tiers"></div>
+  <div class="sec">Placing</div><div class="row" id="placing"></div>
+  <div class="sec">Select</div><div class="row" id="select"></div>
+  <div class="sec">Camera</div><div class="row" id="camera"></div>
+  <div class="sec">Sim</div><div class="row" id="sim"></div>
+</div>
+<button id="toggle">Panel</button>
+<div id="log"></div>
+<div id="readout" class="glass"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.6.6/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi-filters@6.1.5/dist/pixi-filters.min.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/data2.js"></script>
+<script src="../js/sim.js"></script>
+<script src="../js/meta.js"></script>
+<script src="../js/art.js"></script>
+<script src="../js/art-mod-a.js"></script>
+<script src="../js/art-mod-b.js"></script>
+<script src="../js/ships.js"></script>
+<script src="../js/engine/stage.js"></script>
+<script src="../js/engine/camera.js"></script>
+<script src="../js/engine/space.js"></script>
+<script src="../js/engine/world.js"></script>
+<script src="../js/engine/traffic.js"></script>
+<script src="../js/engine/fx.js"></script>
+<script src="../js/engine/post.js"></script>
+<script src="../js/engine/input.js"></script>
+<script src="../js/engine/index.js"></script>
+<script>
+'use strict';
+// ------------------------------------------------------------
+// Harness (DESIGN2.md 3.9): a 28-module station via Sim.place, 6 ships,
+// 5 ready banks (2 full), 3 scaffolds with timers and 2 upgraded modules,
+// staged through Sim.state.cells (the 0.5 cell meta that Meta.hopper /
+// build / upgrade read); buttons for every sector theme, every Engine.fx
+// call, perf tiers, placing, selection, zoom presets and pause.
+// The real data2.js + meta.js are loaded; when meta.js is absent a stub
+// Meta with the same read helpers (and the hooks sim.js calls) stands in.
+// ------------------------------------------------------------
+const $ = s => document.querySelector(s);
+const q = new URLSearchParams(location.search);
+const logEl = $('#log');
+function log(msg) { const d = document.createElement('div'); d.textContent = msg; logEl.appendChild(d); while (logEl.children.length > 6) logEl.removeChild(logEl.firstChild); }
+const ck = (r, c) => r + ',' + c;
+
+// ---- stub Meta (0.5 read helpers + the sim.js hooks) when meta.js is not loaded ----
+if (typeof Meta === 'undefined') {
+  window.Meta = {
+    profile: { v: 2, activeSector: 'home', am: 20, credits: 0 },
+    init() {}, save() {}, onNewGame(state) { this.profile.activeSector = state.sector; }, newStationHere() { Sim.newGame(); },
+    onPlace(r, c, id) { Sim.state.cells[ck(r, c)] = { lvl: 1, bank: 0, readyAt: null, builtAt: Date.now(), totalMs: 0 }; return { instant: true, totalMs: 0 }; },
+    onDemolish() {}, onLevelUp() {}, onResolve() {}, convoyActive() { return false; },
+    _cell(r, c) { const s = Sim.state; const m = s && s.grid[r] && s.grid[r][c]; if (!m) return null; return { m, cl: s.cells[ck(r, c)] || (s.cells[ck(r, c)] = { lvl: 1, bank: 0, readyAt: null, builtAt: Date.now(), totalMs: 0 }) }; },
+    _rate(id, lvl) { const def = MODULES[id]; const base = def.rate != null ? def.rate : (id === 'hub' ? 10 : Math.round(def.cost / 40)); return base * [1, 1.6, 2.4][(lvl || 1) - 1]; },
+    hopper(r, c) {
+      const x = this._cell(r, c); if (!x) return null;
+      const { m, cl } = x; if (cl.readyAt != null) return null;
+      const rate = this._rate(m.id, cl.lvl), cap = Math.round(rate * [60, 90, 120][(cl.lvl || 1) - 1]);
+      const t = Date.now(); cl.bank = Math.min(cap, (cl.bank || 0) + rate * (t - (cl.bankAt || t)) / 60000); cl.bankAt = t;
+      return { bank: Math.floor(cl.bank), cap, rate, ready: cl.bank >= 0.25 * cap, full: cl.bank >= cap };
+    },
+    build(r, c) {
+      const x = this._cell(r, c); if (!x) return null;
+      const { m, cl } = x;
+      if (cl.readyAt == null) return { building: false, remainingMs: 0, totalMs: cl.totalMs || 0, skipAM: 0 };
+      const rem = cl.readyAt - Date.now();
+      if (rem <= 0) { cl.readyAt = null; Sim.emit('build-done', { r, c, id: m.id }); return { building: false, remainingMs: 0, totalMs: cl.totalMs, skipAM: 0 }; }
+      return { building: true, remainingMs: rem, totalMs: cl.totalMs || rem, skipAM: Math.max(1, Math.ceil(rem / 60000 / 8)) };
+    },
+    upgrade(r, c) { const x = this._cell(r, c); if (!x) return null; const lvl = x.cl.lvl || 1; return { lvl, next: lvl < 3 ? { cost: 1000, rate: this._rate(x.m.id, lvl + 1), cap: 0 } : null }; },
+    collect(r, c) { const h = this.hopper(r, c); if (!h) return 0; const amt = h.bank; Sim.state.cells[ck(r, c)].bank = 0; Sim.state.credits += amt; Sim.emit('collect', { r, c, amount: amt }); return amt; },
+    skipBuild(r, c) { const x = this._cell(r, c); if (x && x.cl.readyAt != null) { x.cl.readyAt = null; Sim.emit('build-done', { r, c, id: x.m.id }); return { ok: true, cost: 0 }; } return { ok: false }; },
+    get am() { return this.profile.am; },
+  };
+}
+// harness-only staging helpers that write the 0.5 cell meta directly (Meta reads it back)
+const Stage = {
+  cell(r, c) { const s = Sim.state; if (!s.grid[r] || !s.grid[r][c]) return null; return s.cells[ck(r, c)] || (s.cells[ck(r, c)] = { lvl: 1, bank: 0, readyAt: null, builtAt: Date.now(), totalMs: 0 }); },
+  setBank(r, c, frac) { const cl = this.cell(r, c); if (!cl) return; const h0 = Meta.hopper(r, c); const cap = h0 ? h0.cap : 600; cl.bank = cap * frac; cl.bankAt = Date.now(); },
+  startBuild(r, c, ms) { const cl = this.cell(r, c); if (!cl) return; cl.readyAt = Date.now() + ms; cl.totalMs = ms; cl.startedAt = Date.now(); Sim.emit('build-start', { r, c, id: Sim.state.grid[r][c].id, totalMs: ms }); },
+  skip(r, c) { if (typeof Meta.skipBuild === 'function') { const res = Meta.skipBuild(r, c); if (res && res.ok) return; } const cl = this.cell(r, c); if (cl && cl.readyAt != null) { cl.readyAt = null; Sim.emit('build-done', { r, c, id: Sim.state.grid[r][c].id }); } },
+  setLevel(r, c, lvl) { const cl = this.cell(r, c); if (!cl) return; cl.lvl = lvl; Sim.emit('upgrade', { r, c, lvl }); },
+  collect(r, c) { const h = Meta.hopper(r, c); if (!h || !h.bank) return 0; if (typeof Meta.collect === 'function') { const r2 = Meta.collect(r, c); return typeof r2 === 'number' ? r2 : h.bank; } return 0; },
+};
+
+// ---- stage the station ----
+Sim.newGame(q.get('sector') && SECTORS[q.get('sector')] ? q.get('sector') : 'home');
+Sim.state.name = 'Lantern Reach';
+Sim.state.credits = 1e9; Sim.state.level = 4; Sim.state.nextEventDay = 1e9; Sim.state.rep = 3.2; Sim.state.residents = 24;
+if (Meta.profile && Meta.profile.stats) Meta.profile.stats.instantBuilds = 1e9;   // no tutorial instant-build quota: builds are staged below
+// module plan as offsets from the hub cell, so the stage works on every sector grid size
+const HUB = Sim.state.hub;
+const PLAN = [
+  ['warehouse', 0, -1], ['market', 0, 1], ['comms', -1, 0], ['quarters', 1, 0],
+  ['fuel', 0, -2], ['warehouse', 0, 2], ['solar', -1, -1], ['solar', -1, 1], ['hydro', 1, -1], ['clinic', 1, 1],
+  ['dock', 0, -3], ['dock', 0, 3], ['dock', -2, 0], ['reactor', -1, -2], ['customs', -1, 2], ['rec', 1, -2], ['security', 1, 2],
+  ['bank', -2, -1], ['shipyard', -2, 1], ['cantina', 2, 0], ['quarters', 2, -1], ['habitat', 2, 1], ['dock', 2, -2], ['refinery', 2, 2],
+  ['habitat', 3, 0], ['plaza', 3, 1], ['school', 3, -1], ['gate', 4, 0],
+].map(([id, dr, dc]) => [id, HUB.r + dr, HUB.c + dc]);
+const at = (dr, dc) => [HUB.r + dr, HUB.c + dc];
+let placed = 0;
+for (const [id, r, c] of PLAN) if (Sim.place(id, r, c)) placed++;
+// every staged module is finished unless staged as a scaffold below
+for (const k in Sim.state.cells) { Sim.state.cells[k].readyAt = null; Sim.state.cells[k].bank = 0; }
+Sim.state.credits = 48250;
+for (const g of Object.keys(Sim.state.stock)) Sim.state.stock[g] = Math.floor(Math.random() * 30);
+Sim.state.stock.ore = 40; Sim.state.stock.xenofauna = 6;
+Sim.recomputeLevel(); Sim.state.nextEventDay = 1e9;
+for (let i = 0; i < 6; i++) Sim.spawnShip();
+// banks: 5 ready, 2 of them full; scaffolds: 3 timers; upgrades: 2 modules
+Stage.setBank(...at(0, -1), 1); Stage.setBank(...at(0, 2), 1); Stage.setBank(...at(0, 1), 0.6); Stage.setBank(...at(2, 2), 0.4); Stage.setBank(...at(-2, -1), 0.5);
+Stage.startBuild(...at(3, -1), 45 * 1000); Stage.startBuild(...at(3, 1), 4 * 60 * 1000); Stage.startBuild(...at(4, 0), 15 * 60 * 1000);
+Stage.setLevel(...at(0, -3), 2); Stage.setLevel(...at(-1, -2), 3);
+Sim.emit('change');
+log(`staged ${placed}/${PLAN.length} modules, ${Sim.state.ships.length} ships`);
+
+// ---- controls ----
+const SECTOR_IDS = ['home', 'sable', 'kessler', 'thessaly', 'marrow', 'oros', 'keth', 'aurelia'];
+function btn(host, label, fn, cls) { const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls; b.addEventListener('click', () => { fn(b); }); host.appendChild(b); return b; }
+function mark(host, el) { for (const b of host.children) b.classList.toggle('on', b === el); }
+
+const sectorHost = $('#sectors');
+for (const id of SECTOR_IDS) btn(sectorHost, id, b => { Sim.state.sector = id; Engine.setSector(id, Sim.state); mark(sectorHost, b); log('sector ' + id); });
+
+const credits = $('#credits'), anchor = $('#anchor-credits');
+function fmtC(n) { return Math.round(n).toLocaleString('en-US'); }
+function readyCell() {
+  for (const [id, r, c] of PLAN) { const h = Meta.hopper(r, c); if (h && h.ready) return { r, c, h }; }
+  return { r: HUB.r, c: HUB.c - 1, h: { bank: 900 } };
+}
+const FXB = {
+  collect: () => { const rc = readyCell(); const amt = Stage.collect(rc.r, rc.c) || 900; Engine.fx.collect(rc.r, rc.c, amt, anchor).then(() => log('collect resolved')); },
+  buildStart: () => Engine.fx.buildStart(...at(1, -2)),
+  buildDone: () => Engine.fx.buildDone(...at(1, 1)),
+  floater: () => Engine.fx.floater(HUB.r, HUB.c, '+1,240', PAL.amber),
+  pulse: () => Engine.fx.pulse(...at(-1, 0), PAL.ice),
+  shock: () => Engine.fx.shock(innerWidth / 2, innerHeight / 2, 1.2),
+  levelUp: () => Engine.fx.levelUp(),
+  flash: () => Engine.fx.flash(PAL.ice, 0.25, 400),
+  warp: () => Engine.fx.warp().then(() => log('warp resolved')),
+  comet: () => EngineSpace.comet(),
+  'skip build': () => Stage.skip(...at(3, -1)),
+};
+const fxHost = $('#fx');
+for (const k in FXB) btn(fxHost, k, () => FXB[k]());
+
+const tierHost = $('#tiers');
+const tierBtns = [['auto', null], ['0', 0], ['1', 1], ['2', 2]].map(([l, t]) => btn(tierHost, l, b => { Engine.perf.setTier(t); mark(tierHost, b); }));
+
+const placeHost = $('#placing');
+for (const id of ['dock', 'solar', 'habitat', 'gate']) btn(placeHost, id, b => { Engine.placing = id; mark(placeHost, b); });
+btn(placeHost, 'none', b => { Engine.placing = null; mark(placeHost, b); });
+
+const selHost = $('#select');
+btn(selHost, 'hub', b => { Engine.selected = { r: HUB.r, c: HUB.c }; mark(selHost, b); });
+btn(selHost, 'dock east', b => { const [r, c] = at(0, 3); Engine.selected = { r, c }; mark(selHost, b); });
+btn(selHost, 'reactor', b => { const [r, c] = at(-1, -2); Engine.selected = { r, c }; mark(selHost, b); });
+btn(selHost, 'none', b => { Engine.selected = null; mark(selHost, b); });
+
+const camHost = $('#camera');
+for (const z of [0.55, 1, 1.6, 2, 2.6]) btn(camHost, 'z ' + z, () => { Engine.camera.zoom = z; });
+btn(camHost, 'fit', () => Engine.camera.fit({ ms: 600 }));
+btn(camHost, 'focus gate', () => Engine.camera.focusCell(...at(4, 0), { zoom: 1.8, ms: 600 }));
+let drifting = false;
+btn(camHost, 'drift', b => { drifting = !drifting; Engine.camera.drift(drifting); b.classList.toggle('on', drifting); });
+btn(camHost, 'shake', () => Engine.camera.shake(8));
+btn(camHost, 'avoid panel', () => Engine.camera.avoid({ x: 72 + 12, y: 56, width: 440, height: innerHeight - 104 }));
+
+const simHost = $('#sim');
+let paused = false;
+const pauseBtn = btn(simHost, 'pause', b => { paused = !paused; Engine.setPaused(paused); b.classList.toggle('on', paused); });
+btn(simHost, 'spawn ship', () => Sim.spawnShip());
+btn(simHost, 'flare', () => { Sim.state.fx.flareUntil = Sim.state.day + 3; Sim.emit('change'); });
+btn(simHost, 'alert', () => { document.body.setAttribute('data-condition', 'alert'); setTimeout(() => document.body.removeAttribute('data-condition'), 6000); });
+btn(simHost, 'reduced', b => { const on = document.body.getAttribute('data-motion') !== 'reduced'; if (on) document.body.setAttribute('data-motion', 'reduced'); else document.body.removeAttribute('data-motion'); b.classList.toggle('on', on); });
+$('#toggle').addEventListener('click', () => $('#panel').classList.toggle('hidden'));
+
+// ---- engine events -> harness behaviour (the real UI does this in index.html) ----
+Engine.on('cell-click', d => {
+  if (Engine.placing) {
+    if (Sim.place(Engine.placing, d.r, d.c)) { if (!Meta.build(d.r, d.c).building) Stage.startBuild(d.r, d.c, 45 * 1000); log(`placed ${Engine.placing} at ${d.r},${d.c}`); }
+    return;
+  }
+  Engine.selected = d.occupied ? { r: d.r, c: d.c } : null;
+});
+Engine.on('bank-click', d => { const amt = Stage.collect(d.r, d.c); if (amt > 0) Engine.fx.collect(d.r, d.c, amt, anchor); log(`collected ${amt} at ${d.r},${d.c}`); });
+Engine.on('scaffold-click', d => { Stage.skip(d.r, d.c); log(`skipped build at ${d.r},${d.c}`); });
+Engine.on('ship-click', d => log(`ship ${d.ship.id} ${d.ship.cls} (${d.ship.company}) ${d.ship.state}`));
+Engine.on('empty-click', () => { Engine.selected = null; });
+Engine.on('context', () => { Engine.placing = null; Engine.selected = null; mark(placeHost, null); });
+Engine.on('fx-arrive', d => { if (d.index === 1) { anchor.classList.remove('pulse'); void anchor.offsetWidth; anchor.classList.add('pulse'); } });
+Sim.on('build-done', d => log(`build done: ${d.id} at ${d.r},${d.c}`));
+Sim.on('toast', d => log('toast: ' + d.msg));
+
+// ---- boot ----
+(async () => {
+  $('#ic-credits').innerHTML = Icons.svg('credits', 18);
+  await Engine.init($('#world'));
+  const sectorBtn = [...sectorHost.children].find(b => b.textContent === Sim.state.sector); if (sectorBtn) mark(sectorHost, sectorBtn);
+  mark(tierHost, tierBtns[0]);
+  if (q.get('zoom')) Engine.camera.zoom = parseFloat(q.get('zoom'));
+  if (q.get('tier') != null && q.get('tier') !== '') { const t = parseInt(q.get('tier'), 10); Engine.perf.setTier(t); mark(tierHost, tierBtns[t + 1]); }
+  if (q.get('pause') === '1') { paused = true; Engine.setPaused(true); pauseBtn.classList.add('on'); }
+  if (q.get('panel') === '0') $('#panel').classList.add('hidden');
+  if (q.get('drift') === '1') { drifting = true; Engine.camera.drift(true); }
+  if (q.get('select')) { const [r, c] = q.get('select').split(',').map(Number); Engine.selected = { r, c }; }
+  if (q.get('placing')) Engine.placing = q.get('placing');
+  window.harness = { fire: k => FXB[k] && FXB[k](), Meta, Stage, PLAN };
+  // loop: Sim.tick each frame so ships fly and dock
+  let last = performance.now();
+  const readout = $('#readout');
+  let acc = 0;
+  function loop(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (!paused) Sim.tick(dt);
+    acc += dt;
+    if (acc > 0.25) {
+      acc = 0;
+      credits.textContent = fmtC(Sim.state.credits);
+      const h = Engine.hover;
+      readout.innerHTML = `<span>fps</span><b>${Engine.perf.fps}</b><span>tier</span><b>${Engine.perf.tier}${Engine.perf.bloom ? ' · bloom' : ' · no bloom'}</b>` +
+        `<span>zoom</span><b>${Engine.camera.zoom.toFixed(2)}</b><span>particles</span><b>${Engine.perf.particles}</b>` +
+        `<span>ships</span><b>${Sim.state.ships.length}</b><span>cell</span><b>${h ? h.r + ':' + String(h.c).padStart(2, '0') : '—'}</b>` +
+        `<span>sector</span><b>${Sim.state.sector}</b><span>day</span><b>${Sim.state.day}</b>`;
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+  window.__engineReady = true;
+})().catch(e => { console.error(e); log('ENGINE ERROR ' + e.message); });
+</script>
+</body>
+</html>

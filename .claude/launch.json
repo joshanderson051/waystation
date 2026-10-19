@@ -1,7 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "waystation", "runtimeExecutable": "node", "runtimeArgs": ["waystation/serve.js", "--port", "8787"], "port": 8787 },
-    { "name": "waystation-subpath", "runtimeExecutable": "node", "runtimeArgs": ["waystation/serve.js", "--port", "8788", "--base", "/waystation"], "port": 8788 }
+    { "name": "waystation", "runtimeExecutable": "node", "runtimeArgs": ["C:/Users/josha/Projects/waystation/waystation/serve.js", "--port", "8787"], "port": 8787 },
+    { "name": "waystation-subpath", "runtimeExecutable": "node", "runtimeArgs": ["C:/Users/josha/Projects/waystation/waystation/serve.js", "--port", "8788", "--base", "/waystation"], "port": 8788 }
   ]
 }

@@ -1,0 +1,31 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Pixi smoke check</title>
+<style>html,body{margin:0;background:#04050A;color:#E6E8EC;font:14px monospace}#log{position:fixed;left:8px;top:8px;white-space:pre}</style>
+</head><body>
+<div id="log">loading…</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.6.6/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi-filters@6.1.5/dist/pixi-filters.min.js"></script>
+<script>
+(async () => {
+  const log = (m) => { document.getElementById('log').textContent += '\n' + m; };
+  try {
+    log('PIXI ' + PIXI.VERSION);
+    const F = window.PIXI.filters || window.filters || {};
+    log('filters ns: ' + (window.PIXI.filters ? 'PIXI.filters' : window.filters ? 'window.filters' : 'none') + ' -> ' + Object.keys(F).filter(k => /Filter$/.test(k)).join(', '));
+    const app = new PIXI.Application();
+    await app.init({ background: '#04050A', resizeTo: window, antialias: true, preference: 'webgl' });
+    document.body.appendChild(app.canvas);
+    log('renderer: ' + app.renderer.name + ' ' + app.renderer.type);
+    const g = new PIXI.Graphics().circle(0, 0, 60).fill(0xE9A23B).circle(0,0,30).fill(0xFFE9B8);
+    g.x = innerWidth / 2; g.y = innerHeight / 2;
+    const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+    x.fillStyle = '#8FD3E8'; x.fillRect(16, 16, 96, 96); x.fillStyle = '#04050A'; x.fillRect(48, 48, 32, 32);
+    const sp = new PIXI.Sprite(PIXI.Texture.from(c)); sp.anchor.set(0.5); sp.x = g.x + 180; sp.y = g.y;
+    const layer = new PIXI.Container(); layer.addChild(g, sp); app.stage.addChild(layer);
+    if (F.AdvancedBloomFilter) { layer.filters = [new F.AdvancedBloomFilter({ threshold: 0.3, bloomScale: 1.2, brightness: 1, blur: 8 })]; log('bloom applied'); }
+    if (F.GlowFilter) { sp.filters = [new F.GlowFilter({ distance: 15, outerStrength: 2, color: 0x8FD3E8 })]; log('glow applied'); }
+    app.ticker.add((t) => { g.rotation += 0.01 * t.deltaTime; });
+    window.__pixiOK = true; log('OK');
+  } catch (e) { log('ERROR ' + e.message); window.__pixiErr = e.message; }
+})();
+</script></body></html>

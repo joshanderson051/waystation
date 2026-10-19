@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waystation HUD v2 preview</title>
+<meta name="waystation-store" content='{"mode":"sandbox"}'>
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  /* ---- harness toolbar (not part of the product) ---- */
+  #h-bar { position: fixed; right: 12px; bottom: 60px; z-index: 200; width: 300px; max-height: calc(100vh - 140px); overflow: auto; padding: 10px 12px 12px; background: rgba(4,5,10,.92); border: 1px solid #343B4C; border-radius: 4px; font: 500 11px/1.4 'JetBrains Mono', monospace; color: #A3A7B0; }
+  #h-bar[hidden] { display: none; }
+  #h-bar h4 { margin: 8px 0 4px; font: 600 11px/1 'Barlow Condensed', sans-serif; letter-spacing: .14em; text-transform: uppercase; color: #E9A23B; }
+  #h-bar .row { display: flex; flex-wrap: wrap; gap: 4px; }
+  #h-bar button { padding: 4px 7px; border-radius: 3px; background: #161A25; border: 1px solid #262C3A; color: #E6E8EC; font: 500 11px/1 'JetBrains Mono', monospace; cursor: pointer; }
+  #h-bar button:hover { background: #1E2432; border-color: #343B4C; }
+  #h-bar .log { margin-top: 8px; max-height: 110px; overflow: auto; color: #6B707C; white-space: pre-wrap; font-size: 10px; }
+  #h-bar .contrast { margin-top: 6px; color: #A3A7B0; }
+  #h-bar .contrast b { color: #6FD3A3; }
+  #h-bar .contrast b.bad { color: #FF4F5E; }
+  #h-toggle { position: fixed; right: 12px; bottom: 60px; z-index: 201; width: 28px; height: 28px; border-radius: 3px; background: rgba(4,5,10,.9); border: 1px solid #343B4C; color: #E9A23B; font: 600 12px/1 'JetBrains Mono', monospace; cursor: pointer; }
+  body[data-toolbar="0"] #h-bar, body[data-toolbar="0"] #h-toggle { visibility: hidden; }
+</style>
+</head>
+<body data-level="2">
+
+<div id="world" aria-hidden="true"></div>
+
+<div id="app">
+  <header id="statusbar" class="glass bar" data-hue="amber"><i class="spine"></i></header>
+  <div id="condition" role="status" aria-live="polite"></div>
+  <div id="main">
+    <nav id="rail" class="glass" aria-label="Command rail"></nav>
+    <div id="panel-host" hidden><section id="panel" class="glass cut" role="region" aria-label="Panel"></section></div>
+    <aside id="notices" aria-label="Notices">
+      <div id="toasts" aria-live="polite"></div>
+      <div id="nextup" class="glass cut-sm" hidden><i class="spine"></i><div class="nu-head"><span class="nu-title">Next up</span></div><div class="nu-rows"></div></div>
+    </aside>
+  </div>
+  <footer id="contextbar" class="glass bar" data-hue="ice"><i class="spine"></i></footer>
+</div>
+
+<div id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="box glass cut" data-kind="event"><i class="spine"></i>
+    <div class="modal-head"><span class="modal-ic"></span><span id="modal-tag" class="micro"></span></div>
+    <div class="modal-body"><h2 id="modal-title"></h2><div id="modal-text" class="body-lg"></div><div id="modal-extra"></div></div>
+    <div id="modal-actions"></div>
+  </div>
+</div>
+<div id="sheet" role="dialog" aria-modal="true"><div class="sheet-box glass cut"><i class="spine"></i><div class="sheet-content"></div></div></div>
+<div id="celebrate" aria-live="polite"></div>
+<div id="tooltip" role="tooltip" class="glass"></div>
+<div id="flights" aria-hidden="true"></div>
+
+<div id="title">
+  <div class="title-band glass"><i class="sweep"></i>
+    <h1 class="wordmark hero">Waystation</h1>
+    <div class="title-sub">Station commissioning</div>
+  </div>
+  <div class="commission glass cut" data-hue="amber"><i class="spine"></i>
+    <div id="title-resume">
+      <button type="button" id="btn-resume" class="resume-card">
+        <canvas id="title-thumb" width="200" height="120" aria-hidden="true"></canvas>
+        <span class="resume-main">
+          <span id="resume-rank" class="resume-rank">Commander</span>
+          <span id="resume-name" class="resume-name">&mdash;</span>
+          <span id="resume-meta" class="resume-meta"></span>
+          <span class="resume-cta">Resume <span class="ic-slot" data-icon="chevron-right"></span></span>
+        </span>
+      </button>
+      <div class="title-actions"><button type="button" id="btn-newstation" class="btn ghost">New profile</button></div>
+    </div>
+    <div id="title-form" hidden>
+      <label class="field" for="title-name">Station name</label>
+      <div class="name-row">
+        <input id="title-name" type="text" class="input" maxlength="28" autocomplete="off" spellcheck="false" aria-describedby="title-registry" value="Lantern Reach">
+        <button type="button" id="btn-reroll" class="btn icon ghost" title="Another name" aria-label="Another name"><span class="ic-slot" data-icon="reroll"></span></button>
+      </div>
+      <div id="title-registry" class="micro">Registry WS-1910 will be assigned on commission</div>
+      <div id="title-confirm" class="title-confirm" hidden>
+        <p class="confirm-text">Your current profile will be replaced. Every sector, rank and reward goes with it.</p>
+        <div class="title-actions"><button type="button" id="btn-title-back" class="btn ghost">Back</button></div>
+      </div>
+      <div class="title-actions"><button type="button" id="btn-commission" class="btn big primary">Commission station</button></div>
+    </div>
+  </div>
+</div>
+
+<div id="phone" class="glass cut" data-hue="amber"><i class="spine"></i>
+  <span class="wordmark">Waystation</span>
+  <p class="body-lg">Waystation is a desktop and tablet game. Open it on a screen at least 1024 pixels wide and the bridge will be waiting.</p>
+</div>
+
+<!-- harness toolbar -->
+<button type="button" id="h-toggle" title="Toggle the harness toolbar">H</button>
+<div id="h-bar" hidden>
+  <h4>Panels</h4>
+  <div class="row" id="h-panels"></div>
+  <h4>Overlays</h4>
+  <div class="row">
+    <button data-h="modal:event">Transmission</button><button data-h="modal:alert">Alert</button><button data-h="modal:confirm">Confirm</button><button data-h="modal:store">AM confirm</button>
+    <button data-h="sheet:daily">Daily</button><button data-h="sheet:away">Away</button><button data-h="sheet:keys">Keys</button><button data-h="tooltip">Tooltip</button>
+  </div>
+  <h4>Toasts</h4>
+  <div class="row"><button data-h="toast:good">good</button><button data-h="toast:warn">warn</button><button data-h="toast:bad">bad</button><button data-h="toast:gold">gold</button><button data-h="toast:info">info</button><button data-h="toast:action">with action</button><button data-h="toast:all">3 of each</button></div>
+  <h4>Celebrations</h4>
+  <div class="row"><button data-h="cele:rank">rank</button><button data-h="cele:level">level</button><button data-h="cele:unlock">unlock</button><button data-h="cele:mission">mission</button><button data-h="cele:expedition">expedition</button><button data-h="cele:purchase">purchase</button><button data-h="cele:daily">daily</button></div>
+  <h4>Events</h4>
+  <div class="row"><button data-h="ev:collect">collect</button><button data-h="ev:collect-all">collect all</button><button data-h="ev:build-done">build-done</button><button data-h="ev:am">+25 AM</button><button data-h="ev:mission">mission done</button><button data-h="ev:expedition">exp ready</button><button data-h="ev:discover">discover</button><button data-h="ev:offline">offline</button><button data-h="ev:flare">flare</button><button data-h="ev:alert">pirates</button><button data-h="ev:festival">festival</button><button data-h="ev:clear">clear cond</button></div>
+  <h4>State</h4>
+  <div class="row"><button data-h="place:dock">placing dock</button><button data-h="select:hub">select hub</button><button data-h="select:scaffold">select scaffold</button><button data-h="select:bank">select bank</button><button data-h="deselect">deselect</button><button data-h="motion">reduced motion</button><button data-h="title">title screen</button><button data-h="level:4">level 4</button></div>
+  <h4>Viewport (new window)</h4>
+  <div class="row"><button data-h="vp:1440x900">1440x900</button><button data-h="vp:1180x700">1180x700</button><button data-h="vp:1024x768">1024x768</button><button data-h="vp:720x1200">phone</button></div>
+  <div class="contrast" id="h-contrast"></div>
+  <div class="log" id="h-log"></div>
+</div>
+
+<!-- data (real) -->
+<script src="../js/data.js"></script>
+<script>
+// v1 sim.js globals that data2.js and the HUD may reach for
+'use strict';
+const rnd = (a, b) => a + Math.random() * (b - a);
+const irnd = (a, b) => Math.floor(rnd(a, b + 1));
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const fmt = n => Math.round(n).toLocaleString('en-US');
+</script>
+<script src="../js/data2.js"></script>
+<script src="../js/art.js"></script>
+
+<!-- ================================================================
+     STUBS: Sim, Meta, Engine, Store (log every call; rich fake data)
+     ================================================================ -->
+<script>
+'use strict';
+const HLOG = [];
+function hlog(...a) { const s = a.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' '); HLOG.unshift(s); if (HLOG.length > 60) HLOG.length = 60; const el = document.getElementById('h-log'); if (el) el.textContent = HLOG.join('\n'); }
+const NOW0 = Date.now();
+
+// ---------------------------------------------------------------- Sim stub (v1 economy surface the HUD reads)
+const Sim = {
+  state: null, listeners: {},
+  on(evt, fn) { (this.listeners[evt] ||= []).push(fn); },
+  off(evt, fn) { const l = this.listeners[evt]; if (l) { const i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); } },
+  emit(evt, data) { (this.listeners[evt] || []).forEach(fn => fn(data)); },
+  makeState() {
+    const def = SECTORS.home, cols = def.grid.cols, rows = def.grid.rows;
+    const grid = []; for (let r = 0; r < rows; r++) grid.push(new Array(cols).fill(null));
+    const cr = 4, cc = 7; grid[cr][cc] = { id: 'hub' };
+    const stock = {}, prices = {}, policy = {};
+    GOOD_IDS.forEach((g, i) => { stock[g] = [180, 42, 12, 90, 60, 8, 0, 14, 3, 25, 9, 6][i]; prices[g] = GOODS[g].base * [0.8, 1.1, 1.0, 1.0, 1.3, 0.9, 1.0, 1.0, 1.2, 1.0, 0.95, 1.0][i]; policy[g] = { buy: true, sell: !(g === 'ore' || g === 'xenofauna') }; });
+    const companies = {};
+    COMPANIES.forEach((c, i) => { companies[c.id] = { trust: [64, 78, 41, 55, 33, 70, 12][i], served: [12, 31, 5, 9, 3, 15, 0][i], contractUntil: i === 1 ? 52 : 0, loan: i === 0 ? { principal: 2000, remaining: 1200, perDay: 140, rate: .18 } : null, office: i === 1 }; });
+    return {
+      name: 'Lantern Reach', day: 41, t: .3, credits: 12480, speed: 1, grid, hub: { r: cr, c: cc }, stock, prices, policy, companies,
+      ships: [], nextShipId: 1, shipTimer: .4, residents: 18, rep: 2.6, level: 2,
+      fx: { flareUntil: 0, boom: { good: 'grain', until: 44 }, glut: { good: 'ore', until: 44 }, festivalUntil: 0 },
+      pending: null, nextEventDay: 9999, income: { today: 210, yesterday: 380, breakdown: { 'docking fees': 240, 'trade margin': 310, 'resident rent': 90, 'fuel sales': 120, upkeep: -260, 'loans issued': -120 } },
+      recentAway: 0, log: [], stats: { shipsServed: 63, cargoTraded: 3120, earned: 48900, turnedAway: 2, diverted: 1 }, sector: 'home', cells: {},
+    };
+  },
+  newGame() { this.state = this.makeState(); this.emit('change'); },
+  save() { hlog('Sim.save'); return true; }, load() { return !!this.state; }, reset() { hlog('Sim.reset'); this.newGame(); },
+  now() { return this.state.day + this.state.t; },
+  rows() { return this.state.grid.length; }, cols() { return this.state.grid[0].length; },
+  cells() { const out = []; const g = this.state.grid; for (let r = 0; r < g.length; r++) for (let c = 0; c < g[r].length; c++) if (g[r][c]) out.push({ r, c, m: g[r][c] }); return out; },
+  inBounds(r, c) { return r >= 0 && r < this.rows() && c >= 0 && c < this.cols(); },
+  occupied(r, c) { return this.inBounds(r, c) && !!this.state.grid[r][c]; },
+  neighbors(r, c) { return [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]]; },
+  tierUnlocked(t) { return t <= this.state.level; },
+  canPlace(id, r, c) {
+    const d = MODULES[id], s = this.state;
+    if (!this.inBounds(r, c)) return { ok: false, why: 'Out of bounds' };
+    if (s.grid[r][c]) return { ok: false, why: 'Occupied' };
+    if (!this.tierUnlocked(d.tier)) return { ok: false, why: `Needs station level ${d.tier}` };
+    if (s.credits < d.cost) return { ok: false, why: 'Not enough credits' };
+    if (!this.neighbors(r, c).some(([nr, nc]) => this.occupied(nr, nc))) return { ok: false, why: 'Must touch the station' };
+    return { ok: true };
+  },
+  place(id, r, c) {
+    const chk = this.canPlace(id, r, c); if (!chk.ok) { this.toast(chk.why, 'bad'); return false; }
+    this.state.grid[r][c] = { id, built: this.state.day }; this.state.credits -= MODULES[id].cost;
+    Meta.onPlace(r, c, id);
+    hlog('Sim.place', id, r, c);
+    this.emit('built', { id, r, c }); this.emit('change'); return true;
+  },
+  canDemolish(r, c) {
+    const m = this.state.grid[r] && this.state.grid[r][c]; if (!m) return { ok: false, why: 'Nothing there' };
+    if (m.id === 'hub') return { ok: false, why: 'The Core Hub cannot be removed' };
+    if (this.state.ships.some(sh => sh.dock && sh.dock.r === r && sh.dock.c === c && sh.state === 'docked')) return { ok: false, why: 'A ship is docked here' };
+    return { ok: true };
+  },
+  demolish(r, c) { const d = this.canDemolish(r, c); if (!d.ok) return false; const id = this.state.grid[r][c].id; this.state.grid[r][c] = null; delete this.state.cells[`${r},${c}`]; this.state.credits += MODULES[id].cost * .5; hlog('Sim.demolish', r, c); this.emit('demolished', { id, r, c }); this.emit('change'); return true; },
+  dockUsable(r, c) { return this.neighbors(r, c).some(([nr, nc]) => this.inBounds(nr, nc) && !this.occupied(nr, nc)); },
+  totals() {
+    const s = this.state;
+    const T = { produced: 0, used: 0, docks: 0, storage: 0, beds: 0, food: 0, homes: 0, fun: 0, counts: {}, modules: 0, security: 0, tariff: 0, margin: 0, traffic: 0, business: 0, repairIncome: 0, fuelIncome: 0, repBonus: 0, galactic: false, hasBank: false, hasClinic: false, hasSchool: false, hasMarket: false, produces: {}, converts: [], flare: s.day < s.fx.flareUntil };
+    for (const { m } of this.cells()) {
+      const d = MODULES[m.id]; T.counts[m.id] = (T.counts[m.id] || 0) + 1; if (m.id !== 'hub') T.modules++;
+      if (d.power > 0) { if (!(m.id === 'solar' && T.flare)) T.produced += d.power; } else T.used += -d.power;
+      T.docks += d.docks || 0; T.storage += d.storage || 0; T.beds += d.beds || 0; T.food += d.food || 0; T.homes += d.homes || 0; T.fun += d.fun || 0;
+      T.security += d.security || 0; T.tariff += d.tariff || 0; T.margin += d.margin || 0; T.traffic += d.traffic || 0; T.business += d.business || 0;
+      if (d.galactic) T.galactic = true; if (d.bank) T.hasBank = true; if (m.id === 'clinic') T.hasClinic = true; if (m.id === 'school') T.hasSchool = true; if (m.id === 'market') T.hasMarket = true;
+    }
+    T.efficiency = T.used > T.produced ? clamp(T.produced / Math.max(1, T.used), .3, 1) : 1;
+    T.stockTotal = GOOD_IDS.reduce((a, g) => a + s.stock[g], 0);
+    T.visitors = s.ships.filter(sh => sh.state === 'docked').reduce((a, sh) => a + sh.crew, 0);
+    T.funCount = (T.counts.rec || 0) + (T.counts.plaza || 0) + (T.counts.menagerie || 0);
+    return T;
+  },
+  amenity(T) {
+    const s = this.state, people = T.visitors + s.residents;
+    const food = people ? clamp(T.food / people, 0, 1) : 1, beds = T.visitors ? clamp(T.beds / T.visitors, 0, 1) : 1;
+    const fun = people ? clamp((T.funCount * 40) / people, 0, 1) : (T.funCount ? 1 : .5), health = T.hasClinic ? 1 : (people > 20 ? .4 : .7);
+    return { food, beds, fun, health, score: (food * .35 + beds * .2 + fun * .25 + health * .2) * T.efficiency };
+  },
+  effPrice(g) { const s = this.state; let p = s.prices[g]; if (s.fx.boom && s.fx.boom.good === g && s.day < s.fx.boom.until) p *= 3; if (s.fx.glut && s.fx.glut.good === g && s.day < s.fx.glut.until) p *= .5; return p; },
+  setPolicy(g, k, v) { this.state.policy[g][k] = v; hlog('Sim.setPolicy', g, k, v); this.emit('change'); },
+  dumpStock(g) { const q = this.state.stock[g]; if (!q) return; const got = Math.round(q * this.effPrice(g) * .5); this.state.stock[g] = 0; this.state.credits += got; this.toast(`Sold ${q} ${GOODS[g].name} to a passing broker for ${fmt(got)}`, 'warn'); this.emit('change'); },
+  lend(id, amount) { hlog('Sim.lend', id, amount); this.toast(`Lent ${fmt(amount)} to ${COMPANIES.find(c => c.id === id).name}`, 'good'); },
+  resolveEvent(accepted) { hlog('Sim.resolveEvent', accepted); const ev = this.state.pending; this.state.pending = null; if (ev && ev.id === 'flare') this.state.fx.flareUntil = this.state.day + 3; this.emit('change'); },
+  toast(msg, cls = '') { this.emit('toast', { msg, cls }); },
+  log(msg, cls) { this.state.log.unshift({ day: this.state.day, msg, cls }); },
+  spawnShip(co, cls, state, r, c) {
+    const planet = PLANETS[COMPANIES.find(x => x.id === co).home];
+    const ship = { id: this.state.nextShipId++, company: co, cls, captain: `Capt. ${pick(CAPTAIN_NAMES)}`, cargo: { [planet.exports[0]]: 30, [planet.exports[1] || planet.exports[0]]: 12 }, wants: [...planet.imports], crew: SHIP_CLASSES[cls].crew, state, x: c + .5, y: r + .5, angle: 0, dock: state === 'queue' ? null : { r, c }, dockedUntil: this.now() + .8, waitStart: this.now() - 1.2, trades: [], earned: 0 };
+    this.state.ships.push(ship); return ship;
+  },
+};
+
+// ---------------------------------------------------------------- Meta stub (0.5 read model + section 4 mutators)
+const Meta = {
+  profile: null,
+  init() {
+    this.profile = {
+      v: 2, playerId: 'harness-player', createdAt: NOW0 - 9 * 86400e3, lastSeenAt: NOW0 - 3.2 * 3600e3, am: 42, rank: { xp: 1240 }, activeSector: 'home',
+      unlocked: ['home', 'sable'], sectors: {}, collection: { found: {} }, missions: { progress: {}, claimed: {} }, daily: { streak: 4, dayIndex: 3, claimedAt: 0 },
+      expeditions: { list: [], charts: { home: 3, sable: 1, kessler: 0, thessaly: 2 } }, entitlements: { history: [] }, settings: { sfx: true, music: true, sfxVol: .8, musicVol: .6, motion: 'auto', perf: 'auto' },
+      stats: { collects: 14, transmissions: 3 },
+    };
+    this._claimable = new Set(['c_collect', 't_fuel']); this._done = new Set(['c_dock', 'c_warehouse', 'c_solar']);
+    this._progress = { c_serve3: 2, c_transmission: 0, t_trade500: 320, t_market: 1, t_serve25: 9 };
+    this.profile.expeditions.list = [
+      { id: 'x1', sector: 'thessaly', startedAt: NOW0 - 55 * 60000, endsAt: NOW0 - 5 * 60000, status: 'ready', slot: 0 },
+      { id: 'x2', sector: 'sable', startedAt: NOW0 - 3 * 60000, endsAt: NOW0 + 17 * 60000, status: 'out', slot: 1 },
+    ];
+    const found = this.profile.collection.found;
+    COLLECTION.ships.slice(0, 9).forEach(x => found[x.id] = 1); found.anvil_of_varro = 1; found.kestrel_swift = 2;
+    ['varroan', 'kethi', 'sablite', 'thessalid', 'lantern_moth'].forEach(id => found[id] = 1);
+    ['beacon_shard', 'survey_plate', 'storm_glass', 'deep_pearl', 'tide_compass', 'core_fragment'].forEach(id => found[id] = 1);
+  },
+  save() { hlog('Meta.save'); },
+  onPlace(r, c, id) { const lvl = 1; const ms = (TIMERS && TIMERS.BUILD_MS && TIMERS.BUILD_MS[MODULES[id].tier]) || { 1: 45e3, 2: 240e3, 3: 900e3, 4: 3600e3 }[MODULES[id].tier]; Sim.state.cells[`${r},${c}`] = { lvl, bank: 0, readyAt: Date.now() + ms, builtAt: Date.now(), at: Date.now() }; Sim.emit('build-start', { r, c, id, totalMs: ms }); },
+  cell(r, c) { return Sim.state.cells[`${r},${c}`] || null; },
+  rateOf(id, lvl) { const base = id === 'hub' ? 10 : Math.round(MODULES[id].cost / 40); return Math.round(base * (lvl === 3 ? 2.4 : lvl === 2 ? 1.6 : 1)); },
+  hopper(r, c) { const m = Sim.state.grid[r] && Sim.state.grid[r][c], cm = this.cell(r, c); if (!m || !cm || (cm.readyAt && cm.readyAt > Date.now())) return null; const rate = this.rateOf(m.id, cm.lvl), cap = rate * (cm.lvl === 3 ? 120 : cm.lvl === 2 ? 90 : 60); const bank = Math.min(cap, cm.bank + (Date.now() - cm.at) / 60000 * rate); return { bank, cap, rate, ready: bank >= .25 * cap, full: bank >= cap }; },
+  build(r, c) { const cm = this.cell(r, c); if (!cm || !cm.readyAt) return null; const remainingMs = Math.max(0, cm.readyAt - Date.now()); if (!remainingMs) return { building: false, remainingMs: 0, totalMs: cm.totalMs || 1, skipAM: 0 }; return { building: true, remainingMs, totalMs: cm.totalMs || (cm.readyAt - cm.builtAt), skipAM: Math.max(1, Math.ceil(remainingMs / 60000 / 8)) }; },
+  upgrade(r, c) { const m = Sim.state.grid[r] && Sim.state.grid[r][c], cm = this.cell(r, c); if (!m || !cm) return null; const lvl = cm.lvl || 1; if (lvl >= 3 || m.id === 'hub') return { lvl, next: null }; const mul = lvl === 1 ? 2 : 5; return { lvl, next: { cost: MODULES[m.id].cost * mul, rate: this.rateOf(m.id, lvl + 1), cap: this.rateOf(m.id, lvl + 1) * (lvl + 1 === 3 ? 120 : 90), ms: 2 * ({ 1: 45e3, 2: 240e3, 3: 900e3, 4: 3600e3 }[MODULES[m.id].tier]), note: m.id === 'dock' ? 'Service time −15%' : m.id === 'quarters' || m.id === 'habitat' ? 'Capacity +25%' : null } }; },
+  get am() { return this.profile.am; },
+  get rank() { const xp = this.profile.rank.xp; let cur = RANKS[0]; for (const r of RANKS) if (xp >= r.xp) cur = r; const nx = RANKS.find(r => r.level === cur.level + 1); return { level: cur.level, title: cur.title, xp, next: nx ? nx.xp : null, pct: nx ? (xp - cur.xp) / (nx.xp - cur.xp) : 1 }; },
+  sectors() {
+    return SECTOR_ORDER.map((id, i) => {
+      const def = SECTORS[id]; let status = 'locked', why = '';
+      if (id === Sim.state.sector) status = 'active'; else if (this.profile.unlocked.includes(id)) status = 'owned';
+      else if (i <= 3) status = 'unlockable'; else { const u = def.unlock; why = `Needs station level ${u.level}, ${fmt(u.credits)} cr${u.charts ? ` and ${u.charts} chart${u.charts === 1 ? '' : 's'}` : ''}${u.pass ? ', or the Sector Pass' : ''}`; }
+      const summary = status === 'active' ? { name: Sim.state.name, level: Sim.state.level, credits: Sim.state.credits, modules: Sim.totals().modules, banked: this.bankedTotal() } : status === 'owned' ? { name: 'Dustfall', level: 1, credits: 0, modules: 4, banked: 860 } : null;
+      return { def, status, why, summary };
+    });
+  },
+  bankedTotal() { let t = 0; for (const { r, c } of Sim.cells()) { const h = this.hopper(r, c); if (h) t += Math.floor(h.bank); } return t; },
+  expeditions() { return this.profile.expeditions.list.map(x => Object.assign({}, x, { remainingMs: Math.max(0, x.endsAt - Date.now()), status: x.status === 'claimed' ? 'claimed' : x.endsAt <= Date.now() ? 'ready' : 'out' })); },
+  expeditionSlots() { return { used: this.expeditions().filter(x => x.status === 'out' || x.status === 'ready').length, max: 2 }; },
+  charts(id) { return this.profile.expeditions.charts[id] || 0; },
+  missions() {
+    return MISSIONS.map(m => { const done = this._done.has(m.id), claimable = this._claimable.has(m.id); const progress = done ? m.goal : claimable ? m.goal : (this._progress[m.id] || 0); return { id: m.id, title: m.title, desc: m.desc, progress, goal: m.goal, reward: m.reward, done: done, claimable, chapter: m.chapter }; });
+  },
+  daily() { const d = this.profile.daily; return { streak: d.streak, dayIndex: d.dayIndex, claimable: !d.claimedAt, rewards: DAILY_REWARDS, repairable: false, repairAM: 5 }; },
+  collection() { const f = this.profile.collection.found; const map = it => Object.assign({}, it, { found: !!f[it.id], count: f[it.id] || 0 }); return { ships: COLLECTION.ships.map(map), species: COLLECTION.species.map(map), artifacts: COLLECTION.artifacts.map(map) }; },
+  canCollectAll() { return this.rank.level >= 3; },
+  // mutators
+  collect(r, c) { const h = this.hopper(r, c); if (!h || h.bank < 1) return 0; const amt = Math.floor(h.bank); const cm = this.cell(r, c); cm.bank = 0; cm.at = Date.now(); Sim.state.credits += amt; this.profile.rank.xp += Math.floor(amt / 100); hlog('Meta.collect', r, c, amt); Sim.emit('collect', { r, c, amount: amt }); Sim.emit('change'); return amt; },
+  collectAll() { let t = 0; for (const { r, c } of Sim.cells()) { const h = this.hopper(r, c); if (h && h.bank >= 1) { const amt = Math.floor(h.bank); const cm = this.cell(r, c); cm.bank = 0; cm.at = Date.now(); Sim.state.credits += amt; t += amt; } } hlog('Meta.collectAll', t); Sim.emit('change'); return t; },
+  skipBuild(r, c) { const b = this.build(r, c); if (!b || !b.building) return false; if (this.profile.am < b.skipAM) return false; this.profile.am -= b.skipAM; const cm = this.cell(r, c); cm.readyAt = null; cm.at = Date.now(); hlog('Meta.skipBuild', r, c, b.skipAM); Sim.emit('am', { delta: -b.skipAM, reason: 'skip', total: this.profile.am }); Sim.emit('build-done', { r, c, id: Sim.state.grid[r][c].id }); Sim.emit('change'); return true; },
+  upgradeModule(r, c) { const up = this.upgrade(r, c); if (!up || !up.next || Sim.state.credits < up.next.cost) return false; Sim.state.credits -= up.next.cost; const cm = this.cell(r, c); cm.lvl += 1; cm.readyAt = Date.now() + up.next.ms; cm.builtAt = Date.now(); cm.totalMs = up.next.ms; hlog('Meta.upgradeModule', r, c); Sim.emit('build-start', { r, c, id: Sim.state.grid[r][c].id, totalMs: up.next.ms }); Sim.emit('change'); return true; },
+  launchExpedition(id) { const def = SECTORS[id]; if (Sim.state.credits < def.expedition.cost) return { ok: false, why: 'Not enough credits' }; Sim.state.credits -= def.expedition.cost; const x = { id: 'x' + Date.now(), sector: id, startedAt: Date.now(), endsAt: Date.now() + def.expedition.minutes * 60000, status: 'out', slot: 1 }; this.profile.expeditions.list.push(x); hlog('Meta.launchExpedition', id); Sim.emit('expedition', { id: x.id, state: 'launched' }); Sim.emit('change'); return true; },
+  claimExpedition(id) { const x = this.profile.expeditions.list.find(e => e.id === id); if (!x) return null; x.status = 'claimed'; const loot = { chart: 1, goods: { water: 40, fruit: 22 }, am: 3, credits: 1850, discover: { kind: 'species', id: 'tidesinger', name: 'Tidesingers' } }; this.profile.expeditions.charts[x.sector] = (this.profile.expeditions.charts[x.sector] || 0) + 1; this.profile.am += loot.am; Sim.state.credits += loot.credits; this.profile.collection.found.tidesinger = 1; hlog('Meta.claimExpedition', id); Sim.emit('expedition', { id, state: 'claimed', loot }); Sim.emit('discover', { kind: 'species', id: 'tidesinger' }); Sim.emit('change'); return loot; },
+  skipExpedition(id) { const x = this.profile.expeditions.list.find(e => e.id === id); if (!x) return false; const am = Math.max(1, Math.ceil((x.endsAt - Date.now()) / 60000 / 8)); if (this.profile.am < am) return false; this.profile.am -= am; x.endsAt = Date.now() - 1; hlog('Meta.skipExpedition', id, am); Sim.emit('am', { delta: -am, reason: 'skip', total: this.profile.am }); Sim.emit('expedition', { id, state: 'ready' }); Sim.emit('change'); return true; },
+  claimMission(id) { if (!this._claimable.has(id)) return false; const m = MISSIONS.find(x => x.id === id); this._claimable.delete(id); this._done.add(id); Sim.state.credits += m.reward.credits || 0; this.profile.am += m.reward.am || 0; this.profile.rank.xp += m.reward.xp || 0; hlog('Meta.claimMission', id); Sim.emit('mission', { id, state: 'claimed' }); if (m.reward.am) Sim.emit('am', { delta: m.reward.am, reason: 'mission', total: this.profile.am }); Sim.emit('change'); return m.reward; },
+  claimDaily() { const d = this.profile.daily; if (d.claimedAt) return null; d.claimedAt = Date.now(); const rw = DAILY_REWARDS[d.dayIndex]; const out = rw.kind === 'am' ? { am: rw.amount } : rw.kind === 'credits' ? { credits: rw.min } : { goods: 'Goods crate' }; if (out.am) this.profile.am += out.am; if (out.credits) Sim.state.credits += out.credits; hlog('Meta.claimDaily', out); Sim.emit('daily', { claimed: true, streak: d.streak, reward: out }); Sim.emit('change'); return out; },
+  repairStreak() { return false; },
+  unlockSector(id, o) { const def = SECTORS[id]; if (o && o.withAM) { if (this.profile.am < def.unlock.am) return { ok: false, why: 'Not enough Antimatter' }; this.profile.am -= def.unlock.am; } else if (Sim.state.credits < def.unlock.credits) return { ok: false, why: `Need ${fmt(def.unlock.credits - Sim.state.credits)} more credits` }; else Sim.state.credits -= def.unlock.credits; this.profile.unlocked.push(id); hlog('Meta.unlockSector', id, o); Sim.emit('sector', { id, state: 'unlocked' }); Sim.emit('change'); return true; },
+  switchSector(id) { hlog('Meta.switchSector', id); Sim.state.sector = id; this.profile.activeSector = id; Sim.emit('sector', { id, state: 'switched' }); return Sim.state; },
+  spendAM(n, reason) { if (this.profile.am < n) return false; this.profile.am -= n; Sim.emit('am', { delta: -n, reason, total: this.profile.am }); return true; },
+  export() { return JSON.stringify(this.profile); },
+  import(json) { try { const p = JSON.parse(json); if (!p || p.v !== 2) return false; hlog('Meta.import ok'); return true; } catch (e) { return false; } },
+  newStationHere() { hlog('Meta.newStationHere'); Sim.newGame(); },
+  resetProfile() { hlog('Meta.resetProfile'); },
+};
+
+// ---------------------------------------------------------------- Engine stub: a 2D canvas world + the 0.3 facade
+const Engine = {
+  host: null, canvas: null, ctx: null, listeners: {}, placing: null, selected: null, hover: null,
+  perf: { fps: 60, tier: 2 }, _avoid: null, _focus: null, _stars: [],
+  camera: {
+    zoom: 1, x: 0, y: 0, min: .55, max: 2.6,
+    focusCell(r, c, o) { hlog('camera.focusCell', r, c, o); Engine._focus = { r, c, t: performance.now() }; },
+    fit(o) { hlog('camera.fit', o); }, drift(b) { hlog('camera.drift', b); }, shake(px) { hlog('camera.shake', px); },
+    avoid(rect) { Engine._avoid = rect; },
+  },
+  fx: {
+    collect(r, c, amount, targetEl) { hlog('fx.collect', r, c, amount); const p = Engine.cellToScreen(r, c), hr = Engine.host.getBoundingClientRect(); Engine._burst = { x: p.x, y: p.y, t: performance.now() }; return Overlays.fly({ x: hr.left + p.x, y: hr.top + p.y - 10 }, targetEl, { n: Math.max(8, Math.min(14, Math.round(amount / 50))), icon: 'credits', onHit: () => UI.anchorHit('credits') }); },
+    buildStart(r, c) { hlog('fx.buildStart', r, c); }, buildDone(r, c) { hlog('fx.buildDone', r, c); Engine._burst = Object.assign(Engine.cellToScreen(r, c), { t: performance.now() }); },
+    floater(r, c, text, color) { hlog('fx.floater', r, c, text, color); }, pulse(r, c, color) { hlog('fx.pulse', r, c, color); Engine._pulse = Object.assign(Engine.cellToScreen(r, c), { t: performance.now() }); },
+    shock(x, y, s) { hlog('fx.shock', x, y, s); }, levelUp() { hlog('fx.levelUp'); Engine._flash = performance.now(); }, flash(color, a, ms) { hlog('fx.flash', color, a, ms); Engine._flash = performance.now(); },
+    warp() { hlog('fx.warp'); Engine._flash = performance.now(); return new Promise(r => setTimeout(r, 900)); },
+  },
+  init(host) { this.host = host; this.canvas = document.createElement('canvas'); host.appendChild(this.canvas); this.ctx = this.canvas.getContext('2d'); this.seed(); this.resize(); window.addEventListener('resize', () => this.resize()); this.bindInput(); requestAnimationFrame(t => this.frame(t)); return Promise.resolve(); },
+  seed() { const rng = (() => { let s = 1910; return () => (s = (s * 16807) % 2147483647) / 2147483647; })(); this._stars = Array.from({ length: 420 }, () => ({ x: rng(), y: rng(), r: .4 + rng() * 1.1, a: .25 + rng() * .65 })); },
+  setSector(def, state) { hlog('Engine.setSector', def && def.id); }, setPaused(b) { hlog('Engine.setPaused', b); }, setPerf(t) { hlog('Engine.setPerf', t); },
+  resize() { const r = this.host.getBoundingClientRect(); this.w = Math.max(1, r.width); this.h = Math.max(1, r.height); const dpr = Math.min(2, devicePixelRatio || 1); this.canvas.width = this.w * dpr; this.canvas.height = this.h * dpr; this.canvas.style.width = this.w + 'px'; this.canvas.style.height = this.h + 'px'; this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); },
+  on(evt, fn) { (this.listeners[evt] ||= []).push(fn); }, off(evt, fn) { const l = this.listeners[evt]; if (l) { const i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); } },
+  emit(evt, d) { (this.listeners[evt] || []).forEach(fn => fn(d)); },
+  // grid geometry: cell size from the free area, station centred in the clear part of the screen
+  geom() {
+    const s = Sim.state, cols = s.grid[0].length, rows = s.grid.length;
+    const top = 56, bottom = this.h - 48, left = 72 + (this._avoid ? this._avoid.w + 24 : 0), right = this.w - 330;
+    const cell = Math.max(8, Math.floor(Math.min((right - left) / (cols + 3), (bottom - top) / (rows + 3))));
+    const ox = Math.round((left + right) / 2 - cols * cell / 2), oy = Math.round((top + bottom) / 2 - rows * cell / 2);
+    return { cell, ox, oy, cols, rows };
+  },
+  cellAt(x, y) { const g = this.geom(); const c = Math.floor((x - g.ox) / g.cell), r = Math.floor((y - g.oy) / g.cell); return (r >= 0 && r < g.rows && c >= 0 && c < g.cols) ? { r, c } : null; },
+  cellToScreen(r, c) { const g = this.geom(); return { x: g.ox + (c + .5) * g.cell, y: g.oy + (r + .5) * g.cell }; },
+  bindInput() {
+    const cv = this.canvas;
+    cv.addEventListener('mousemove', e => { const cell = this.cellAt(e.clientX, e.clientY); const k = cell ? `${cell.r},${cell.c}` : ''; if (k !== this._hk) { this._hk = k; this.hover = cell; this.emit('cell-hover', cell ? { r: cell.r, c: cell.c, x: e.clientX, y: e.clientY } : null); } });
+    cv.addEventListener('mouseleave', () => { this._hk = ''; this.hover = null; this.emit('cell-hover', null); });
+    cv.addEventListener('click', e => { const cell = this.cellAt(e.clientX, e.clientY); if (!cell) { this.emit('empty-click', { x: e.clientX, y: e.clientY }); return; } const occ = Sim.occupied(cell.r, cell.c); const hp = occ ? Meta.hopper(cell.r, cell.c) : null; const bd = occ ? Meta.build(cell.r, cell.c) : null; if (occ && !this.placing && hp && hp.ready) this.emit('bank-click', { r: cell.r, c: cell.c }); else if (occ && !this.placing && bd && bd.building) this.emit('scaffold-click', { r: cell.r, c: cell.c }); else this.emit('cell-click', { r: cell.r, c: cell.c, occupied: occ, x: e.clientX, y: e.clientY }); });
+    cv.addEventListener('contextmenu', e => { e.preventDefault(); const cell = this.cellAt(e.clientX, e.clientY); this.emit('context', cell || { r: null, c: null }); });
+  },
+  thumbnail(state, w, h) { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const x = cv.getContext('2d'); x.fillStyle = '#03040A'; x.fillRect(0, 0, w, h); const g = state.grid, cols = g[0].length, rows = g.length, cell = Math.floor(Math.min(w / (cols + 1), h / (rows + 1))), ox = (w - cols * cell) / 2, oy = (h - rows * cell) / 2; for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (g[r][c]) { x.fillStyle = g[r][c].id === 'hub' ? '#F3E9D6' : PAL.family(g[r][c].id); x.globalAlpha = .85; x.fillRect(ox + c * cell + 1, oy + r * cell + 1, cell - 2, cell - 2); } return cv; },
+  frame(t) {
+    const x = this.ctx, w = this.w, h = this.h; if (!Sim.state) { requestAnimationFrame(tt => this.frame(tt)); return; }
+    // space
+    const sky = x.createLinearGradient(0, 0, w * .3, h); sky.addColorStop(0, '#05070F'); sky.addColorStop(.5, '#0B1226'); sky.addColorStop(1, '#070B18'); x.fillStyle = sky; x.fillRect(0, 0, w, h);
+    const neb = (cx, cy, r, col, a) => { const g = x.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)'); x.globalAlpha = a; x.fillStyle = g; x.fillRect(cx - r, cy - r, r * 2, r * 2); x.globalAlpha = 1; };
+    neb(w * .55, h * .55, Math.max(w, h) * .55, '#5A3A1C', .35); neb(w * .25, h * .8, Math.max(w, h) * .4, '#1C2440', .5); neb(w * .8, h * .2, Math.max(w, h) * .35, '#3B2A14', .3);
+    for (const s of this._stars) { x.globalAlpha = s.a; x.fillStyle = '#FFF4E0'; x.fillRect(s.x * w, s.y * h, s.r, s.r); } x.globalAlpha = 1;
+    // planet upper right
+    const pr = h * .3, px = w * .86, py = h * .16; const pg = x.createRadialGradient(px - pr * .4, py - pr * .4, pr * .1, px, py, pr); pg.addColorStop(0, '#FFE2A8'); pg.addColorStop(.35, '#C9A86A'); pg.addColorStop(1, '#3A2210'); x.fillStyle = pg; x.beginPath(); x.arc(px, py, pr, 0, Math.PI * 2); x.fill();
+    const rim = x.createRadialGradient(px, py, pr * .95, px, py, pr * 1.08); rim.addColorStop(0, 'rgba(255,226,168,.35)'); rim.addColorStop(1, 'rgba(255,226,168,0)'); x.fillStyle = rim; x.beginPath(); x.arc(px, py, pr * 1.08, 0, Math.PI * 2); x.fill();
+    // station
+    const g = this.geom(), s = Sim.state, cell = g.cell;
+    x.strokeStyle = 'rgba(243,233,214,.08)'; x.lineWidth = 1;
+    for (let r = 0; r <= g.rows; r++) for (let c = 0; c <= g.cols; c++) { x.fillStyle = 'rgba(243,233,214,.10)'; x.fillRect(g.ox + c * cell - .5, g.oy + r * cell - .5, 1, 1); }
+    x.lineWidth = Math.max(3, cell * .14); x.strokeStyle = '#232838';
+    for (const { r, c } of Sim.cells()) for (const [nr, nc] of [[r + 1, c], [r, c + 1]]) if (Sim.occupied(nr, nc)) { x.beginPath(); x.moveTo(g.ox + (c + .5) * cell, g.oy + (r + .5) * cell); x.lineTo(g.ox + (nc + .5) * cell, g.oy + (nr + .5) * cell); x.stroke(); }
+    for (const { r, c, m } of Sim.cells()) {
+      const X = g.ox + c * cell + 4, Y = g.oy + r * cell + 4, S = cell - 8, fam = PAL.family(m.id), bd = Meta.build(r, c), hp = Meta.hopper(r, c);
+      x.fillStyle = 'rgba(0,0,0,.35)'; x.fillRect(X + 2, Y + 4, S, S);
+      x.fillStyle = '#1B2030'; x.globalAlpha = bd && bd.building ? .4 : 1; x.fillRect(X, Y, S, S); x.globalAlpha = 1;
+      x.strokeStyle = 'rgba(243,233,214,.25)'; x.lineWidth = 1; x.strokeRect(X + .5, Y + .5, S - 1, S - 1);
+      x.fillStyle = m.id === 'hub' ? '#F3E9D6' : fam; x.fillRect(X + 4, Y + S - 7, S - 8, 3);
+      if (m.id !== 'hub' && (s.cells[`${r},${c}`] || {}).lvl > 1) { x.fillStyle = '#F3E9D6'; x.fillRect(X + S - 8, Y + 4, 4, 4); }
+      Icons.draw(x, m.id, X + S / 2 - Math.min(20, S * .3), Y + S / 2 - Math.min(20, S * .3) - 2, Math.min(40, S * .6), fam);
+      if (bd && bd.building) { x.strokeStyle = '#8FD3E8'; x.lineWidth = 2; x.beginPath(); x.arc(X + S / 2, Y + S / 2, S / 2 + 2, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - bd.remainingMs / bd.totalMs)); x.stroke(); x.fillStyle = 'rgba(4,5,10,.8)'; x.fillRect(X + S / 2 - 20, Y + S + 4, 40, 14); x.fillStyle = '#BFE8F4'; x.font = '500 11px "JetBrains Mono"'; x.textAlign = 'center'; x.fillText(Fmt.ms(bd.remainingMs), X + S / 2, Y + S + 15); }
+      if (hp && hp.ready) { const bob = Math.sin(t / 600 + r + c) * 3; x.fillStyle = '#E9A23B'; x.shadowColor = 'rgba(233,162,59,.9)'; x.shadowBlur = hp.full ? 14 : 8; x.beginPath(); x.arc(X + S / 2, Y - 10 + bob, hp.full ? 9 : 7, 0, Math.PI * 2); x.fill(); x.shadowBlur = 0; x.strokeStyle = '#140C00'; x.lineWidth = 1.5; x.beginPath(); x.arc(X + S / 2, Y - 10 + bob, 3, .6, Math.PI * 2 - .6); x.stroke(); }
+      if (this.selected && this.selected.r === r && this.selected.c === c) { x.strokeStyle = '#F3E9D6'; x.lineWidth = 1.5; const L = 10, p = 3; for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const cx = sx < 0 ? X - p : X + S + p, cy = sy < 0 ? Y - p : Y + S + p; x.beginPath(); x.moveTo(cx, cy + sy * -L); x.lineTo(cx, cy); x.lineTo(cx + sx * -L, cy); x.stroke(); } }
+    }
+    if (this.placing) { x.strokeStyle = 'rgba(243,233,214,.6)'; x.lineWidth = 1; for (let r = 0; r < g.rows; r++) for (let c = 0; c < g.cols; c++) if (!Sim.occupied(r, c) && Sim.canPlace(this.placing, r, c).ok) { const X = g.ox + c * cell, Y = g.oy + r * cell; x.strokeRect(X + 6.5, Y + 6.5, cell - 13, cell - 13); } }
+    if (this._pulse && t - this._pulse.t < 600) { const k = (t - this._pulse.t) / 600; x.strokeStyle = `rgba(243,233,214,${1 - k})`; x.lineWidth = 2; x.beginPath(); x.arc(this._pulse.x, this._pulse.y, cell * (.5 + k), 0, Math.PI * 2); x.stroke(); }
+    if (this._flash && t - this._flash < 500) { x.fillStyle = `rgba(255,244,224,${.35 * (1 - (t - this._flash) / 500)})`; x.fillRect(0, 0, w, h); }
+    // vignette
+    const vg = x.createRadialGradient(w / 2, h / 2, Math.min(w, h) * .4, w / 2, h / 2, Math.max(w, h) * .75); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.38)'); x.fillStyle = vg; x.fillRect(0, 0, w, h);
+    requestAnimationFrame(tt => this.frame(tt));
+  },
+};
+
+// ---------------------------------------------------------------- Store stub (7.2 surface)
+const Store = {
+  ui: { confirm: null }, mode: 'sandbox', ready: Promise.resolve(),
+  catalog() { return STORE_CATALOG.map(r => ({ sku: r.sku, kind: r.kind, title: r.name, desc: r.desc, amount: r.amount || 0, grant: r.kind === 'am' ? { am: r.amount } : r.kind === 'credits' ? { credits: { hours: r.rateMinutes / 60, min: r.min } } : r.kind === 'pass' ? { unlockAll: true, entitlement: r.sku } : Object.assign({ entitlement: r.sku }, typeof r.grant === 'object' ? { am: r.grant.am, payload: r.grant } : {}), priceCents: r.priceCents, priceLabel: r.priceLabel, badge: r.badge, owned: r.sku === 'liveries' })); },
+  async purchase(sku) {
+    const e = this.catalog().find(i => i.sku === sku); hlog('Store.purchase', sku);
+    if (!e) return { ok: false, sku, granted: false, error: 'unknown-sku', message: `Unknown item "${sku}".` };
+    if (e.owned) return { ok: false, sku, granted: false, error: 'already-owned', message: 'You already own this.' };
+    const ok = this.ui.confirm ? await this.ui.confirm({ sku, title: e.title, desc: e.desc, priceLabel: e.priceLabel, testMode: true }) : true;
+    if (!ok) { const p = { sku, granted: false, mode: 'sandbox', cancelled: true }; Sim.emit('purchase', p); return { ok: false, ...p }; }
+    await new Promise(r => setTimeout(r, 600));
+    if (e.grant.am) { Meta.profile.am += e.grant.am; Sim.emit('am', { delta: e.grant.am, reason: 'purchase', total: Meta.profile.am }); }
+    if (e.grant.credits) { const cr = Math.max(e.grant.credits.min, 0); Sim.state.credits += cr; }
+    const p = { sku, granted: true, mode: 'sandbox', grantId: 'sandbox-' + Date.now(), pending: false }; Sim.emit('purchase', p); Sim.emit('change'); return { ok: true, ...p };
+  },
+  async restore(email) { hlog('Store.restore', email); return { ok: true, mode: 'sandbox', applied: [], message: 'Test mode: purchases live in this browser only.' }; },
+};
+</script>
+
+<!-- the HUD under test -->
+<script src="../js/ui/sound.js"></script>
+<script src="../js/ui/format.js"></script>
+<script src="../js/ui/overlays.js"></script>
+<script src="../js/ui/panels.js"></script>
+<script src="../js/ui/hud.js"></script>
+
+<script>
+'use strict';
+(function harness() {
+  const q = new URLSearchParams(location.search);
+  if (q.get('toolbar') === '0') document.body.dataset.toolbar = '0';
+  if (q.get('hold') === '1') Overlays.celeMs = 6000;   // hold celebrations for screenshots
+
+  // ---- stage: 28 modules, 3 timers, ready banks, ships
+  Meta.init();
+  Sim.newGame();
+  const S = Sim.state, now = Date.now();
+  const plan = [['dock', 4, 4], ['fuel', 4, 5], ['warehouse', 4, 6], ['market', 4, 8], ['warehouse', 4, 9], ['dock', 4, 10],
+    ['comms', 3, 7], ['dock', 2, 7], ['quarters', 5, 7], ['cantina', 6, 7], ['habitat', 7, 7],
+    ['solar', 3, 6], ['solar', 3, 8], ['hydro', 5, 6], ['clinic', 5, 8], ['reactor', 3, 5], ['rec', 5, 5], ['customs', 3, 9], ['security', 5, 9],
+    ['quarters', 6, 6], ['habitat', 6, 8], ['dock', 6, 5], ['solar', 2, 6], ['bank', 3, 4], ['warehouse', 2, 8], ['fuel', 6, 9], ['school', 7, 6]];
+  const minsAgo = [70, 40, 12, 55, 5, 61, 30, 90, 20, 8, 44, 66, 15, 50, 25, 70, 3, 33, 48, 10, 62, 36, 9, 72, 27, 58, 14];
+  plan.forEach(([id, r, c], i) => { S.grid[r][c] = { id, built: 10 + i }; S.cells[`${r},${c}`] = { lvl: i % 7 === 0 ? 2 : i === 15 ? 3 : 1, bank: 0, readyAt: null, builtAt: now - 3600e3, at: now - minsAgo[i] * 60000 }; });
+  S.cells['4,7'] = { lvl: 1, bank: 0, readyAt: null, builtAt: now - 9 * 86400e3, at: now - 50 * 60000 };
+  // three timers: a scaffold at 4:12, an upgrade at 38:00 and a long build at 1h05
+  S.grid[7][8] = { id: 'plaza', built: 41 }; S.cells['7,8'] = { lvl: 1, bank: 0, readyAt: now + 252e3, builtAt: now - 648e3, totalMs: 900e3, at: now };
+  S.cells['3,5'].readyAt = now + 38 * 60000; S.cells['3,5'].builtAt = now - 10 * 60000; S.cells['3,5'].totalMs = 48 * 60000;
+  S.grid[2][5] = { id: 'shipyard', built: 41 }; S.cells['2,5'] = { lvl: 1, bank: 0, readyAt: now + 65 * 60000, builtAt: now - 25 * 60000, totalMs: 90 * 60000, at: now };
+  Sim.spawnShip('kestrel', 'courier', 'docked', 4, 3); Sim.spawnShip('halvorsen', 'hauler', 'docked', 4, 11); Sim.spawnShip('meridian', 'freighter', 'approach', 1, 7); Sim.spawnShip('tidewater', 'hauler', 'queue', 8, 12);
+  S.ships[0].trades = ['D041 sold 30 alloy for 1,240', 'D041 bought 12 grain for 310'];
+  S.residents = 18;
+
+  // the daily reward auto-opens on start when claimable (5.4); keep it claimed at boot unless ?daily=1 so the bridge is visible
+  if (q.get('daily') !== '1') Meta.profile.daily.claimedAt = NOW0;
+  Engine.init(document.getElementById('world'));
+  UI.init();
+  UI.start();
+  if (q.get('reduced') === '1') Motion.setOverride('reduced');
+  if (q.get('panel')) UI.openPanel(q.get('panel'));
+  if (q.get('screen') === 'title') showTitle();
+  setInterval(() => UI.tick(), 250);
+
+  // ---- toolbar
+  const bar = document.getElementById('h-bar'), toggle = document.getElementById('h-toggle');
+  toggle.addEventListener('click', () => { bar.hidden = !bar.hidden; });
+  document.getElementById('h-panels').innerHTML = PANEL_DEFS.map(p => `<button data-h="panel:${p.id}">${p.label}</button>`).join('') + '<button data-h="panel:close">close</button>';
+  function showTitle() {
+    document.body.setAttribute('data-screen', 'title');
+    UI.setTitleResume({ name: S.name, day: S.day, level: S.level, credits: S.credits, am: Meta.am, banked: Meta.bankedTotal(), rank: Meta.rank, sector: 'home', thumb: Engine.thumbnail(S, 200, 120) });
+    document.getElementById('btn-resume').onclick = () => { document.body.removeAttribute('data-screen'); UI.start(); };
+    document.getElementById('btn-newstation').onclick = () => { document.getElementById('title-resume').hidden = true; document.getElementById('title-form').hidden = false; document.getElementById('title-confirm').hidden = false; };
+    document.getElementById('btn-title-back').onclick = () => { document.getElementById('title-resume').hidden = false; document.getElementById('title-form').hidden = true; };
+    document.getElementById('btn-commission').onclick = () => { document.body.removeAttribute('data-screen'); UI.start(); };
+  }
+  const EVENT_SAMPLE = { id: 'refugees', title: 'Refugee Convoy', text: 'A convoy from a failed colony asks for shelter. Taking them in needs free homes, but word travels.', data: {}, choice: true, yes: 'Take them in', no: 'Turn them away' };
+  const ALERT_SAMPLE = { id: 'pirates', title: 'Pirate Raid', text: 'Raiders hit a cargo bay. Security posts drive them off faster.', data: {}, choice: false };
+  const H = {
+    'modal:event': () => { S.pending = EVENT_SAMPLE; UI.showEvent(); },
+    'modal:alert': () => { S.pending = ALERT_SAMPLE; UI.showEvent(); },
+    'modal:confirm': () => UI.confirm('Scrap Docking Bay?', 'Scrapping returns <b>400</b> credits. The <b>312</b> credits banked in its hopper are lost.', () => hlog('confirmed'), { yes: 'Scrap it', danger: true }),
+    'modal:store': () => Store.ui.confirm({ sku: 'am_140', title: 'Antimatter · 140', desc: '125 plus 15 bonus.', priceLabel: '$4.99', testMode: true }).then(ok => hlog('store confirm', ok)),
+    'sheet:daily': () => { Meta.profile.daily.claimedAt = 0; UI.refresh(); UI.openDaily(); },
+    'sheet:away': () => UI.showAway({ ms: 3.2 * 3600e3, credits: 4820, banked: 4820, builds: 2, expeditions: 1, ships: 11, events: ['Solar flare: arrays dark for 2 days', 'Kestrel Lines opened an office'] }),
+    'sheet:keys': () => Overlays.keys(),
+    'tooltip': () => { Engine.emit('cell-hover', { r: 4, c: 4, x: 500, y: 400 }); setTimeout(() => Engine.emit('cell-hover', null), 4000); },
+    'toast:good': () => UI.toast('Kestrel courier paid 280', 'good'), 'toast:warn': () => UI.toast('Need 300 more credits for a Docking Bay', 'warn'),
+    'toast:bad': () => UI.toast('Pirates raided the warehouse: 40 ore lost', 'bad'), 'toast:gold': () => UI.toast('Mission complete: Tap the Bank', 'gold'),
+    'toast:info': () => UI.toast('Expedition launched to Sable Drift', 'info'), 'toast:action': () => UI.toast('Comms Relay online', 'good', { chip: 'Build', icon: 'build', action: { label: 'Focus', fn: () => hlog('focus') } }),
+    'toast:all': () => { ['good', 'warn', 'bad', 'gold', 'info'].forEach((k, i) => setTimeout(() => H['toast:' + k](), i * 120)); },
+    'cele:rank': () => UI.celebrate('rank', { level: 4, title: 'Commodore' }), 'cele:level': () => UI.celebrate('level', { level: 3 }),
+    'cele:unlock': () => UI.celebrate('unlock', { id: 'sable' }), 'cele:mission': () => UI.celebrate('mission', { title: 'Open for Business', reward: { credits: 600, am: 5, xp: 30 } }),
+    'cele:expedition': () => UI.celebrate('expedition', { sector: 'thessaly', loot: { chart: 1, goods: { water: 40, fruit: 22 }, am: 3, credits: 1850 } }),
+    'cele:purchase': () => UI.celebrate('purchase', { title: '+140 Antimatter', reward: { am: 140 } }), 'cele:daily': () => UI.celebrate('daily', { dayIndex: 3, reward: { credits: 6000 } }),
+    'ev:collect': () => Meta.collect(4, 4) || Meta.collect(3, 4) || hlog('nothing banked'), 'ev:collect-all': () => UI.collectAll(),
+    'ev:build-done': () => { const cm = S.cells['7,8']; cm.readyAt = null; cm.at = Date.now(); Sim.emit('build-done', { r: 7, c: 8, id: 'plaza' }); },
+    'ev:am': () => { Meta.profile.am += 25; Sim.emit('am', { delta: 25, reason: 'harness', total: Meta.profile.am }); },
+    'ev:mission': () => { Meta._claimable.add('c_serve3'); Sim.emit('mission', { id: 'c_serve3', state: 'complete' }); },
+    'ev:expedition': () => { const x = Meta.profile.expeditions.list.find(e => e.status === 'out'); if (x) { x.endsAt = Date.now() - 1; Sim.emit('expedition', { id: x.id, state: 'ready', sector: x.sector }); } },
+    'ev:discover': () => { Meta.profile.collection.found.gate_warden = 1; Sim.emit('discover', { kind: 'species', id: 'gate_warden' }); },
+    'ev:offline': () => Sim.emit('offline', { ms: 5.5 * 3600e3, credits: 7230, banked: 7230, builds: 1, expeditions: 1, ships: 18, events: ['Trade boom: grain prices tripled'] }),
+    'ev:flare': () => { S.fx.flareUntil = S.day + 2; Sim.emit('change'); }, 'ev:alert': () => UI.raiseAlert('pirates'), 'ev:festival': () => { S.fx.festivalUntil = S.day + 3; Sim.emit('change'); },
+    'ev:clear': () => { S.fx.flareUntil = 0; S.fx.festivalUntil = 0; UI._alert = { kind: null, until: 0 }; Sim.emit('change'); },
+    'place:dock': () => UI.place('dock'), 'select:hub': () => UI.select(4, 7), 'select:scaffold': () => UI.select(7, 8), 'select:bank': () => UI.select(4, 4), 'deselect': () => { UI.deselect(); UI.place(null); },
+    'motion': () => Motion.setOverride(Motion.override === 'reduced' ? 'auto' : 'reduced'),
+    'title': () => showTitle(),
+    'level:4': () => { S.level = S.level === 4 ? 2 : 4; Sim.emit('levelup', { level: S.level }); },
+  };
+  bar.addEventListener('click', e => {
+    const b = e.target.closest('button[data-h]'); if (!b) return;
+    const k = b.dataset.h;
+    if (k.startsWith('panel:')) { const id = k.slice(6); if (id === 'close') UI.closePanel(); else UI.openPanel(id); return; }
+    if (k.startsWith('vp:')) { const [w, h] = k.slice(3).split('x').map(Number); window.open(location.pathname + '?toolbar=0', '_blank', `width=${w},height=${h}`); return; }
+    if (H[k]) H[k](); else hlog('no handler', k);
+  });
+
+  // ---- contrast check (section 8): glass composited over --space-2 (#0B1226, the brightest space tone) and --space-0
+  function lum(c) { const f = v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }; return .2126 * f(c[0]) + .7152 * f(c[1]) + .0722 * f(c[2]); }
+  function over(fg, a, bg) { return fg.map((v, i) => Math.round(v * a + bg[i] * (1 - a))); }
+  function ratio(a, b) { const l1 = lum(a), l2 = lum(b); return (Math.max(l1, l2) + .05) / (Math.min(l1, l2) + .05); }
+  const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const glass = over([10, 15, 30], .72, hex('#0B1226')), glass2 = over([16, 23, 44], .78, glass), glassDark = over([10, 15, 30], .72, hex('#03040A'));
+  const rows = [['body --ink-2 on glass', ratio(hex('#A3A7B0'), glass), 7], ['body --ink-2 on card', ratio(hex('#A3A7B0'), glass2), 7], ['--ink on glass', ratio(hex('#E6E8EC'), glass), 7],
+    ['label --ink-3 on glass', ratio(hex('#6B707C'), glass), 4.5], ['--amber-hi on glass', ratio(hex('#FFC46A'), glass), 7], ['--ice on glass', ratio(hex('#8FD3E8'), glass), 7], ['--am-hi on glass', ratio(hex('#DDB8FF'), glass), 7], ['--ink-2 on glass/space-0', ratio(hex('#A3A7B0'), glassDark), 7]];
+  document.getElementById('h-contrast').innerHTML = rows.map(([n, r, min]) => `${n}: <b class="${r >= min ? '' : 'bad'}">${r.toFixed(1)}:1</b>`).join('<br>');
+  window.HARNESS = { contrast: rows.map(([n, r]) => ({ n, r: +r.toFixed(2) })), fire: k => (H[k] || (() => {}))(), showTitle };
+})();
+</script>
+</body>
+</html>

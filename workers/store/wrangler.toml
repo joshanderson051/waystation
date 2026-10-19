@@ -1,0 +1,42 @@
+# Waystation store backend — Cloudflare Worker configuration (DESIGN2.md 7.4).
+# Follow README.md in this folder step by step; every REPLACE_… below is filled in there.
+#
+# Secrets are NEVER written in this file. Set them with:
+#   npx wrangler secret put STRIPE_SECRET_KEY        (sk_test_… first, sk_live_… when you go live)
+#   npx wrangler secret put STRIPE_WEBHOOK_SECRET    (whsec_… from the webhook endpoint you create in Stripe)
+
+name = "waystation-store"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+workers_dev = true            # publishes at https://waystation-store.<your-subdomain>.workers.dev
+
+[observability]
+enabled = true                # request logs in the Cloudflare dashboard (free tier includes this)
+
+# ---------------------------------------------------------------- KV: grants and per-player grant lists
+# Create the namespace once with `npx wrangler kv namespace create STORE` and paste the id it prints.
+[[kv_namespaces]]
+binding = "STORE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+# For `npx wrangler dev` (local testing) create a second one with `--preview` and paste it here:
+# preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+
+# ---------------------------------------------------------------- plain variables (not secret)
+[vars]
+# The site origins allowed to call this worker, comma-separated, no trailing slash.
+# Add "http://localhost:8794" (or whatever port you serve the game on) while testing locally.
+ALLOWED_ORIGIN = "https://joshanderson051.github.io"
+
+# sku -> Stripe price id. One line per catalog item (DESIGN2.md 7.1). Test-mode prices first;
+# replace with live-mode price ids when you go live (they are different ids).
+PRICES = '''{
+  "am_50":       "price_REPLACE_am_50",
+  "am_140":      "price_REPLACE_am_140",
+  "am_320":      "price_REPLACE_am_320",
+  "am_900":      "price_REPLACE_am_900",
+  "credits_s":   "price_REPLACE_credits_s",
+  "credits_l":   "price_REPLACE_credits_l",
+  "sector_pass": "price_REPLACE_sector_pass",
+  "founder":     "price_REPLACE_founder",
+  "liveries":    "price_REPLACE_liveries"
+}'''

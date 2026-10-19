@@ -4,6 +4,7 @@ A browser-based space station builder. The game, its landing page and the produc
 [`waystation/`](waystation/README.md); that folder is what gets published.
 
 - `waystation/index.html` is the landing page, `waystation/play/` is the game.
+- `waystation/DESIGN2.md` is the canonical specification (visuals, world engine, meta-game, HUD, store); `workers/store/` is the Stripe payment backend (Cloudflare Worker).
 - `scripts/dist.sh` assembles `dist/` for a static host (drops the docs, the local server and the dev previews).
 - `.github/workflows/pages.yml` publishes `dist/` to GitHub Pages on every push to `main`.
 

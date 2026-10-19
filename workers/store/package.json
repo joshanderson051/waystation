@@ -1,0 +1,21 @@
+{
+  "name": "waystation-store-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Waystation store backend: a Cloudflare Worker that creates Stripe Checkout sessions and records grants in KV (DESIGN2.md 7.4). No runtime dependencies.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node test/store.test.js",
+    "dev": "wrangler dev --port 8788",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "login": "wrangler login"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
