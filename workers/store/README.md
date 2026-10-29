@@ -93,17 +93,17 @@ npm test
 
 | sku | Product name | Description | Price | Test-mode Price ID (done 19 Oct 2026) |
 |---|---|---|---|---|
-| `am_50` | Antimatter · 50 | A vial of violet light. | $1.99 | `price_1USIUoFL8R957E3xoCDdGRhG` |
-| `am_140` | Antimatter · 140 | 125 plus 15 bonus. | $4.99 | `price_1USIVmFL8R957E3xY727d9Tq` |
-| `am_320` | Antimatter · 320 | 250 plus 70 bonus. | $9.99 | `price_1USIWiFL8R957E3xHHfCmtXA` |
-| `am_900` | Antimatter · 900 | 500 plus 400 bonus. | $24.99 | `price_1USIYfFL8R957E3xPbSgJbd4` |
-| `credits_s` | Supply Run | Two hours of your total station rate, at least 10,000 credits. | $1.99 | `price_1USIYuFL8R957E3xAkDJSeI7` |
-| `credits_l` | Trade Fleet | Eight hours of your total station rate, at least 40,000 credits. | $5.99 | `price_1USIZ9FL8R957E3x6XXal2Iw` |
-| `sector_pass` | Sector Pass | Every sector unlocked for this profile. No charts needed. | $9.99 | `price_1USIZNFL8R957E3xOORrW8Kr` |
-| `founder` | Founder's Livery | Ivory-amber station strip, the title Founder, and 100 Antimatter. | $4.99 | `price_1USIZcFL8R957E3xlP8au1s6` |
-| `liveries` | Sector Liveries | The six sector liveries for your station strip. | $2.99 | `price_1USIZsFL8R957E3xfXhXhx1o` |
+| `am_50` | Port Solace · 50 Antimatter | A vial of violet light. | $1.99 | `price_1USIUoFL8R957E3xoCDdGRhG` |
+| `am_140` | Port Solace · 140 Antimatter | 125 plus 15 bonus. | $4.99 | `price_1USIVmFL8R957E3xY727d9Tq` |
+| `am_320` | Port Solace · 320 Antimatter | 250 plus 70 bonus. | $9.99 | `price_1USIWiFL8R957E3xHHfCmtXA` |
+| `am_900` | Port Solace · 900 Antimatter | 500 plus 400 bonus. | $24.99 | `price_1USIYfFL8R957E3xPbSgJbd4` |
+| `credits_s` | Port Solace · Supply Run | Two hours of your total station rate, at least 10,000 credits. | $1.99 | `price_1USIYuFL8R957E3xAkDJSeI7` |
+| `credits_l` | Port Solace · Trade Fleet | Eight hours of your total station rate, at least 40,000 credits. | $5.99 | `price_1USIZ9FL8R957E3x6XXal2Iw` |
+| `sector_pass` | Port Solace · Sector Pass | Every sector unlocked for this profile. No charts needed. | $9.99 | `price_1USIZNFL8R957E3xOORrW8Kr` |
+| `founder` | Port Solace · Founder's Livery | Ivory-amber station strip, the title Founder, and 100 Antimatter. | $4.99 | `price_1USIZcFL8R957E3xlP8au1s6` |
+| `liveries` | Port Solace · Sector Liveries | The six sector liveries for your station strip. | $2.99 | `price_1USIZsFL8R957E3xfXhXhx1o` |
 
-The sku on the left is fixed: it is how the game names each item. Names, descriptions and prices match
+Product names start with "Port Solace · " so checkout pages, receipts and the Stripe dashboard name the game (renamed 29 Oct 2026; the game itself shows the short names from data2.js). The sku on the left is fixed: it is how the game names each item. Names, descriptions and prices match
 `STORE_CATALOG` in `waystation/play/js/data2.js`; if you change them in Stripe, change them there too.
 The Price IDs above are **test-mode** ids; live mode gets its own set (step 10).
 
