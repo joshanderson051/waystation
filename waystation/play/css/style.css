@@ -1097,6 +1097,11 @@ body[data-placing] .hint { color: var(--ivory); }
 #modal-text { color: var(--ink-2); user-select: text; }
 #modal-text b, #modal-text strong { color: var(--ink); }
 #modal-text .num { color: var(--ink); }
+/* Port Authority gifts (gifts.js, DESIGN2.md A9.4): one row per gift, the crew's note set off as a quote */
+#modal-text .gift { padding: 8px 0; border-top: 1px solid var(--hairline); }
+#modal-text .gift:first-of-type { border-top: 0; }
+#modal-text .gift .chips { margin: 0 0 6px; }
+#modal-text .gift-note { margin: 0; padding: 6px 10px; background: var(--surface-2); border-left: 2px solid var(--amber); color: var(--ink); overflow-wrap: anywhere; }
 #modal-extra { margin-top: 14px; }
 #modal-extra:empty { display: none; }
 #modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 18px 24px 20px; flex: none; }

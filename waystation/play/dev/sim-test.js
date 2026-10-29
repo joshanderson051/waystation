@@ -1088,10 +1088,219 @@ async function testImportPage() {
   check('a key outside waystation… rejects the whole payload', p.el('head').textContent === 'The station could not be moved' && st._map.size === 1);
 }
 
+// ------------------------------------------------------------ js/gifts.js: presence and Port Authority gifts (A9, spec section 4)
+// Runs gifts.js alone in a vm context with a fake fetch, a minimal Meta, a stub Overlays and a stub DOM whose nodes
+// record every textContent and innerHTML write, so "the note is text" can be asserted directly.
+const GIFTS_BASE = 'https://account.example.test';
+function makeGiftsWorld(o = {}) {
+  const storage = o.storage || makeStorage();
+  const clock = { now: START };
+  const calls = [], nodes = [], modals = [], listeners = {};
+  const respond = o.respond || (() => ({ status: 200, json: { ok: true, gifts: [] } }));
+  const fetch = async (url, init) => {
+    const call = { url, method: init && init.method, headers: { ...((init && init.headers) || {}) }, body: init && init.body ? JSON.parse(init.body) : null };
+    calls.push(call);
+    const r = respond(call, calls);
+    if (r === 'offline') throw new TypeError('Failed to fetch');
+    return { ok: r.status >= 200 && r.status < 300, status: r.status, json: async () => r.json };
+  };
+  const node = tag => {
+    const n = { tag, className: '', children: [], _text: '', htmlSets: [], textSets: [],
+      appendChild(c) { this.children.push(c); return c; },
+      set textContent(v) { this._text = String(v); this.textSets.push(String(v)); this.children = []; },
+      get textContent() { return this._text + this.children.map(c => c.textContent).join(''); },
+      set innerHTML(v) { this.htmlSets.push(String(v)); this.children = []; this._text = ''; },
+      get innerHTML() { return this.htmlSets.length ? this.htmlSets[this.htmlSets.length - 1] : ''; } };
+    nodes.push(n); return n;
+  };
+  let modalText = node('div');
+  const doc = {
+    hidden: false, readyState: 'complete',
+    body: { getAttribute: () => null },
+    querySelector: sel => (sel === 'meta[name="portsolace-account"]' && o.apiBase !== '' ? { getAttribute: () => JSON.stringify({ apiBase: o.apiBase == null ? GIFTS_BASE : o.apiBase }) } : null),
+    addEventListener: (evt, fn) => { (listeners[evt] ||= []).push(fn); },
+    createElement: tag => node(tag),
+    getElementById: id => (id === 'modal-text' ? modalText : null),
+  };
+  const hist = (o.history || []).slice();
+  const M = {
+    profile: { playerId: o.playerId || 'p_test_player_1', credits: 6000, am: 20, activeSector: 'home', unlocked: ['home', 'aurelia'], rank: { level: 3 },
+      sectors: { home: { name: 'Kestrel Deep', day: 12, level: 4 } }, entitlements: { owned: {}, history: hist } },
+    saves: 0, log: [],
+    get credits() { return this.profile.credits; },
+    addCredits(n, reason) { this.profile.credits += n; this.log.push(['credits', n, reason]); return this.profile.credits; },
+    addAM(n, reason) { this.profile.am += n; this.log.push(['am', n, reason]); return this.profile.am; },
+    grantEntitlement(sku, payload) { this.profile.entitlements.history.push({ sku, ...payload }); this.profile.entitlements.owned[sku] = true; return true; },
+    save() { this.saves++; },
+  };
+  const Ov = {
+    modal(opts) { modals.push(opts); modalText = node('div'); modalText.innerHTML = opts.html || ''; },
+    anyOpen: () => false,
+    rewardChips: r => [r.credits ? `<span class="rchip amber"><i class="ic-credits"></i><span>${r.credits} cr</span></span>` : '', r.am ? `<span class="rchip am"><i class="ic-antimatter"></i><span>${r.am} AM</span></span>` : ''].join(''),
+  };
+  const ctx = vm.createContext({ console, localStorage: storage, fetch, document: doc, Meta: M, Overlays: Ov, setTimeout, clearTimeout, setInterval, clearInterval, AbortController });
+  if (o.account) ctx.Account = o.account;
+  ctx.window = ctx;
+  vm.runInContext('Date', ctx).now = () => clock.now;
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'gifts.js'), 'utf8'), ctx, { filename: 'gifts.js' });
+  const Gifts = vm.runInContext('Gifts', ctx);
+  const visibility = hidden => { doc.hidden = hidden; for (const fn of listeners.visibilitychange || []) fn(); };
+  return { Gifts, ctx, M, calls, nodes, modals, clock, doc, storage, visibility, get modalText() { return modalText; } };
+}
+
+async function testGifts() {
+  sec('18. Gifts (A9): presence and Port Authority gifts (js/gifts.js)');
+  const presences = W => W.calls.filter(c => c.url.endsWith('/presence'));
+  const acks = W => W.calls.filter(c => c.url.endsWith('/gifts/ack'));
+  const gift = (id, credits, am, note) => ({ id, credits, am, note: note || '', createdAt: START - 1000 });
+  const settle = () => new Promise(r => setImmediate(r));
+
+  // presence body shape and the Bearer rule
+  let W = makeGiftsWorld();
+  check('exposes Gifts.init, checkNow, state and window.Gifts', typeof W.Gifts.init === 'function' && typeof W.Gifts.checkNow === 'function' && typeof W.Gifts.state === 'object' && W.ctx.window.Gifts === W.Gifts);
+  let r = await W.Gifts.checkNow();
+  const p0 = W.calls[0];
+  check('presence: one POST to {apiBase}/presence', r.ok && W.calls.length === 1 && p0.url === GIFTS_BASE + '/presence' && p0.method === 'POST' && /application\/json/.test(p0.headers['content-type']), W.calls.map(c => c.url));
+  check('presence body: exactly playerId, summary, platform, version', p0.body && Object.keys(p0.body).sort().join() === 'platform,playerId,summary,version', p0.body);
+  check('summary: name, day, level, rank, credits, am, sectors from the profile', JSON.stringify(Object.keys(p0.body.summary).sort()) === JSON.stringify(['am', 'credits', 'day', 'level', 'name', 'rank', 'sectors']) &&
+    p0.body.playerId === 'p_test_player_1' && p0.body.summary.name === 'Kestrel Deep' && p0.body.summary.day === 12 && p0.body.summary.level === 4 && p0.body.summary.rank === 3 &&
+    p0.body.summary.credits === 6000 && p0.body.summary.am === 20 && p0.body.summary.sectors === 2 && Object.values(p0.body.summary).slice(1).every(Number.isInteger), p0.body.summary);
+  check('platform is phone or desktop, version is a string', ['phone', 'desktop'].includes(p0.body.platform) && typeof p0.body.version === 'string', p0.body);
+  check('no Account: no Authorization header', !('authorization' in p0.headers));
+  check('no gifts: no ack, no modal', acks(W).length === 0 && W.modals.length === 0);
+
+  const st = makeStorage(); st.setItem('portsolace.account', JSON.stringify({ token: 'tok_signed_in', email: 'a@b.co' }));
+  W = makeGiftsWorld({ storage: st, account: { state: { signedIn: true }, config: { apiBase: GIFTS_BASE } } });
+  await W.Gifts.checkNow();
+  check('signed in: Bearer token from Account\'s stored session', W.calls[0].headers.authorization === 'Bearer tok_signed_in', W.calls[0].headers);
+  W = makeGiftsWorld({ storage: st, account: { state: { signedIn: false }, config: { apiBase: GIFTS_BASE } } });
+  await W.Gifts.checkNow();
+  check('a stored token while Account is signed out is not sent', W.calls.length === 1 && !('authorization' in W.calls[0].headers));
+  W = makeGiftsWorld({ account: { state: { signedIn: false }, config: { apiBase: 'https://other.example.test/' } } });
+  await W.Gifts.checkNow();
+  check('uses Account\'s parsed apiBase (trailing slash dropped)', W.calls[0].url === 'https://other.example.test/presence', W.calls[0].url);
+
+  // a gift is applied once, recorded, saved, acked and shown
+  const g1 = gift('gft_AAAAAAAAAAAAAAAAAAAAAA', 25000, 75, 'Thanks for testing the gate.');
+  W = makeGiftsWorld({ respond: c => (c.url.endsWith('/presence') ? { status: 200, json: { ok: true, gifts: [g1] } } : { status: 200, json: { ok: true, acked: 1 } }) });
+  r = await W.Gifts.checkNow();
+  const h1 = W.M.profile.entitlements.history.filter(h => h.grantId === g1.id);
+  check('gift applied: credits and AM added through Meta with reason gift', W.M.profile.credits === 31000 && W.M.profile.am === 95 && W.M.log.some(l => l[0] === 'credits' && l[1] === 25000 && l[2] === 'gift') && W.M.log.some(l => l[0] === 'am' && l[1] === 75 && l[2] === 'gift'), W.M.log);
+  check('history records {sku gift, grantId, mode gift, at, granted, note}', h1.length === 1 && h1[0].sku === 'gift' && h1[0].mode === 'gift' && h1[0].at === START && h1[0].granted.credits === 25000 && h1[0].granted.am === 75 && h1[0].note === g1.note, h1);
+  check('profile saved after applying', W.M.saves >= 1);
+  check('ack: POST /gifts/ack {playerId, ids:[id]}', acks(W).length === 1 && acks(W)[0].body.playerId === 'p_test_player_1' && JSON.stringify(acks(W)[0].body.ids) === JSON.stringify([g1.id]), acks(W).map(a => a.body));
+  check('checkNow reports applied and acked', r.ok && r.acked && JSON.stringify(r.applied) === JSON.stringify([g1.id]), r);
+  check('one modal: tag Port Authority, the crew title', W.modals.length === 1 && W.modals[0].tag === 'Port Authority' && W.modals[0].title === 'A gift from the Port Solace crew', W.modals.map(m => m.title));
+  check('modal shows the amounts with the credit and Antimatter chips', W.nodes.some(n => n.className === 'chips' && /ic-credits[\s\S]*25000 cr/.test(n.innerHTML) && /ic-antimatter[\s\S]*75 AM/.test(n.innerHTML)) && W.modalText.textContent.includes(g1.note));
+  r = await W.Gifts.checkNow();
+  check('same gift delivered again: not re-applied, acked again, no second modal', W.M.profile.credits === 31000 && W.M.profile.am === 95 && W.M.profile.entitlements.history.filter(h => h.grantId === g1.id).length === 1 &&
+    acks(W).length === 2 && JSON.stringify(r.already) === JSON.stringify([g1.id]) && W.modals.length === 1, r);
+
+  // a gift already in the history is acked but not applied
+  const old = gift('gft_BBBBBBBBBBBBBBBBBBBBBB', 9000, 9);
+  const g2 = gift('gft_CCCCCCCCCCCCCCCCCCCCCC', 0, 40, 'Second one');
+  W = makeGiftsWorld({ history: [{ sku: 'gift', grantId: old.id, mode: 'gift', at: START - 5000, granted: { credits: 9000, am: 9 } }],
+    respond: c => (c.url.endsWith('/presence') ? { status: 200, json: { ok: true, gifts: [old, g2] } } : { status: 200, json: { ok: true } }) });
+  r = await W.Gifts.checkNow();
+  check('already-applied gift: no credits, not recorded twice', W.M.profile.credits === 6000 && W.M.profile.entitlements.history.filter(h => h.grantId === old.id).length === 1);
+  check('the new gift alongside it is applied (AM only)', W.M.profile.am === 60 && W.M.profile.entitlements.history.some(h => h.grantId === g2.id) && !W.M.log.some(l => l[0] === 'credits'), W.M.log);
+  check('one ack carrying both the applied and the already-applied id', acks(W).length === 1 && [...acks(W)[0].body.ids].sort().join() === [g2.id, old.id].sort().join(), acks(W).map(a => a.body));
+  check('the modal lists only the new gift', W.modals.length === 1 && W.nodes.filter(n => n.className === 'gift').length === 1);
+  W = makeGiftsWorld({ history: [{ sku: 'gift', grantId: old.id }], respond: c => (c.url.endsWith('/presence') ? { status: 200, json: { ok: true, gifts: [old] } } : { status: 200, json: { ok: true } }) });
+  await W.Gifts.checkNow();
+  check('only already-applied gifts: acked, no modal', acks(W).length === 1 && W.modals.length === 0 && W.M.saves === 0);
+
+  // ack fails, the next presence re-delivers: no double grant
+  const g3 = gift('gft_DDDDDDDDDDDDDDDDDDDDDD', 1000, 5);
+  let ackStatus = 500;
+  W = makeGiftsWorld({ respond: c => (c.url.endsWith('/presence') ? { status: 200, json: { ok: true, gifts: [g3] } } : { status: ackStatus, json: ackStatus === 200 ? { ok: true } : { error: 'server' } }) });
+  r = await W.Gifts.checkNow();
+  check('ack failure: gift applied once, ack reported failed, id kept as unacked', !r.acked && W.M.profile.credits === 7000 && W.M.profile.am === 25 && W.Gifts.state.unacked.includes(g3.id), { r, st: W.Gifts.state });
+  ackStatus = 200;
+  r = await W.Gifts.checkNow();
+  check('re-delivery after a failed ack: not applied again, acked now', r.acked && W.M.profile.credits === 7000 && W.M.profile.am === 25 && W.M.profile.entitlements.history.filter(h => h.grantId === g3.id).length === 1 && W.Gifts.state.unacked.length === 0 && W.modals.length === 1, { r, st: W.Gifts.state });
+  W = makeGiftsWorld({ respond: c => (c.url.endsWith('/presence') ? { status: 200, json: { ok: true, gifts: [g3] } } : 'offline') });
+  r = await W.Gifts.checkNow();
+  check('an offline ack is silent and the gift stays applied once', r.ok && !r.acked && W.M.profile.credits === 7000);
+
+  // lost ack, then the admin revokes: presence no longer offers the gift, but the next check-in still sends the ack
+  const g4 = gift('gft_GGGGGGGGGGGGGGGGGGGGGG', 0, 3);
+  let offer = [g4], ackOk = false;
+  W = makeGiftsWorld({ respond: c => (c.url.endsWith('/presence') ? { status: 200, json: { ok: true, gifts: offer } } : ackOk ? { status: 200, json: { ok: true, acked: c.body.ids } } : 'offline') });
+  r = await W.Gifts.checkNow();
+  const h4 = () => W.M.profile.entitlements.history.find(h => h.grantId === g4.id);
+  check('a new gift is recorded with acked:false until the ack succeeds', !r.acked && W.M.profile.am === 23 && h4() && h4().acked === false, h4());
+  offer = []; ackOk = true;                                    // the admin revoked it: /presence returns nothing
+  const savesBefore = W.M.saves;
+  r = await W.Gifts.checkNow();
+  check('lost ack + revoke: the next check-in (no gifts offered) re-sends the ack', acks(W).length === 2 && JSON.stringify(acks(W)[1].body.ids) === JSON.stringify([g4.id]) && r.acked, acks(W).map(a => a.body));
+  check('after the ack the history entry is marked acked and saved; no second grant', h4().acked === true && W.M.saves > savesBefore && W.M.profile.am === 23 && W.Gifts.state.unacked.length === 0, { h: h4(), st: W.Gifts.state });
+  await W.Gifts.checkNow();
+  check('nothing outstanding: no further ack', acks(W).length === 2);
+
+  // outstanding acks survive a reload: they come from the stored history, not only memory
+  W = makeGiftsWorld({ history: [{ sku: 'gift', grantId: g4.id, mode: 'gift', at: START - 5000, granted: { credits: 0, am: 3 }, acked: false }],
+    respond: c => (c.url.endsWith('/presence') ? { status: 200, json: { ok: true, gifts: [] } } : { status: 200, json: { ok: true, acked: [] } }) });
+  r = await W.Gifts.checkNow();
+  check('after a reload, a history gift still marked acked:false is acked on the first check-in', acks(W).length === 1 && JSON.stringify(acks(W)[0].body.ids) === JSON.stringify([g4.id]) && W.M.profile.entitlements.history[0].acked === true && W.M.profile.am === 20, acks(W).map(a => a.body));
+
+  // a failed profile save: applied in memory, never acked, so the server keeps offering it
+  const g5 = gift('gft_HHHHHHHHHHHHHHHHHHHHHH', 400, 0);
+  let saveWorks = false;
+  W = makeGiftsWorld({ respond: c => (c.url.endsWith('/presence') ? { status: 200, json: { ok: true, gifts: [g5] } } : { status: 200, json: { ok: true, acked: c.body.ids } }) });
+  W.M.save = function () { this.saves++; return saveWorks; };
+  r = await W.Gifts.checkNow();
+  check('save failed (storage full): the gift is not acked', acks(W).length === 0 && r.saved === false && !r.acked && W.Gifts.state.unacked.includes(g5.id) && W.M.profile.credits === 6400, { r, st: W.Gifts.state });
+  r = await W.Gifts.checkNow();
+  check('still failing: re-offered, not granted twice, still not acked', acks(W).length === 0 && W.M.profile.credits === 6400 && W.M.profile.entitlements.history.filter(h => h.grantId === g5.id).length === 1, { r });
+  saveWorks = true;
+  r = await W.Gifts.checkNow();
+  check('once a save succeeds the gift is acked', acks(W).length === 1 && JSON.stringify(acks(W)[0].body.ids) === JSON.stringify([g5.id]) && r.acked && W.M.profile.credits === 6400 && W.Gifts.state.unacked.length === 0, { r, st: W.Gifts.state });
+
+  // the note is untrusted: text only
+  const evil = '<img src=x onerror="alert(1)"><b>bold</b>';
+  W = makeGiftsWorld({ respond: c => (c.url.endsWith('/presence') ? { status: 200, json: { ok: true, gifts: [gift('gft_EEEEEEEEEEEEEEEEEEEEEE', 10, 0, evil), gift('gft_FFFFFFFFFFFFFFFFFFFFFF', 0, 1, 'plain')] } } : { status: 200, json: {} }) });
+  await W.Gifts.checkNow();
+  const noteNode = W.nodes.find(n => n.className === 'gift-note' && n._text === evil);
+  check('a note with HTML is set through textContent, verbatim', !!noteNode && noteNode.textSets.includes(evil));
+  check('no innerHTML write and no modal option carries the note', W.nodes.every(n => n.htmlSets.every(h => !h.includes('<img') && !h.includes('<b>'))) && W.modals.every(m => !JSON.stringify(m).includes('onerror')));
+  check('two gifts at once: one modal listing both', W.modals.length === 1 && W.nodes.filter(n => n.className === 'gift').length === 2);
+
+  // unconfigured, offline, no player id: no requests or silence
+  W = makeGiftsWorld({ apiBase: '' });
+  r = await W.Gifts.checkNow();
+  W.Gifts.init(); await settle();
+  check('no apiBase: no requests at all (checkNow and init)', W.calls.length === 0 && !r.ok && r.why === 'unconfigured', r);
+  W = makeGiftsWorld({ apiBase: 'not a url' });
+  await W.Gifts.checkNow();
+  check('a non-http apiBase counts as unconfigured', W.calls.length === 0);
+  W = makeGiftsWorld({ respond: () => 'offline' });
+  let threw = null;
+  try { r = await W.Gifts.checkNow(); } catch (e) { threw = e; }
+  check('offline presence fails silently', !threw && !r.ok && r.why === 'offline' && W.Gifts.state.lastOk === false && W.modals.length === 0, r);
+  W = makeGiftsWorld({ respond: () => ({ status: 200, json: { ok: true, gifts: [{ id: '<x>', credits: 5 }, null, 'gft_x'] } }) });
+  await W.Gifts.checkNow();
+  check('malformed gift entries are ignored and never acked', W.M.profile.credits === 6000 && acks(W).length === 0);
+  W = makeGiftsWorld({ playerId: 'short' });
+  await W.Gifts.checkNow();
+  check('an invalid player id sends nothing', W.calls.length === 0);
+
+  // cadence: boot, then on becoming visible after 10+ minutes hidden
+  W = makeGiftsWorld();
+  W.Gifts.init(); await settle();
+  check('init sends presence on boot', presences(W).length === 1 && W.Gifts.state.started);
+  W.Gifts.init(); await settle();
+  check('init is idempotent', presences(W).length === 1);
+  W.visibility(true); W.clock.now += 2 * MIN; W.visibility(false); await settle();
+  check('visible again after 2 minutes hidden: no extra check-in', presences(W).length === 1);
+  W.visibility(true); W.clock.now += 11 * MIN; W.visibility(false); await settle();
+  check('visible again after 11 minutes hidden: one check-in', presences(W).length === 2);
+}
+
 // ============================================================ run
 (async function main() {
   console.log(`Port Solace v2 sim-test  (${FILES.join(', ')})`);
-  const tests = [testNewProfileAndTutorial, testHoppers, testOffline, testExpeditions, testMissions, testDaily, testRanks, testSectors, testExportImportAndReset, testMigration, testV1Sim, testStore, testConvoyAndMisc, testShippedPreset, testPlots, testAchievements, testLiveries, testMigrateScript, testImportPage];
+  const tests = [testNewProfileAndTutorial, testHoppers, testOffline, testExpeditions, testMissions, testDaily, testRanks, testSectors, testExportImportAndReset, testMigration, testV1Sim, testStore, testConvoyAndMisc, testShippedPreset, testPlots, testAchievements, testLiveries, testMigrateScript, testImportPage, testGifts];
   for (const t of tests) {
     try { await t(); } catch (e) { results.fail++; results.failures.push(`${t.name}: threw ${e && e.stack}`); console.log(`  THREW ${e && e.stack}`); }
   }

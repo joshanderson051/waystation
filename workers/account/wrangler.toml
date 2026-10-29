@@ -4,6 +4,7 @@
 # Secrets are NEVER written in this file. Set the two secrets with:
 #   npx wrangler secret put PEPPER          (a long random string; `npm run pepper` prints one)
 #   npx wrangler secret put EMAIL_API_KEY   (the email provider's API key, for "Forgot your password?"; README step 2b)
+#   npx wrangler secret put ADMIN_USER_IDS  (Port Authority: the owner's account id, u_...; README "Port Authority")
 
 name = "waystation-account"    # the old internal name stays on purpose: renaming it would create a new Worker
 main = "src/index.js"
@@ -23,6 +24,21 @@ id = "49c534db58b94e3190a36443908faca5"
 # For `npx wrangler dev` (local testing) create a second one with `--preview` and paste it here:
 # preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
 
+# ---------------------------------------------------------- KV: the store worker's purchases (Port Authority, read only)
+# The same namespace the store worker binds as STORE (player:{playerId} -> grant ids, grant:{id} -> {sku, at}).
+# The account worker only reads it, to show a player's purchases in the Port Authority portal.
+[[kv_namespaces]]
+binding = "STORE"
+id = "d3f64a0e3dda4eaa83808326a71471f2"
+
+# ---------------------------------------------------------- D1: Port Authority (players, gifts, admin log)
+# Schema in migrations/; apply with `npx wrangler d1 migrations apply portsolace --remote` (README "Port Authority").
+[[d1_databases]]
+binding = "DB"
+database_name = "portsolace"
+database_id = "07dec3c6-0522-485c-916f-f5adb4bd9064"
+migrations_dir = "migrations"
+
 # ---------------------------------------------------------------- plain variables (not secret)
 [vars]
 # The site origins allowed to call this worker, comma-separated, no trailing slash. portsolace.com is the live
@@ -39,3 +55,7 @@ EMAIL_PROVIDER = "resend"
 EMAIL_FROM = "noreply@portsolace.com"
 EMAIL_FROM_FALLBACK = "onboarding@resend.dev"
 PLAY_URL = "https://portsolace.com/play/"
+# Port Authority (README "Port Authority"): the account emails allowed into the admin API, comma-separated.
+# An email alone admits nobody: the account's id must also be in the ADMIN_USER_IDS secret (signup does not
+# verify emails, so whoever registers an address owns it). ADMIN_USER_IDS never goes in this file.
+ADMIN_EMAILS = "joshanderson051@gmail.com"

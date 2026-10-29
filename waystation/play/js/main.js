@@ -211,6 +211,8 @@
     if (takeMovedFlag()) setTimeout(() => call(UI, 'toast', 'Station moved to portsolace.com', 'good'), 900);   // M5: back from play/import.html
 
     requestAnimationFrame(frame);
+    // A9 Port Authority: presence check-ins and gifts; after Meta, Store, Account and the HUD (its modal waits for the title to close)
+    if (typeof Gifts !== 'undefined') { try { call(Gifts, 'init'); } catch (e) { /* presence never disturbs play */ } }
     if (has(Store, 'resume')) Store.resume().catch(() => {});
   }
 

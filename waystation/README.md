@@ -114,6 +114,7 @@ only way code refers to a picture. Rebuild the pack when a master changes; never
   credits (tagged `admin` in the profile history), finishes timers, fills banks, unlocks sectors and forces the store mode. To change
   the passphrase: `node -e "console.log(require('crypto').createHash('sha256').update('new passphrase').digest('hex'))"` and paste the
   hex into the tag. In a client-side game this is a convenience gate, not a security boundary.
+- **Port Authority** (`admin/`, served at `/admin/`): the owner's player portal for seeing who plays and sending credits or Antimatter; see the root README and DESIGN2.md Addendum A9.
 
 ## Push notifications
 

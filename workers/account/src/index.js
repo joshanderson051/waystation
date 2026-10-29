@@ -17,6 +17,9 @@
 //                                                            409 {error:'conflict', server:{version, updatedAt, summary}}
 //   DELETE /account   (Bearer) {password}                 -> {ok}
 //   GET    /health                                        -> configuration summary (no secrets)
+//   Port Authority (A9, src/portauthority.js; D1 binding DB): POST /presence, POST /gifts/ack, and the admin API
+//   GET /admin/stats, GET /admin/players, GET /admin/players/:playerId, POST /admin/gifts,
+//   POST /admin/gifts/:id/revoke, GET /admin/log (Bearer token of an account listed in both ADMIN_USER_IDS and ADMIN_EMAILS)
 //
 // Passwords and recovery phrases: PBKDF2-SHA256, 100,000 iterations (the Workers maximum), 16-byte salt, PEPPER appended to the
 // secret. Tokens: 32 random bytes base64url, stored by their SHA-256 with a sliding 30-day TTL and the
@@ -38,6 +41,9 @@
 //   ALLOWED_ORIGIN   comma-separated list of site origins allowed to call this worker
 //   PEPPER           secret; a long random string appended to every password and phrase before hashing
 //   EMAIL_PROVIDER, EMAIL_FROM, EMAIL_FROM_FALLBACK, PLAY_URL and the secret EMAIL_API_KEY: see email.js
+//   ADMIN_EMAILS     comma-separated account emails allowed into the Port Authority admin API
+//   ADMIN_USER_IDS   secret; comma-separated account ids (u_...) allowed in. An admin must be on both lists
+//   DB (D1), STORE (the store worker's KV, read only): see portauthority.js
 // ============================================================
 import {
   HttpError, LIMITS, WORDS, PBKDF2_ITER, TOKEN_BYTES, TOKEN_TTL_S, TOKEN_REFRESH_MS, RESET_TOKEN_TTL_S, SAVE_MAX_BYTES, BODY_MAX_BYTES, PASSWORD_MAX, PHRASE_WORDS, TOKEN_RE,
@@ -45,6 +51,10 @@ import {
   readBodyBytes, requireEmail, requirePassword, summarise,
 } from './lib.js';
 import { emailConfig, resetEmail, resetLink, sendEmail, RESET_MINUTES } from './email.js';
+import { portAuthority, adminEmails, adminIds, d1Bound } from './portauthority.js';
+
+// Port Authority (A9): presence, gifts and the admin API, in portauthority.js; it gets this file's helpers.
+const PA = portAuthority({ authenticate, rateLimit, readJsonBody, kv });
 
 const ROUTES = {
   '/health':  { GET: health },
@@ -57,7 +67,27 @@ const ROUTES = {
   '/me':      { GET: me },
   '/save':    { GET: getSave, PUT: putSave },
   '/account': { DELETE: deleteAccount },
+  '/presence':      { POST: PA.presence },
+  '/gifts/ack':     { POST: PA.giftsAck },
+  '/admin/stats':   { GET: PA.adminStats },
+  '/admin/players': { GET: PA.adminPlayers },
+  '/admin/gifts':   { POST: PA.adminCreateGift },
+  '/admin/log':     { GET: PA.adminLog },
 };
+// Routes with one path parameter (handed to the handler as ctx.params), tried only under these prefixes.
+const PARAM_ROUTES = [
+  { prefix: '/admin/players/', re: /^\/admin\/players\/([^/]+)$/, route: { GET: PA.adminPlayer } },
+  { prefix: '/admin/gifts/', re: /^\/admin\/gifts\/([^/]+)\/revoke$/, route: { POST: PA.adminRevokeGift } },
+];
+function findRoute(path) {
+  if (Object.prototype.hasOwnProperty.call(ROUTES, path)) return { route: ROUTES[path], params: [] };
+  for (const r of PARAM_ROUTES) {
+    if (!path.startsWith(r.prefix)) continue;
+    const m = path.match(r.re);
+    if (m) return { route: r.route, params: m.slice(1) };
+  }
+  return null;
+}
 
 export default {
   fetch(request, env, ectx) {
@@ -79,9 +109,11 @@ export async function handle(request, env, opts = {}) {
   };
   try {
     const path = url.pathname.replace(/\/+$/, '') || '/';
-    const route = ROUTES[path];
-    if (!route) throw new HttpError(404, 'not-found', `No route for ${path}.`);
-    const fn = route[request.method];
+    const found = findRoute(path);
+    if (!found) throw new HttpError(404, 'not-found', `No route for ${path}.`);
+    const { route } = found;
+    ctx.params = found.params;
+    const fn = Object.prototype.hasOwnProperty.call(route, request.method) ? route[request.method] : null;
     if (!fn) throw new HttpError(405, 'method-not-allowed', `${request.method} is not allowed on ${path}.`, { allow: Object.keys(route) });
     const result = await fn(request, url, env, ctx);
     return json(result.status || 200, result.data, cors);
@@ -207,6 +239,11 @@ async function health(request, url, env) {
       saveMaxBytes: SAVE_MAX_BYTES,
       pbkdf2Iterations: PBKDF2_ITER,
       words: WORDS.length,
+      presence: true,                                         // A9 Port Authority; never lists the admin emails
+      d1: d1Bound(env),
+      admins: adminEmails(env).length,
+      adminIds: adminIds(env).length,                         // ADMIN_USER_IDS entries (a secret); never the ids
+      storeKv: Boolean(env.STORE && typeof env.STORE.get === 'function'),
     },
   };
 }

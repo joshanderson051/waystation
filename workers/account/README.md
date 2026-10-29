@@ -27,9 +27,10 @@ and break live sign-ins.
 | Piece | Where | What it does |
 |---|---|---|
 | Worker | `src/index.js` | `/signup`, `/login`, `/logout`, `/recover`, `/forgot`, `/reset`, `/me`, `/save` (GET and PUT), `/account` (DELETE), `/health` |
+| Port Authority | `src/portauthority.js`, `migrations/` | Presence, gifts and the admin API behind the owner's portal, on D1 ("Port Authority" below) |
 | Reset email | `src/email.js` | The "Forgot your password?" email (text and HTML) and the Resend / Brevo adapters |
 | Settings | `wrangler.toml` | Names the worker, binds the KV namespace, lists the allowed site origins, names the email sender |
-| Tests | `test/account.test.js`, `test/reset.test.js`, `test/client.test.js` | `npm test` runs them locally; no account needed |
+| Tests | `test/account.test.js`, `test/reset.test.js`, `test/client.test.js`, `test/portauthority.test.js` | `npm test` runs them locally; no account needed (D1 runs on Node's built-in SQLite, `test/d1.js`) |
 | Game client | `../../waystation/play/js/account.js` | The `Account` object the game uses; already written, you only point it at the worker |
 
 How it works once connected:
@@ -227,6 +228,80 @@ That override affects only your browser. Remove it with
 
 ---
 
+## Port Authority (the owner's player portal)
+
+Port Authority is the private page at <https://portsolace.com/admin/> where the owner sees every active
+player and sends them gifts of credits or Antimatter (DESIGN2.md Addendum A9). This worker is its backend:
+the code is `src/portauthority.js`, the storage a **D1 database** called `portsolace` (binding `DB`).
+
+**Who shows up.** Every running game reports **presence** every 10 minutes, keyed by its random player id
+(most players never make an account). Presence stores the station summary (name, day, level, rank,
+credits, Antimatter, sectors), the platform (`phone` or `desktop`), the game version, first and last seen
+and a session count (a new session when the game was silent for more than 30 minutes). When the game is
+signed in, the row is also linked to the account id and email. Nothing else personal is stored.
+
+**Gifts.** A gift sent from the portal waits in D1. The player's next presence call hands it to the game
+(within 10 minutes while they play); the game applies it once (its entitlement history guards against
+doubles) and confirms with `/gifts/ack`. A gift can be revoked until the game has confirmed it. Every gift
+and every revoke is written to the admin log.
+
+| Method and path | Who | What it does |
+|---|---|---|
+| `POST /presence` | the game | `{playerId, summary, platform, version}`, optional Bearer. Upserts the player and answers `{ok, gifts:[{id, credits, am, note, createdAt}]}` (every gift not yet confirmed or revoked). An invalid token is ignored. |
+| `POST /gifts/ack` | the game | `{playerId, ids}`: marks those gifts applied (only this player's, only once). Answers `{ok, acked:[ids]}`. |
+| `GET /admin/stats` | admin | Players, active in 24 h / 7 d / 30 d, accounts, gifts by status |
+| `GET /admin/players` | admin | `?q=&active=all\|24h\|7d\|30d&sort=last_seen\|first_seen\|level\|credits\|am&dir=asc\|desc&limit=50&offset=0`: `{total, players}`. `q` searches station name, email and player id. |
+| `GET /admin/players/:playerId` | admin | `{player, gifts, purchases, purchasesAvailable}`; purchases are read from the store worker's KV (binding `STORE`, read only) |
+| `POST /admin/gifts` | admin | `{playerId, credits, am, note, requestId}`: credits 0 to 10,000,000, Antimatter 0 to 100,000, at least one above 0, note up to 140 characters (shown to the player); the player must have reported presence. `requestId` (optional, 8-64 `[A-Za-z0-9_-]`, one per reviewed gift) makes it idempotent: a repeat returns the first gift with `duplicate: true` (409 `request-reused` if it named another gift) |
+| `POST /admin/gifts/:id/revoke` | admin | Cancels a gift the game has not confirmed (409 `already-applied` after) |
+| `GET /admin/log` | admin | `?limit=50`: the most recent admin actions |
+
+**Who is an admin.** An account is an admin only when it is on both lists: its email in `ADMIN_EMAILS`
+in `wrangler.toml` (`[vars]`, comma-separated; case and spaces do not matter) and its account id (`u_…`)
+in the secret `ADMIN_USER_IDS` (comma-separated). The id matters because `/signup` does not verify email
+addresses: whoever registers an address first owns it, and anyone could register the owner's address
+after the owner deleted the account. A new account always gets a new id, so it is never an admin. An admin
+signs in to the portal with their normal game account (email and password). No token or a bad one answers
+401, any other account 403 `not-admin`. An admin's calls count against 300 calls per 10 minutes per
+account. Failed calls that carry a well-formed token (401/403) count against 10 per 10 minutes per IP;
+after that, such failures answer 429 for the rest of the window. Calls without a token are never counted,
+and a valid admin token is never blocked, so a shared IP (a phone behind carrier NAT) cannot lock the
+owner out. `/health` shows how many admins are configured (`admins` for the emails, `adminIds` for the
+ids), never who.
+
+**Before the first deploy (the lead).** Set `ADMIN_USER_IDS` to the owner's account id:
+
+1. The owner signs in to the game (or the portal) once with `joshanderson051@gmail.com`, so that account
+   exists and is the owner's. If no account exists for that address yet, create it now, before deploying.
+2. Read its id: in the game's browser console run
+   `fetch('https://account.portsolace.com/me',{headers:{authorization:'Bearer '+JSON.parse(localStorage['portsolace.account']).token}}).then(r=>r.json()).then(d=>console.log(d.user.id))`.
+3. `npx wrangler secret put ADMIN_USER_IDS` and paste the id (several ids: comma-separated).
+   `/health` then shows `"adminIds": 1`.
+
+Never delete the owner's account: a new account for the same email gets a new id and is not an admin
+until `ADMIN_USER_IDS` is updated. To add or remove an admin, change both lists, then `npm run deploy`
+(the secret applies on `secret put`).
+
+**Setting up D1 (once).** The database already exists (its id is in `wrangler.toml`). Create the tables
+with the migrations in `migrations/` (`0001` the tables, `0002` the gift `request_id` that makes sending a
+gift idempotent), set `ADMIN_USER_IDS` as above, then deploy:
+
+```sh
+npx wrangler d1 migrations apply portsolace --remote
+npm run deploy
+```
+
+`/health` then shows `"presence": true, "d1": true, "admins": 1, "adminIds": 1, "storeKv": true`. Later schema changes go
+in new numbered files in `migrations/` and are applied the same way (`npx wrangler d1 migrations list
+portsolace --remote` shows what is pending). To try it on your own machine, use `--local` instead of
+`--remote` and `npm run dev`.
+
+**Capacity.** D1's free plan allows 5 million row reads and 100,000 row writes a day; one presence call
+writes one or two rows. The rate limits still live in KV (one KV write per presence call and per admin
+call), on top of the cloud saves: see **Capacity and cost** above.
+
+---
+
 ## Local testing against a worker on your own machine (for developers)
 
 ```sh
@@ -237,6 +312,12 @@ npm run dev                                                 # wrangler dev on ht
 Add an `EMAIL_API_KEY=…` line to `.dev.vars` to send real reset emails from the local worker (with
 `--var PLAY_URL:http://localhost:8794/waystation/play/` so the link opens the local game); without it
 `/forgot` answers 503 locally.
+
+To try Port Authority locally, apply the migrations with `--local`, sign up a local admin account, read its
+id from `/me`, and start the worker with both lists, for example
+`npx wrangler dev --port 8790 --var ADMIN_EMAILS:admin@example.test --var ADMIN_USER_IDS:u_…` (or put
+`ADMIN_USER_IDS=u_…` in `.dev.vars`). The portal honours the `portsolace.account.config` override only when it
+is itself served from localhost, 127.0.0.1, `*.localhost` or `*.test`.
 
 Add the game's local origin (for example `http://localhost:8794`) to `ALLOWED_ORIGIN` while testing, serve
 the game from the repository root with `node waystation/serve.js --port 8794 --base waystation` (in Git
@@ -269,9 +350,18 @@ Authenticated calls send `Authorization: Bearer <token>`.
 | `GET /save` | – (Bearer) | `{version, updatedAt, size, summary, profile}` | 401; 404 `no-save` |
 | `PUT /save` | `{profile, baseVersion}` (Bearer; plain JSON or gzip) | `{version, updatedAt, size, summary}` | 400 `bad-profile` / `bad-version`; 401; 409 `conflict` `{server:{version, updatedAt, summary}}`; 413 `too-large` |
 | `DELETE /account` | `{password}` (Bearer) | `{ok:true}` | 400; 401 `bad-credentials` / `unauthorised` |
+| `POST /presence` | `{playerId, summary, platform, version}` (optional Bearer) | `{ok:true, gifts:[{id, credits, am, note, createdAt}]}` | 400 `bad-player` / `bad-json`; 429; 500 `config` (no DB) |
+| `POST /gifts/ack` | `{playerId, ids}` | `{ok:true, acked:[ids]}` | 400 `bad-player` / `bad-ids`; 429 |
+| `GET /admin/stats` | – (admin Bearer) | `{players, active24h, active7d, active30d, accounts, giftsPending, giftsDelivered, giftsApplied, giftsRevoked}` | 401; 403 `not-admin`; 429 |
+| `GET /admin/players` | `?q&active&sort&dir&limit&offset` (admin) | `{total, players:[row + {pendingGifts}]}` | 401; 403; 429 |
+| `GET /admin/players/:playerId` | – (admin) | `{player, gifts:[row + {status}], purchases:[{grantId, sku, at}], purchasesAvailable}` | 400 `bad-player`; 404 `unknown-player` |
+| `POST /admin/gifts` | `{playerId, credits, am, note}` (admin) | `{gift}` | 400 `bad-player` / `bad-credits` / `bad-am` / `empty-gift` / `bad-note`; 404 `unknown-player` |
+| `POST /admin/gifts/:id/revoke` | – (admin) | `{gift}` (again: the same gift, not logged twice) | 400 `bad-gift`; 404 `unknown-gift`; 409 `already-applied` |
+| `GET /admin/log` | `?limit=50` (admin) | `{entries:[{id, at, admin, action, target, detail}]}` | 401; 403 |
 
 Rate limits per IP: 10 sign-ups per hour, 20 logins per 10 minutes, 5 recoveries per hour, 3 reset emails
-per hour (and 3 per hour per address, whatever the IP), 10 reset attempts per hour; a 429 carries
+per hour (and 3 per hour per address, whatever the IP), 10 reset attempts per hour, 120 presence reports and
+120 gift confirmations per 10 minutes, 300 admin calls per 10 minutes (10 failed ones); a 429 carries
 `retryAfter` (seconds) in the body and a `Retry-After` header.
 
 KV layout: `user:{email}` → `{id, email, pw:{salt,hash,iter}, rec:{salt,hash,iter}, tokenGen, createdAt}`;
