@@ -44,13 +44,15 @@ password resets and push subscriptions.
 
 ## Port Authority
 
-Port Authority is the owner's player portal at <https://portsolace.com/admin/> (`waystation/admin/`, not indexed by
-search engines). Sign in with the owner's Port Solace account: its email must be listed in `ADMIN_EMAILS` in
-`workers/account/wrangler.toml` and its account id in the `ADMIN_USER_IDS` secret (an email alone admits nobody,
-because sign-up does not verify addresses; `workers/account/README.md` "Port Authority" has the one-time setup, which
-the lead does before the first deploy, and the rule never to delete the owner's account); if the game on the same browser is already signed in
-with that account, it offers "Continue as". Anyone else gets "This account is not a Port Authority admin." The sign-in
-lasts until the tab closes.
+Port Authority is the owner's player portal at <https://admin.portsolace.com/>, its own subdomain behind a login (the
+`portsolace-admin` Worker in `workers/admin`, not indexed by search engines). Nothing of the portal loads until you log
+in with your Port Solace account (the same email and password as the game), and only the owner's account gets in: its
+email must be listed in `ADMIN_EMAILS` in `workers/account/wrangler.toml` and its account id in the `ADMIN_USER_IDS`
+secret (an email alone admits nobody, because sign-up does not verify addresses; `workers/account/README.md` "Port
+Authority" has the one-time setup, which the lead does before the first deploy, and the rule never to delete the owner's
+account). Anyone else gets "This account is not a Port Authority admin." The login lasts 12 hours or until Sign out; a
+forgotten password is reset from the game's sign-in at <https://portsolace.com/play/>. The old address
+<https://portsolace.com/admin/> only redirects there.
 
 - **See who is playing.** Every game reports in (its random player id, station name, day, level, rank, credits,
   Antimatter, platform; the email only when the game is signed in to an account), so anonymous players appear too. The
@@ -61,8 +63,8 @@ lasts until the tab closes.
   game picks it up at its next check-in and shows a "Port Authority" message. A gift can be revoked until the game has
   applied it. Each player's gift history, store purchases and an admin log of every gift and revoke are on the page.
 - **Setup.** It needs the account Worker deployed with its D1 database (`portsolace`, migrations in
-  `workers/account/migrations/`) and the game update that reports presence. DESIGN2.md Addendum A9 is the specification.
-  To try it against a local Worker, set `localStorage["portsolace.account.config"] = '{"apiBase":"http://localhost:<port>"}'`
-  on the page's origin and add that origin to the Worker's `ALLOWED_ORIGIN`.
+  `workers/account/migrations/`), the game update that reports presence, and the admin Worker deployed with its
+  `SESSION_SECRET` secret (`workers/admin/README.md` has the deploy order and local testing). DESIGN2.md Addendum A9
+  is the specification (A9.7 for the subdomain and login).
 
 Copyright © 2026. All rights reserved. The source is public so the game can be played and reviewed; it is not licensed for reuse or redistribution.

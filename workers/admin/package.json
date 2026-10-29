@@ -1,0 +1,21 @@
+{
+  "name": "portsolace-admin-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Port Authority front door: a Cloudflare Worker that serves the owner's player portal at admin.portsolace.com behind a signed session cookie and proxies its admin API calls to the account Worker (DESIGN2.md A9.7). No runtime dependencies.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test",
+    "secret": "node -e \"console.log(require('crypto').randomBytes(32).toString('base64url'))\"",
+    "dev": "wrangler dev --port 8796",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "wrangler": "^4.44.0"
+  }
+}
