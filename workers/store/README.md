@@ -12,12 +12,17 @@ Until this backend exists, the game runs in **sandbox mode**: the Store panel wo
 and purchases are stored in the player's browser only. The game decides which mode it is in from one line
 in `waystation/play/index.html` (step 9).
 
-> **Status (19 October 2026): connected, running in Stripe test mode.** Steps 0 to 9 are done. The worker is
-> deployed at <https://waystation-store.waystation-store-worker.workers.dev> (KV namespace
-> `d3f64a0e3dda4eaa83808326a71471f2`), the nine test-mode products and prices exist in Stripe, the webhook
-> destination `we_1USIelFL8R957E3xfYBBXiGp` is registered, and the game's `<meta>` tag points at the worker.
-> A $1.99 test purchase with the 4242 card was claimed by the game, recorded in KV and delivered by the
-> webhook. Until step 10 (go live) is done, the Store only accepts Stripe's test cards and charges nothing.
+> **Status (29 October 2026): live, real payments.** Steps 0 to 10 are done. The worker at
+> <https://waystation-store.waystation-store-worker.workers.dev> (KV namespace
+> `d3f64a0e3dda4eaa83808326a71471f2`) runs on the **live** keys of the **Prime Signal Marketing LLC** Stripe
+> account (`acct_1T48AICn9alqZLnN`). That account holds the nine live products and prices (their ids are in
+> `wrangler.toml`) and the live webhook destination `we_1UVxC8Cn9alqZLnNvwQepPSI`. Buyers' card statements
+> show that account's statement descriptor.
+>
+> The test-mode setup of 19 October lives in a **different** Stripe account, the "New business" sandbox
+> (`acct_1USITjFL8R957E3x`, webhook `we_1USIelFL8R957E3xfYBBXiGp`); its test price ids are in the table in
+> step 1. To try changes with test cards, run the worker locally with that sandbox's `sk_test_…` key in
+> `.dev.vars` and the test price ids (see "Local testing" below) instead of switching the deployed worker back.
 
 ---
 
@@ -275,12 +280,30 @@ Only when you are happy with the test run:
    ```
 
 6. Deploy again: `npm run deploy`. `/health` should now say `"stripe": "live"`.
+
+   **Switching keys without a gap.** `wrangler secret put` deploys the moment you press Enter, so for a few
+   minutes the live key would meet test price ids and every purchase would fail. To switch in one step instead
+   (this is how it was done on 29 October 2026), stage the secrets on a new version, then upload and deploy:
+
+   ```sh
+   npx wrangler versions secret put STRIPE_SECRET_KEY       # paste sk_live_…  (staged, not live yet)
+   npx wrangler versions secret put STRIPE_WEBHOOK_SECRET   # paste the live whsec_…
+   npx wrangler versions upload                             # live PRICES from wrangler.toml, keeps the staged secrets
+   npx wrangler versions deploy <version id it printed>@100% -y
+   ```
+
+   Use the same commands whenever you roll a key later. On Windows PowerShell type `npx.cmd` instead of `npx`.
 7. Make one small real purchase yourself and refund it from the Stripe dashboard to confirm the loop.
 8. On the landing page (`waystation/index.html`) replace the "still runs in Stripe's test mode" sentence
    under **Antimatter** with one that says purchases are real, and push.
 
 The game's `<meta>` tag does not change between test and live; only the worker's secrets and price ids do.
 Keep the test-mode products and the test webhook destination: they are what you use to try changes later.
+
+**Tax codes.** Products created in the Prime Signal account took that account's default tax code
+(`txcd_20060002`, shown as "Advertising Services"). Checkout does not compute tax today (no
+`automatic_tax`), so nothing is charged differently, but if you turn on Stripe Tax, first set each product's
+tax code to a digital-goods or video-game code your accountant agrees with.
 
 ---
 

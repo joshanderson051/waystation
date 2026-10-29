@@ -27,16 +27,16 @@ id = "d3f64a0e3dda4eaa83808326a71471f2"
 # Add "http://localhost:8794" (or whatever port you serve the game on) while testing locally.
 ALLOWED_ORIGIN = "https://joshanderson051.github.io"
 
-# sku -> Stripe price id. One line per catalog item (DESIGN2.md 7.1). Test-mode prices first;
-# replace with live-mode price ids when you go live (they are different ids).
+# sku -> Stripe price id. One line per catalog item (DESIGN2.md 7.1). LIVE-mode prices of the
+# Prime Signal Marketing LLC account (since 2026-10-29); the old test ids are in README.md step 1.
 PRICES = '''{
-  "am_50":       "price_1USIUoFL8R957E3xoCDdGRhG",
-  "am_140":      "price_1USIVmFL8R957E3xY727d9Tq",
-  "am_320":      "price_1USIWiFL8R957E3xHHfCmtXA",
-  "am_900":      "price_1USIYfFL8R957E3xPbSgJbd4",
-  "credits_s":   "price_1USIYuFL8R957E3xAkDJSeI7",
-  "credits_l":   "price_1USIZ9FL8R957E3x6XXal2Iw",
-  "sector_pass": "price_1USIZNFL8R957E3xOORrW8Kr",
-  "founder":     "price_1USIZcFL8R957E3xlP8au1s6",
-  "liveries":    "price_1USIZsFL8R957E3xfXhXhx1o"
+  "am_50":       "price_1UVx3FCn9alqZLnNeP8A34Rb",
+  "am_140":      "price_1UVx4TCn9alqZLnNTzHm1xcN",
+  "am_320":      "price_1UVx52Cn9alqZLnNsDhlH9Pw",
+  "am_900":      "price_1UVx5UCn9alqZLnNfoBq9RQC",
+  "credits_s":   "price_1UVx5vCn9alqZLnNH2BGOlrL",
+  "credits_l":   "price_1UVx6MCn9alqZLnNIAjJ6YDN",
+  "sector_pass": "price_1UVx6nCn9alqZLnNsdkK2NbD",
+  "founder":     "price_1UVx7DCn9alqZLnNpuTazjqg",
+  "liveries":    "price_1UVx7eCn9alqZLnNwK8qlbMG"
 }'''
