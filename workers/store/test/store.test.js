@@ -178,7 +178,7 @@ describe('worker: POST /checkout', () => {
     assert.equal(stripe.calls.length, 2);
     for (const call of stripe.calls) {
       const suffix = call.body.get('payment_intent_data[statement_descriptor_suffix]');
-      assert.equal(suffix, 'WAYSTATION');
+      assert.equal(suffix, 'PORTSOLACE');
       assert.ok('PRIME SIGN'.length + 2 + suffix.length <= 22, 'prefix + "* " + suffix fits the 22-character limit');
       assert.doesNotMatch(suffix, /[<>\\'"*]/, 'no characters Stripe rejects in a descriptor');
     }

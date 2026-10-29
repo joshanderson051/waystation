@@ -24,7 +24,7 @@
 const STRIPE_API = 'https://api.stripe.com';
 const SIGNATURE_TOLERANCE_S = 5 * 60;                     // 7.4: 5-minute tolerance on webhook timestamps
 const RESTORE_PAGE = 100;                                 // Stripe list limit (max 100); older sessions are not scanned
-const STATEMENT_SUFFIX = 'WAYSTATION';                    // card statements read "PRIME SIGN* WAYSTATION" (22 chars max with the prefix)
+const STATEMENT_SUFFIX = 'PORTSOLACE';                    // card statements read "PRIME SIGN* PORTSOLACE" (22 chars max with the prefix)
 
 const PLAYER_RE  = /^[A-Za-z0-9_-]{8,64}$/;               // uuid or similar
 const SESSION_RE = /^cs_(test|live)_[A-Za-z0-9]{8,}$/;

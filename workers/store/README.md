@@ -333,7 +333,7 @@ tax code to a digital-goods or video-game code your accountant agrees with.
   after a refund; this is deliberate (the player may have spent it). Delete the KV key `grant:<session id>`
   in the Cloudflare dashboard if you want "Restore purchases" to stop re-applying that item.
 - **Card statements**: every Checkout Session sends `payment_intent_data[statement_descriptor_suffix]` =
-  `WAYSTATION` (`STATEMENT_SUFFIX` in `src/index.js`), so buyers' statements read `PRIME SIGN* WAYSTATION`
+  `PORTSOLACE` (`STATEMENT_SUFFIX` in `src/index.js`), so buyers' statements read `PRIME SIGN* PORTSOLACE`
   rather than only the LLC's name, which heads off "I don't recognise this charge" disputes. `PRIME SIGN` is the
   account's shortened descriptor (Stripe dashboard → Settings → Business → Public details). Prefix, `* ` and
   suffix together may not exceed 22 characters, so the suffix stays at 10 or fewer while the prefix is 10.
