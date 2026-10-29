@@ -100,6 +100,7 @@ const b64 = file => 'data:image/png;base64,' + fs.readFileSync(file).toString('b
 'use strict';
 const ARTPACK = ${JSON.stringify(pack, null, 1)};
 ARTPACK.url = function (group, id, size) {
+  if (group === 'props' || group === 'people') return (this.sheets[id] || (this.groups.props && this.groups.props.ids.includes(id))) ? this.base + group + '/' + id + '.webp' : null;   // flat groups
   const g = this.groups[group]; if (!g || !g.ids.includes(id)) return null;
   const s = size && g.sizes.includes(size) ? size : g.sizes[0];
   return this.base + group + '/' + s + '/' + id + '.webp';

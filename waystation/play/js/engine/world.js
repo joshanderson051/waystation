@@ -1,13 +1,16 @@
 // ============================================================
 // WAYSTATION v2 — engine/world.js (Engineer E)
-// The station layer (DESIGN2.md 3.1 texture baking, 3.4): plates baked
-// from ART[id] per zoom band, soft shadows, trusses with the powered
-// seam and running lights, live lit/tell canvases on the emissive layer
-// (dock LEDs, cores, lamps), hero glows, scaffolds with progress rings
-// and timers (Meta.build), bank chips (Meta.hopper), upgrade ticks
-// (Meta.upgrade), hover / selection / placement feedback, floaters
-// hand-off, Engine.thumbnail, and the plot / territory layer
-// (DESIGN2.md A1.2): unclaimed field, debris, clearing band, reveal.
+// The station layer. Since A6 ("the illustrated look") each occupied cell
+// is a miniature: the pack render modules/512/<id>.webp anchored at the
+// bottom centre of its cell in painter's order over a family-hue pad,
+// with an elliptical drop shadow, one soft additive glow for bloom, the
+// dock approach chase and the reactor breathe as pad effects, and the v1
+// procedural plate bake as the fallback that cross-fades out when the
+// render arrives. Also: trusses with the powered seam, scaffolds with
+// progress rings and timers (Meta.build), bank chips (Meta.hopper),
+// upgrade ticks (Meta.upgrade) on the pad rim, hover / selection /
+// placement feedback, floaters hand-off, Engine.thumbnail, liveries (A5:
+// pads, seams and glows) and the plot / territory layer (A1.2).
 //
 // World units: CSS px at zoom 1; cell (r, c) at (c*CELL, r*CELL).
 // Reads Sim.state and the Meta read helpers every frame; never writes them.
@@ -24,23 +27,31 @@ const EngineWorld = (() => {
     rec: 'RE', hydro: 'HY', clinic: 'CL', habitat: 'HA', reactor: 'RX', customs: 'CU', security: 'SE', school: 'SC',
     bank: 'BA', plaza: 'PL', menagerie: 'ME', refinery: 'RF', shipyard: 'SH', observatory: 'OB', gate: 'GA', hub: 'HB',
   };
-  const CLASS_B = { cantina: 1, rec: 1, school: 1, customs: 1, observatory: 1, fuel: 1, hydro: 1 };
-  const REDUCED_KEEP = { security: 1, habitat: 1, dock: 1 };
   const OFFLINE = { plate: '#2A2F3D', rim: '#55596A', strip: '#55596A', sil: '#6C7284' };
-  const HERO = { hub: { color: 'ivory', r: 16, a: 0.35 }, reactor: { color: '#9FE8D8', r: 12, a: 0.4 }, gate: { color: 'ice', r: 20, a: 0.4 } };
-  const LIVE_FPS = [4, 8, 12];               // live canvas redraw rate per tier
+  // A6 miniature geometry: width 1.0 cell (hub 1.08), feet at cell bottom - 0.02 cell (the render overflows upward a little)
+  const MINI_W = 1.0, MINI_W_HUB = 1.08, MINI_LIFT = 0.02;
+  const miniW = id => (id === 'hub' ? MINI_W_HUB : MINI_W) * CELL;
+  const miniTop = (r, id) => wy(r + 1) - MINI_LIFT * CELL - miniW(id);           // world y of the render's top edge
+  // one soft additive glow per module by family (A6: amber by default, ice for ops, gold for power, rose for culture),
+  // sized as light spill (0.5 cell; hub and reactor 0.7) at 0.22–0.30
+  const GLOW_FAMILY = { ops: 'ice', power: 'gold', culture: 'rose', trade: 'amber', life: 'amber', hub: 'ivory' };
+  const GLOW_HERO = { hub: { r: 0.7, a: 0.3 }, reactor: { r: 0.7, a: 0.3 }, gate: { r: 0.55, a: 0.3 } };
+  const CHIP_D = 0.26, CHIP_MAX_PX = 30;
+  const TINT_OVERDRAW = 0x8A96A8, TINT_BUILDING = 0x9AA0AA, CYAN = '#5EC4FF';
+  const FADE_MS = 240;
 
   const S = {
     stateRef: null, rows: 0, cols: 0, cellCount: 0,
     cells: [], byKey: new Map(), dist: new Map(), tags: new Map(), dockInfo: new Map(), spars: [],
     station: null, gridBox: null,
-    band: 1.25, cellDev: 0, pad: 0, k: 1,
+    band: 1.25, cellDev: 0, pad: 0, k: 1, worldPerDev: 1,
     trussG: null, seamG: null, trussDirty: true, runLights: [], growCell: null,
+    padsG: null, padsKey: '',
     overlay: { hover: null, hoverHalo: null, sel: null, selHalo: null, place: null, ghost: null, reason: null, reasonBg: null, lane: null },
     hoverKey: null, hoverT0: 0, selKey: null, selT0: 0, ghostPos: null,
-    pops: new Map(), dockState: new Map(), lastStock: null, stockChangedAt: -1e9,
-    shipsByDock: new Map(), T: null, flags: null, trends: null,
-    pointer: null, bAllowed: new Set(), bFrame: -1,
+    pops: new Map(), dockState: new Map(),
+    shipsByDock: new Map(), T: null,
+    pointer: null,
     placing: null, selected: null, hover: null,
     floaters: new WeakMap(),
     dotsG: null, stationKey: '',
@@ -49,7 +60,7 @@ const EngineWorld = (() => {
     // plot / territory (A1.2): bounds from Sim.state.plot, ring list, field graphics, debris pool, clearing band
     plot: { key: '', bounds: null, rings: [], clearing: null, fieldG: null, bandG: null, sweep: null, label: null, pill: null, debris: [], debrisRoot: null, reveal: null, pulses: [], lastText: '' },
   };
-  const DEBRIS_CAP = 600, DEBRIS_PER_CELL = [1, 1, 3];
+  const DEBRIS_CAP = 240, DEBRIS_PER_CELL = [0.4, 0.4, 1.2];   // 40% of the first cut: the field sits behind the station
 
   const hasMeta = fn => typeof Meta !== 'undefined' && Meta && typeof Meta[fn] === 'function';
   const metaBuild = (r, c) => { if (!hasMeta('build')) return null; try { return Meta.build(r, c); } catch (e) { return null; } };
@@ -57,11 +68,12 @@ const EngineWorld = (() => {
   const metaUpgrade = (r, c) => { if (!hasMeta('upgrade')) return null; try { return Meta.upgrade(r, c); } catch (e) { return null; } };
   const hasArt = id => typeof ART !== 'undefined' && ART && ART[id] && typeof ART[id] === 'object';
   const simState = () => (typeof Sim !== 'undefined' && Sim) ? Sim.state : null;
+  const famOf = id => (typeof FAMILY !== 'undefined' && FAMILY && FAMILY[id]) || 'hub';
 
-  // ---------------------------------------------------------------- livery (A5): strips, truss seams, hub rim and core, tinted at bake time
-  // Textures are cached by a key that carries the livery id (plateTexture), so a change rebakes once and switching back is instant;
-  // nothing is tinted per frame. The active id is Meta.livery() (falls back to Meta.profile.settings.livery, then 'default');
-  // without a profile the id pinned by the `livery` event stands in.
+  // ---------------------------------------------------------------- livery (A5): pads, truss seams, hub rim and glows
+  // Pads and glows re-tint from the active livery; the fallback plate bake carries the livery id in its texture key.
+  // The active id is Meta.livery() (falls back to Meta.profile.settings.livery, then 'default'); without a profile
+  // the id pinned by the `livery` event stands in.
   const LIVERY_DEFAULT = { id: 'default', name: 'Standard', strip: 'family', seam: '#8FD3E8', rim: '#F3E9D6', hubCore: '#F3E9D6' };
   function liveryDefs() { return (typeof LIVERIES !== 'undefined' && Array.isArray(LIVERIES) && LIVERIES.length) ? LIVERIES : [LIVERY_DEFAULT]; }
   function liveryById(id) { const L = liveryDefs(); return L.find(l => l.id === id) || L.find(l => l.id === 'default') || LIVERY_DEFAULT; }
@@ -79,12 +91,20 @@ const EngineWorld = (() => {
   function seamColor() { return livery().seam || U.pal('ice'); }
   function rimColor() { return livery().rim || U.pal('ivory'); }
   function hubCoreColor() { return livery().hubCore || U.pal('ivory'); }
-  function heroColor(id) { const hero = HERO[id]; if (!hero) return null; if (id === 'hub') return hubCoreColor(); return hero.color[0] === '#' ? hero.color : U.pal(hero.color); }
+  // pad hue: the module's strip colour (family by default, the livery strip when dressed); the hub pad takes the livery rim
+  function padColor(id) { return id === 'hub' ? rimColor() : stripColor(id); }
+  // glow hue: family light; a dressed station mixes the livery strip into it; the hub always glows its core colour
+  function glowColor(id) {
+    if (id === 'hub') return hubCoreColor();
+    const base = U.pal(GLOW_FAMILY[famOf(id)] || 'amber');
+    const s = livery().strip;
+    return (!s || s === 'family') ? base : U.mix(base, s, 0.5);
+  }
   function applyLivery(def) {
     if (!def || (S.livery && S.livery.id === def.id)) return false;
     S.livery = def;
-    for (const rec of S.cells) { rec.bakeKey = ''; rec.liveKey = ''; if (rec.glow) rec.glow.texture = ST.glowTexture(heroColor(rec.id), 32); }
-    S.trussDirty = true;
+    for (const rec of S.cells) { rec.bakeKey = ''; rec.glow.texture = ST.glowTexture(glowColor(rec.id), 32); }
+    S.trussDirty = true; S.padsKey = '';
     return true;
   }
   function syncLivery() { return applyLivery(liveryById(wantedLiveryId())); }
@@ -98,11 +118,16 @@ const EngineWorld = (() => {
     return (r >= 0 && r < S.rows && c >= 0 && c < S.cols) ? { r, c } : null;
   }
   function cellCentre(r, c) { return { x: (c + 0.5) * CELL, y: (r + 0.5) * CELL }; }
+  // World rect of what a cell shows: the render's box when the pack is active, else the cell (for HUD tooltips)
+  function cellBounds(r, c) {
+    const rec = S.byKey.get(keyOf(r, c));
+    if (rec && rec.artState !== 'none') { const w = miniW(rec.id); return { x: wx(c + 0.5) - w / 2, y: miniTop(r, rec.id), width: w, height: w }; }
+    return { x: wx(c), y: wy(r), width: CELL, height: CELL };
+  }
   function occupied(r, c) { const s = simState(); return !!(s && s.grid[r] && s.grid[r][c]); }
   function neighbors(r, c) { return [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]]; }
 
-  // ---------------------------------------------------------------- bake geometry per band
-  // All plate/live canvases share one geometry per band so sprites align exactly.
+  // ---------------------------------------------------------------- bake geometry per band (fallback plates, ghost)
   function setBand(band) {
     S.band = band;
     S.cellDev = Math.round(CELL * band * ST.dpr);
@@ -110,12 +135,18 @@ const EngineWorld = (() => {
     S.k = S.cellDev / 100;                           // device px per unit
     S.worldPerDev = CELL / S.cellDev;
   }
-  function placeCellSprite(sp, r, c) {
-    sp.scale.set(S.worldPerDev);
-    sp.position.set(wx(c) - S.pad * S.worldPerDev, wy(r) - S.pad * S.worldPerDev);
+  function placeCellSprite(sp, r, c, scale) {
+    const sc = scale || 1, cx = wx(c) + CELL / 2, cy = wy(r) + CELL / 2;
+    sp.scale.set(S.worldPerDev * sc);
+    sp.position.set(cx - (S.cellDev / 2 + S.pad) * S.worldPerDev * sc, cy - (S.cellDev / 2 + S.pad) * S.worldPerDev * sc);
+  }
+  function placeMini(sp, r, c, id, scale) {
+    const w = miniW(id) * (scale || 1);
+    sp.width = w; sp.height = w;
+    sp.position.set(wx(c) + CELL / 2, wy(r + 1) - MINI_LIFT * CELL);
   }
 
-  // ---------------------------------------------------------------- plate baking (8.0 rules, v1 bakeSprite)
+  // ---------------------------------------------------------------- plate baking (v1 8.0 rules; the loading fallback)
   function roundRectPath(p, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
     p.moveTo(x + r, y); p.arcTo(x + w, y, x + w, y + h, r); p.arcTo(x + w, y + h, x, y + h, r); p.arcTo(x, y + h, x, y, r); p.arcTo(x, y, x + w, y, r); p.closePath();
@@ -136,17 +167,14 @@ const EngineWorld = (() => {
     const isHub = id === 'hub', off = variant === 'offline';
     const fam = U.famColor(id), custom = liveryId() !== 'default';
     const plateCol = off ? OFFLINE.plate : U.pal('hull');
-    // A5: the strip takes the livery colour (the family hue stays on the silhouette); the hub's rim, rings and seams take the livery rim
     const rimCol = off ? OFFLINE.rim : (isHub && custom ? U.rgba(rimColor(), 0.3) : U.pal('hull-rim'));
     const stripCol = off ? OFFLINE.strip : stripColor(id);
     const silCol = off ? OFFLINE.sil : (isHub ? rimColor() : fam);
     g.translate(pad, pad); g.scale(k, k);
     g.lineJoin = 'round'; g.lineCap = 'round';
     const shape = inset => { const p = new Path2D(); if (isHub) hexPath(p, 50, 50, 48 + inset); else roundRectPath(p, 6 - inset, 6 - inset, 88 + 2 * inset, 88 + 2 * inset, 10 + inset); return p; };
-    // plate: fill, key-light edges (2 device px), rim
     const plate = shape(0);
     g.fillStyle = plateCol; g.fill(plate);
-    // subtle plate gradient: a hair lighter at the top so the hull reads as lit from above
     g.save(); g.clip(plate);
     const pg = g.createLinearGradient(0, 0, 0, 100);
     pg.addColorStop(0, 'rgba(255,255,255,.06)'); pg.addColorStop(1, 'rgba(0,0,0,.10)');
@@ -157,21 +185,14 @@ const EngineWorld = (() => {
     g.restore();
     g.strokeStyle = rimCol; g.lineWidth = isHub ? 2 : 1.5; g.stroke(plate);
     if (!isHub) {
-      // signal strip: one segment at level 1, two at level 2, three at level 3 (3.1 upgrades)
       const segs = Math.max(1, Math.min(3, lvl | 0));
       const gap = 4, total = 68, w = (total - gap * (segs - 1)) / segs;
       g.fillStyle = stripCol;
       for (let i = 0; i < segs; i++) g.fillRect(16 + i * (w + gap), 7.5, w, 4);
-      // rivets
       g.fillStyle = 'rgba(255,255,255,.3)';
       for (const [x, y] of [[13, 13], [87, 13], [13, 87], [87, 87]]) { g.beginPath(); g.arc(x, y, 2, 0, TAU); g.fill(); }
-      // ivory level ticks along the left rim
-      if (lvl >= 2) {
-        g.fillStyle = U.pal('ivory');
-        for (let i = 0; i < lvl - 1; i++) g.fillRect(8.5, 22 + i * 8, 3, 5);
-      }
+      if (lvl >= 2) { g.fillStyle = U.pal('ivory'); for (let i = 0; i < lvl - 1; i++) g.fillRect(8.5, 22 + i * 8, 3, 5); }
     }
-    // silhouette by the art bundle (family colour, 55% fill / 100% stroke)
     const st = { color: silCol, lamp: U.pal('lamp'), cellPx: cd / ST.dpr, dpr: ST.dpr, variant, reduced: ST.reduced,
       dock: open ? { open, usable: true, approaching: false, docked: false, progress: 0, berth: 0 } : null };
     let drawn = false;
@@ -201,17 +222,13 @@ const EngineWorld = (() => {
     }
   }
 
-  // Soft drop shadow (black 35%, blur ~10 at zoom 1, offset 0/4), one texture per shape per band.
-  function shadowTexture(isHub) {
-    const size = S.cellDev + S.pad * 2;
-    return ST.bake(`shadow|${isHub ? 'hex' : 'rect'}|${S.cellDev}`, size, size, g => {
-      const k = S.cellDev / 100, blur = Math.max(2, 10 * S.band * ST.dpr * 0.6);
-      g.translate(S.pad, S.pad); g.scale(k, k);
-      const p = new Path2D(); if (isHub) hexPath(p, 50, 50, 48); else roundRectPath(p, 6, 6, 88, 88, 10);
-      let blurred = false;
-      try { g.filter = `blur(${blur / k}px)`; g.fillStyle = 'rgba(0,0,0,.6)'; g.fill(p); g.filter = 'none'; blurred = 'filter' in g; } catch (e) { blurred = false; }
-      if (!blurred) { for (let i = 4; i >= 0; i--) { g.fillStyle = `rgba(0,0,0,${0.1 + i * 0.02})`; const q = new Path2D(); if (isHub) hexPath(q, 50, 50, 48 + i * 2); else roundRectPath(q, 6 - i * 2, 6 - i * 2, 88 + i * 4, 88 + i * 4, 10 + i * 2); g.fill(q); } }
-    });
+  // Elliptical drop shadow under a miniature (soft radial, squashed when placed), one texture for all cells.
+  function shadowTexture() {
+    return ST.bake('shadow|ellipse', 128, 128, g => {
+      const gr = g.createRadialGradient(64, 64, 8, 64, 64, 62);
+      gr.addColorStop(0, 'rgba(0,0,0,.9)'); gr.addColorStop(0.55, 'rgba(0,0,0,.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(64, 64, 62, 0, TAU); g.fill();
+    }).texture;
   }
 
   function bankTexture(full) {
@@ -246,8 +263,8 @@ const EngineWorld = (() => {
     const L = ST.layers;
     if (!s) {
       for (const rec of S.cells) destroyCell(rec);
-      S.cells = []; S.byKey.clear(); S.spars = []; S.trussDirty = true; S.stateRef = null; S.cellCount = 0;
-      if (S.trussG) S.trussG.clear(); if (S.seamG) S.seamG.clear();
+      S.cells = []; S.byKey.clear(); S.spars = []; S.trussDirty = true; S.stateRef = null; S.cellCount = 0; S.padsKey = '';
+      if (S.trussG) S.trussG.clear(); if (S.seamG) S.seamG.clear(); if (S.padsG) S.padsG.clear();
       return;
     }
     S.rows = s.grid.length; S.cols = s.grid[0] ? s.grid[0].length : 0;
@@ -323,9 +340,10 @@ const EngineWorld = (() => {
     for (const [key, rec] of S.byKey) if (!keep.has(key)) destroyCell(rec);
     S.byKey = keep;
     S.cells = cells.map(x => keep.get(keyOf(x.r, x.c)));
-    // draw order: by row then column so lower plates overlap shadows naturally
+    // painter's order: by row then column, so lower rows overlap the rows above (the renders rise into them)
     S.cells.sort((a, b) => (a.r - b.r) || (a.c - b.c));
-    S.cells.forEach(rec => { L.world.plates.addChild(rec.plate); L.world.shadow.addChild(rec.shadow); });
+    S.cells.forEach(rec => { L.world.minis.addChild(rec.plate, rec.mini); L.world.shadow.addChild(rec.shadow); });
+    S.padsKey = '';
 
     // station box (occupied cells) and grid box, world px
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -333,205 +351,113 @@ const EngineWorld = (() => {
     S.station = cells.length ? { x0, y0, x1, y1 } : null;
     S.gridBox = { x0: 0, y0: 0, x1: S.cols * CELL, y1: S.rows * CELL };
     CAM.setStation(S.station, S.gridBox);
-    // lanes end at the station box and the planet keeps clear of it: re-lay space when the box changes
     const stationKey = S.station ? [x0, y0, x1, y1, S.cols, S.rows].join(',') : '';
     if (stationKey !== S.stationKey) { S.stationKey = stationKey; EngineSpace.setStation(); }
 
-    if (S.stateRef !== s) { S.stateRef = s; S.lastStock = null; S.pops.clear(); S.dockState.clear(); S.hoverKey = S.selKey = null; }
+    if (S.stateRef !== s) { S.stateRef = s; S.pops.clear(); S.dockState.clear(); S.hoverKey = S.selKey = null; }
     S.cellCount = cells.length;
     buildDots();
   }
 
   function createCell(r, c, id) {
+    const hero = GLOW_HERO[id];
     const rec = {
       key: keyOf(r, c), r, c, id, def: MODULES[id],
-      plate: new PIXI.Sprite(), shadow: new PIXI.Sprite(), live: null, glow: null,
-      liveNext: Math.random() * 0.2, liveKey: '', bakeKey: '',
-      scaffold: null, bank: null, bankT0: 0, lvl: 1, building: false,
+      plate: new PIXI.Sprite(), mini: new PIXI.Sprite(), shadow: new PIXI.Sprite(shadowTexture()),
+      glow: ST.sprite(ST.glowTexture(glowColor(id), 32), { blend: 'add', alpha: 0 }),
+      glowR: hero ? hero.r : 0.5, glowA: hero ? hero.a : 0.26,
+      chase: null, artUrl: ST.assets.url('modules', id, 512), artState: 'none', fadeT0: 0,
+      bakeKey: '', scaffold: null, bank: null, lvl: 1, building: false,
     };
-    rec.plate.eventMode = 'none'; rec.shadow.eventMode = 'none';
-    rec.shadow.alpha = 0.35;
-    const hero = HERO[id];
-    if (hero) {
-      rec.glow = ST.sprite(ST.glowTexture(heroColor(id), 32), { blend: 'add', alpha: hero.a });
-      rec.glow.position.set(wx(c) + CELL / 2, wy(r) + CELL / 2);
-      ST.layers.world.emissive.addChild(rec.glow);
+    rec.plate.eventMode = rec.mini.eventMode = rec.shadow.eventMode = 'none';
+    rec.mini.anchor.set(0.5, 1); rec.mini.visible = false;
+    rec.shadow.anchor.set(0.5); rec.shadow.alpha = 0.27;
+    rec.shadow.position.set(wx(c) + CELL / 2, wy(r) + CELL * 0.64);
+    rec.shadow.scale.set(CELL * 0.69 / 128, CELL * 0.3 / 128);
+    rec.glow.position.set(wx(c) + CELL / 2, wy(r) + CELL * 0.45);
+    ST.layers.world.emissive.addChild(rec.glow);
+    if ((rec.def.docks || 0) > 0 && id !== 'hub') {
+      rec.chase = [0, 1, 2].map(() => ST.sprite(ST.glowTexture(CYAN, 6, 'hard'), { blend: 'add', alpha: 0.4 }));
+      for (const d of rec.chase) { d.scale.set(0.5); ST.layers.world.emissive.addChild(d); }
     }
+    if (rec.artUrl) ST.assets.load(rec.artUrl);
     return rec;
   }
   function destroyCell(rec) {
-    rec.plate.destroy(); rec.shadow.destroy();
-    if (rec.glow) rec.glow.destroy();
-    if (rec.live) { rec.live.sprite.destroy(); ST.destroyTexture(rec.live.tex); rec.live = null; }
+    rec.plate.destroy(); rec.mini.destroy(); rec.shadow.destroy(); rec.glow.destroy();
+    if (rec.chase) for (const d of rec.chase) d.destroy();
     hideScaffold(rec); hideBank(rec);
   }
 
-  // Ensure the plate texture and live canvas match the current band / variant / tag / level.
+  // Fallback plate: keep its bake in step with band / variant / tag / level while it is still visible.
   function refreshBake(rec, variant) {
     const open = (rec.id !== 'hub' && (rec.def.docks || 0) > 0) ? ((S.dockInfo.get(rec.key) || {}).open || 'e') : '';
-    const tagStr = tagStringFor(rec);
+    const tagStr = tagsOK() ? tagStringFor(rec) : '';
     const key = `${S.cellDev}|${variant}|${open}|${tagStr}|${rec.lvl}`;
     if (key === rec.bakeKey) return;
     rec.bakeKey = key;
     rec.plate.texture = plateTexture(rec.id, variant, open, tagStr, rec.lvl).texture;
-    rec.shadow.texture = shadowTexture(rec.id === 'hub').texture;
-    placeCellSprite(rec.plate, rec.r, rec.c);
-    placeCellSprite(rec.shadow, rec.r, rec.c);
-    rec.shadow.y += 4;
-    if (!rec.live || rec.live.size !== S.cellDev + S.pad * 2) {
-      if (rec.live) { rec.live.sprite.destroy(); ST.destroyTexture(rec.live.tex); }
-      const size = S.cellDev + S.pad * 2;
-      const canvas = U.makeCanvas(size, size);
-      const tex = ST.textureFromCanvas(canvas);
-      const sprite = new PIXI.Sprite(tex); sprite.eventMode = 'none';
-      ST.layers.world.emissive.addChild(sprite);
-      rec.live = { canvas, ctx: canvas.getContext('2d'), tex, sprite, size };
-      rec.liveKey = '';
-      rec.liveNext = 0;
-    }
-    placeCellSprite(rec.live.sprite, rec.r, rec.c);
-    if (rec.glow) { const hero = HERO[rec.id]; rec.glow.scale.set((hero.r * 2 * 1.6) / 64); }
   }
   function tagStringFor(rec) {
-    if (!tagsOK()) return '';
     const t = S.tags.get(rec.key); if (!t) return '';
     const berth = (rec.id !== 'hub' && (rec.def.docks || 0) > 0 && t.berth) ? String(t.berth).padStart(2, '0') : '';
     return (t.reg || '') + '|' + berth;
   }
+  // The render arrived: swap it in and cross-fade the plate out over 240 ms.
+  function adoptArt(rec) {
+    if (rec.artState !== 'none') return;
+    const tex = ST.assets.texture(rec.artUrl);
+    if (!tex) return;
+    rec.mini.texture = tex; rec.mini.visible = true;
+    rec.artState = 'fading'; rec.fadeT0 = U.nowMs();
+  }
 
-  // ---------------------------------------------------------------- per-frame shared state (8.2)
+  // ---------------------------------------------------------------- per-frame shared state
   function frameShared(s) {
-    const T = Sim.totals();
+    S.T = Sim.totals();
     const byDock = S.shipsByDock; byDock.clear();
-    let linerNear = false;
-    const hx = s.hub.c + 0.5, hy = s.hub.r + 0.5;
-    for (const sh of s.ships) {
-      if (sh.dock && (sh.state === 'approach' || sh.state === 'docked')) byDock.set(keyOf(sh.dock.r, sh.dock.c), sh);
-      if (sh.cls === 'liner' && Math.hypot(sh.x - hx, sh.y - hy) < 6) linerNear = true;
-    }
-    if (S.lastStock !== null && T.stockTotal !== S.lastStock) S.stockChangedAt = U.nowMs();
-    S.lastStock = T.stockTotal;
-    S.T = T;
-    S.flags = {
-      flare: !!T.flare,
-      festival: s.day < ((s.fx && s.fx.festivalUntil) || 0),
-      alert: ST.condition === 'alert',
-      loan: Object.values(s.companies).some(c => !!c.loan),
-      converting: (s.stock.ore || 0) >= 6,
-      xeno: (s.stock.xenofauna || 0) > 0,
-      linerNear, shipAdjacent: false,
-      stockChanged: U.nowMs() - S.stockChangedAt < 400,
-    };
-    S.trends = T.hasMarket ? marketTrends() : null;
+    for (const sh of s.ships) if (sh.dock && (sh.state === 'approach' || sh.state === 'docked')) byDock.set(keyOf(sh.dock.r, sh.dock.c), sh);
   }
-  function marketTrends() {
-    const arr = GOOD_IDS.map(g => { const b = GOODS[g].base, d = Sim.effPrice(g) - b; return { k: Math.abs(d) / b, s: d > b * 0.02 ? 1 : d < -b * 0.02 ? -1 : 0 }; });
-    arr.sort((a, b) => b.k - a.k);
-    return arr.slice(0, 4).map(x => x.s);
+
+  // ---------------------------------------------------------------- pads (A6): rounded squares in the family hue under every miniature
+  function ensurePads() {
+    if (S.padsG) return;
+    S.padsG = new PIXI.Graphics(); S.padsG.eventMode = 'none';
+    ST.layers.world.plates.addChild(S.padsG);
   }
-  function tellClassOf(id) {
-    if (hasArt(id) && (ART[id].tellClass === 'A' || ART[id].tellClass === 'B')) return ART[id].tellClass;
-    return CLASS_B[id] ? 'B' : 'A';
-  }
-  // Class-B budget (8.0): within 3 cells of the pointer or all when <= 12 modules; at most 16; none at tier 0.
-  function bTellBudget() {
-    if (S.bFrame === ST.frame) return S.bAllowed;
-    S.bFrame = ST.frame;
-    const allowed = new Set();
-    S.bAllowed = allowed;
-    if (ST.tier === 0 || ST.reduced || CELL * CAM.zoom < 44) return allowed;
-    const few = (S.T.modules + 1) <= 12, cand = [];
+  function drawPads() {
+    ensurePads();
+    const g = S.padsG; g.clear();
     for (const rec of S.cells) {
-      if (tellClassOf(rec.id) !== 'B') continue;
-      let d;
-      if (S.pointer) d = Math.hypot(wx(rec.c + 0.5) - S.pointer.x, wy(rec.r + 0.5) - S.pointer.y) / CELL; else d = few ? 0 : 99;
-      if (few || d <= 3) cand.push({ k: rec.key, d });
-    }
-    cand.sort((a, b) => a.d - b.d);
-    for (let i = 0; i < Math.min(16, cand.length); i++) allowed.add(cand[i].k);
-    return allowed;
-  }
-
-  function buildSt(rec, s, powered) {
-    const { id, key, r, c, def } = rec, T = S.T;
-    let dock = null;
-    if ((def.docks || 0) > 0) {
-      const di = S.dockInfo.get(key) || { open: null, usable: false, berth: 0 };
-      const sh = S.shipsByDock.get(key);
-      const docked = !!(sh && sh.state === 'docked');
-      let progress = 0;
-      if (docked) { const dd = SHIP_CLASSES[sh.cls].dockDays || 1; progress = U.clamp(1 - (sh.dockedUntil - Sim.now()) / dd, 0, 1); }
-      let ds = S.dockState.get(key);
-      if (!ds) { ds = { docked, at: -1e12 }; S.dockState.set(key, ds); }
-      else if (ds.docked !== docked) { ds.docked = docked; ds.at = U.nowMs(); }
-      const kc = U.easeOutCubic((U.nowMs() - ds.at) / 300);
-      dock = { open: di.open, usable: di.usable, approaching: !!(sh && sh.state === 'approach'), docked, progress, berth: di.berth, clamp: docked ? kc : 1 - kc };
-    }
-    let ratio = 0, crowd = 0;
-    if (id === 'quarters') ratio = T.beds ? Math.min(1, T.visitors / T.beds) : 0;
-    else if (id === 'habitat') ratio = T.homes ? Math.min(1, s.residents / T.homes) : 0;
-    else if (id === 'warehouse') ratio = T.storage ? Math.min(1, T.stockTotal / T.storage) : 0;
-    else if (id === 'plaza') { crowd = U.clamp(Math.round((s.residents || 0) / 5), 0, 6); ratio = Math.min(1, (s.residents || 0) / 30); }
-    const load = T.produced > 0 ? T.used / T.produced : (T.used > 0 ? 2 : 0);
-    let shipAdjacent = false;
-    for (const [nr, nc] of neighbors(r, c)) { const sh = S.shipsByDock.get(keyOf(nr, nc)); if (sh && sh.state === 'docked') { shipAdjacent = true; break; } }
-    return {
-      color: U.famColor(id), lamp: (id === 'hub' && liveryId() !== 'default') ? hubCoreColor() : U.pal('lamp'),
-      T, efficiency: T.efficiency, powered,
-      hover: !!(S.hover && S.hover.r === r && S.hover.c === c), selected: !!(S.selected && S.selected.r === r && S.selected.c === c), reduced: ST.reduced,
-      cellPx: S.cellDev / ST.dpr, dpr: ST.dpr, dock, ratio, crowd, load, day: s.day + s.t,
-      trends: id === 'market' ? S.trends : null, flags: Object.assign({}, S.flags, { shipAdjacent }),
-    };
-  }
-
-  // ---------------------------------------------------------------- live canvas (lit + tell + status)
-  function liveStaticKey(rec, st, powered, offline) {
-    // inputs that change what `lit` draws; a change forces a redraw even at tier 0
-    const d = st.dock;
-    return [powered ? 1 : 0, offline ? 1 : 0, Math.round(st.ratio * 9), st.crowd, Math.round(st.load * 10), d ? (d.docked ? 'd' : d.approaching ? 'a' : d.usable ? 'f' : 'b') + Math.round(d.progress * 50) + Math.round(d.clamp * 10) : '',
-      st.flags.flare ? 1 : 0, st.flags.festival ? 1 : 0, st.flags.alert ? 1 : 0, st.flags.loan ? 1 : 0, st.flags.converting ? 1 : 0, st.flags.xeno ? 1 : 0, st.flags.linerNear ? 1 : 0, st.flags.shipAdjacent ? 1 : 0, st.flags.stockChanged ? 1 : 0,
-      st.efficiency < 1 ? 1 : 0, st.hover ? 1 : 0, st.selected ? 1 : 0].join(',');
-  }
-
-  function redrawLive(rec, s, st, powered, offline) {
-    const lv = rec.live, g = lv.ctx, k = S.k, u = S.cellDev / (100 * ST.dpr);
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, lv.size, lv.size);
-    g.translate(S.pad, S.pad); g.scale(k, k);
-    const art = hasArt(rec.id) ? ART[rec.id] : null;
-    if (art) {
-      if (!offline && typeof art.lit === 'function') { g.save(); try { art.lit(g, u, st); } catch (e) { /* art error must not kill the frame */ } g.restore(); }
-      if (typeof art.tell === 'function' && tellAllowed(rec)) {
-        g.save();
-        const frozen = !powered || CELL * CAM.zoom < 36 || (ST.reduced && !REDUCED_KEEP[rec.id]);
-        const t = frozen ? 0 : ST.tellTime + (rec.r * 7 + rec.c * 13) * 0.37;
-        try { art.tell(g, u, t, st); } catch (e) { /* ignore */ }
-        g.restore();
+      const col = U.int(padColor(rec.id)), x = wx(rec.c) + 5, y = wy(rec.r) + 5, w = CELL - 10;   // 5 px inset: a 2–3 px seam between neighbours
+      // a dark seat under the pad keeps cells apart where the renders close the gaps, then the family fill and rim
+      g.roundRect(x - 1.5, y - 1.5, w + 3, w + 3, 7).fill({ color: 0x03040A, alpha: 0.55 });
+      g.roundRect(x, y, w, w, 6).fill({ color: col, alpha: 0.10 }).roundRect(x, y, w, w, 6).stroke({ width: 1, color: col, alpha: 0.45 });
+      // upgrade level ticks on the pad's lower rim
+      if (rec.lvl >= 2) {
+        const n = rec.lvl - 1, tw = 6, gap = 4, total = n * tw + (n - 1) * gap;
+        for (let i = 0; i < n; i++) g.rect(wx(rec.c) + CELL / 2 - total / 2 + i * (tw + gap), y + w - 1, tw, 2);
+        g.fill({ color: U.int(U.pal('ivory')), alpha: 0.9 });
       }
     }
-    // power shortage: dashed warn ring rotating 1 rev / 12 s + 6u triangle, on every consumer
-    if (S.T.efficiency < 1 && rec.def.power < 0) {
-      const warn = U.pal('warn'), inset = 2, rad = 12, w = 100 - 2 * inset, perim = 4 * w - (8 - TAU) * rad;
-      g.save(); g.strokeStyle = warn; g.lineWidth = 1 / k * ST.dpr; g.setLineDash([4 / k, 3 / k]);
-      g.lineDashOffset = -((ST.tellTime / 12) % 1) * perim;
-      const p = new Path2D(); roundRectPath(p, inset, inset, w, w, rad); g.stroke(p); g.setLineDash([]);
-      g.fillStyle = warn; g.beginPath(); g.moveTo(92, 5); g.lineTo(95, 11); g.lineTo(89, 11); g.closePath(); g.fill();
-      g.restore();
-    }
-    ST.updateTexture(lv.tex);
-    // shipyard crane sparks (art-mod-b calls the v1 FX global, which the engine does not define)
-    if (rec.id === 'shipyard' && powered && st.flags.shipAdjacent && !ST.reduced && ST.tier > 0) {
-      const t = ST.tellTime + (rec.r * 7 + rec.c * 13) * 0.37, leg = Math.floor(t / 3), f = U.easeInOutSine((t % 3) / 3);
-      const x = (leg % 2 ? 74 - 48 * f : 26 + 48 * f) / 100, y = 0.38;
-      if (Math.floor(t * 2) !== rec.sparkBucket) { rec.sparkBucket = Math.floor(t * 2); EngineFX.sparks(wx(rec.c) + x * CELL, wy(rec.r) + y * CELL, U.pal('ice-hi'), 1, 350); }
-    }
   }
-  function tellAllowed(rec) {
-    if (rec.id === 'hub' || rec.id === 'market') return true;        // static geometry lives in their tells
-    if (CELL * CAM.zoom < 36) return false;
-    if (ST.reduced) return !!REDUCED_KEEP[rec.id];
-    if (tellClassOf(rec.id) === 'B') return bTellBudget().has(rec.key);
-    return true;
+
+  // ---------------------------------------------------------------- dock chase (A6): three cyan dots along the pad's open side
+  function updateChase(rec, info, sh) {
+    const open = (info && info.open) || 'e', cx = wx(rec.c) + CELL / 2, cy = wy(rec.r) + CELL / 2, e = CELL / 2 - 7, sp = 9;
+    const docked = !!(sh && sh.state === 'docked'), approaching = !!(sh && sh.state === 'approach');
+    const step = Math.floor(ST.tellTime * 2) % 3;                   // chase: centre, ends, dark (2 steps / s)
+    for (let i = 0; i < 3; i++) {
+      const d = rec.chase[i], k = i - 1;
+      if (open === 'e') d.position.set(cx + e, cy + k * sp); else if (open === 'w') d.position.set(cx - e, cy + k * sp);
+      else if (open === 's') d.position.set(cx + k * sp, cy + e); else d.position.set(cx + k * sp, cy - e);
+      let a;
+      if (!info || !info.usable) a = 0;
+      else if (docked) a = 0.9;
+      else if (approaching) a = (step === 0 && i === 1) || (step === 1 && i !== 1) ? 1 : 0.15;
+      else a = 0.35;
+      d.alpha = a; d.visible = a > 0;
+    }
   }
 
   // ---------------------------------------------------------------- scaffold (3.4)
@@ -543,7 +469,6 @@ const EngineWorld = (() => {
       label.anchor.set(0.5, 1);                    // sits inside its own cell, above the bottom edge (never over the cell below)
       const back = new PIXI.Graphics(); back.eventMode = 'none';
       const x = wx(rec.c), y = wy(rec.r), ice = U.int(U.pal('ice'));
-      // hatched frame: 45° lines at 6u pitch clipped to the cell, dashed outline
       hatchCell(frame, x, y, CELL * 0.08, 1);
       frame.stroke({ width: 1, color: ice, alpha: 0.28 });
       const dash = 6, g2 = 4, per = 2 * (CELL - 4), seg = dash + g2;
@@ -563,11 +488,9 @@ const EngineWorld = (() => {
     sc.ring.circle(cx, cy, R).stroke({ width: 2, color: U.int(U.pal('hairline-2')), alpha: 0.9 });
     // moveTo first: a Pixi v8 arc with no current point draws a line from the local origin
     if (prog > 0) sc.ring.moveTo(cx, cy - R).arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + prog * TAU).stroke({ width: 3, color: U.int(U.pal('ice')), alpha: 1, cap: 'round' });
-    const secs = Math.max(0, Math.ceil(b.remainingMs / 1000)), m = Math.floor(secs / 60), s2 = secs % 60;
-    const txt = m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}:${String(s2).padStart(2, '0')}`;
+    const txt = timeText(b.remainingMs);
     if (txt !== sc.lastText) {
       sc.lastText = txt; sc.label.text = txt;
-      // dark pill behind the timer so it reads over the hatched plate
       const w = sc.label.width + 10, h = sc.label.height + 4;
       sc.back.clear().roundRect(sc.label.x - w / 2, sc.label.y - h + 1, w, h, 3).fill({ color: 0x04050A, alpha: 0.74 });
     }
@@ -575,6 +498,10 @@ const EngineWorld = (() => {
       sc.lastSpark = ST.time + 1.5;
       EngineFX.sparks(wx(rec.c) + CELL * (0.25 + Math.random() * 0.5), wy(rec.r) + CELL * (0.25 + Math.random() * 0.5), U.pal('ice-hi'), 6, 320);
     }
+  }
+  function timeText(ms) {
+    const secs = Math.max(0, Math.ceil(ms / 1000)), m = Math.floor(secs / 60), s2 = secs % 60;
+    return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}:${String(s2).padStart(2, '0')}`;
   }
   // Diagonal hatch lines across the cell at (x, y): dir +1 = down-right (x - y = d), -1 = up-right (x + y = d).
   function hatchCell(g, x, y, pitch, dir) {
@@ -604,7 +531,12 @@ const EngineWorld = (() => {
     rec.scaffold = null;
   }
 
-  // ---------------------------------------------------------------- bank chips (3.4)
+  // ---------------------------------------------------------------- bank chips (3.4; A6: 0.26 cell wide, capped at 30 screen px, 6 px above the render's top edge)
+  function chipRadius() { return Math.min(CHIP_D * CELL, CHIP_MAX_PX / Math.max(0.01, CAM.zoom)) / 2; }
+  function chipY(rec) {
+    const top = rec.artState !== 'none' ? miniTop(rec.r, rec.id) : wy(rec.r);
+    return top - 6 - chipRadius();
+  }
   function showBank(rec, h) {
     if (!rec.bank) {
       const halo = ST.sprite(ST.glowTexture(U.pal('amber'), 32), { blend: 'add', alpha: 0 });
@@ -615,18 +547,16 @@ const EngineWorld = (() => {
     const bk = rec.bank;
     if (bk.full !== !!h.full || bk.band !== S.band) {
       bk.full = !!h.full; bk.band = S.band;
-      const tex = bankTexture(bk.full);
-      bk.sprite.texture = tex.texture;
-      bk.sprite.scale.set((26 / tex.w));
+      bk.sprite.texture = bankTexture(bk.full).texture;
     }
     const pop = U.easeOutBack(Math.min(1, (ST.time - bk.t0) / 0.35));
-    const bob = Math.sin(ST.time * TAU * 0.8 + rec.c * 0.9 + rec.r * 0.4) * 4;
-    const cx = wx(rec.c) + CELL / 2, cy = wy(rec.r) - 18 + (ST.reduced ? 0 : bob);
+    const bob = Math.sin(ST.time * TAU * 0.8 + rec.c * 0.9 + rec.r * 0.4) * 3;
+    const cx = wx(rec.c) + CELL / 2, cy = chipY(rec) + (ST.reduced ? 0 : bob), d = chipRadius() * 2;
     const sc = (bk.full ? 1.15 : 1) * pop;
-    bk.sprite.position.set(cx, cy); bk.sprite.scale.set((26 / bankTexture(bk.full).w) * sc);
+    bk.sprite.position.set(cx, cy); bk.sprite.scale.set((d / bankTexture(bk.full).w) * sc);
     bk.halo.position.set(cx, cy);
-    bk.halo.alpha = bk.full ? 0.35 + 0.2 * Math.sin(ST.time * 3) : 0.12;
-    bk.halo.scale.set(bk.full ? 1.1 : 0.7);
+    bk.halo.alpha = bk.full ? 0.18 + 0.1 * Math.sin(ST.time * 3) : 0.06;
+    bk.halo.scale.set((bk.full ? 1.1 : 0.7) * d / 26);
   }
   function hideBank(rec) {
     if (!rec.bank) return;
@@ -635,7 +565,7 @@ const EngineWorld = (() => {
   function bankAt(x, y) {
     for (const rec of S.cells) {
       if (!rec.bank) continue;
-      if (Math.hypot(x - rec.bank.sprite.x, y - rec.bank.sprite.y) <= 16) return { r: rec.r, c: rec.c };
+      if (Math.hypot(x - rec.bank.sprite.x, y - rec.bank.sprite.y) <= Math.max(12, chipRadius() + 4)) return { r: rec.r, c: rec.c };
     }
     return null;
   }
@@ -646,7 +576,7 @@ const EngineWorld = (() => {
   }
   function isScaffold(r, c) { const rec = S.byKey.get(keyOf(r, c)); return !!(rec && rec.scaffold); }
 
-  // ---------------------------------------------------------------- trusses (3.4 / v1 7.7)
+  // ---------------------------------------------------------------- trusses (3.4 / v1 7.7): spars join the pad edges
   function ensureTruss() {
     if (!S.trussG) {
       S.trussG = new PIXI.Graphics(); S.trussG.eventMode = 'none'; ST.layers.world.truss.addChild(S.trussG);
@@ -657,13 +587,13 @@ const EngineWorld = (() => {
     const ax = wx(sp.a.c + 0.5), ay = wy(sp.a.r + 0.5), bx = wx(sp.b.c + 0.5), by = wy(sp.b.r + 0.5);
     const age = U.nowMs() - sp.born;
     const p = age < 250 ? U.easeOutCubic(Math.max(0, age) / 250) : 1;
-    return { ax, ay, bx: ax + (bx - ax) * p, by: ay + (by - ay) * p, growing: age < 250, full: bx, fullY: by };
+    return { ax, ay, bx: ax + (bx - ax) * p, by: ay + (by - ay) * p, growing: age < 250 };
   }
   function drawTruss() {
     ensureTruss();
     const g = S.trussG, sg = S.seamG;
     g.clear(); sg.clear();
-    const w = 0.16 * CELL, hw = w / 2, inset = 0.44 * CELL;
+    const w = 0.16 * CELL, hw = w / 2, inset = CELL / 2 - 4;      // from pad edge to pad edge
     const truss = U.int(U.pal('truss')), edge = U.int(U.pal('hull-edge')), ice = U.int(seamColor());   // A5: the seam and its end caps take the livery seam colour
     let growing = false;
     for (const sp of S.spars) {
@@ -697,7 +627,7 @@ const EngineWorld = (() => {
     const want = (ST.tier > 0 && !ST.reduced) ? S.spars.length : 0;
     while (S.runLights.length < want) { const sp = ST.sprite(ST.glowTexture(U.pal('lamp'), 8, 'hard'), { blend: 'add' }); sp.scale.set(0.6); em.addChild(sp); S.runLights.push(sp); }
     while (S.runLights.length > want) S.runLights.pop().destroy();
-    const inset = 0.44 * CELL, t = ST.tellTime;
+    const inset = CELL / 2 - 4, t = ST.tellTime;
     for (let i = 0; i < want; i++) {
       const sp = S.spars[i], lt = S.runLights[i];
       const ph = ((t + sp.phase) % 2.5 + 2.5) % 2.5;
@@ -711,7 +641,7 @@ const EngineWorld = (() => {
     }
   }
 
-  // ---------------------------------------------------------------- overlay: hover, selection, placement (3.4 / v1 10)
+  // ---------------------------------------------------------------- overlay: hover, selection, placement (3.4 / v1 10), on the pads
   function ensureOverlay() {
     const O = S.overlay; if (O.hover) return;
     const L = ST.layers.overlay;
@@ -774,22 +704,21 @@ const EngineWorld = (() => {
   function drawOverlay(s, dt) {
     ensureOverlay();
     const O = S.overlay, ivory = U.int(U.pal('ivory')), bad = U.int(U.pal('bad')), nowM = U.nowMs();
-    // grid dots fade in while placing
     const dotsTarget = S.placing ? 0.16 : 0;
     S.dotsG.alpha += (dotsTarget - S.dotsG.alpha) * Math.min(1, dt / 0.16);
 
-    // hover: ivory outline 1.5 px + soft halo (not while placing, never outside the plot)
+    // hover: ivory outline 1.5 px on the pad + soft halo (not while placing, never outside the plot)
     O.hover.clear();
     const hv = S.hover;
     if (!S.placing && hv && s.grid[hv.r] && s.grid[hv.r][hv.c] && inPlot(hv.r, hv.c)) {
       const key = keyOf(hv.r, hv.c);
       if (key !== S.hoverKey) { S.hoverKey = key; S.hoverT0 = nowM; }
       const k = Math.min(1, (nowM - S.hoverT0) / 140);
-      O.hover.roundRect(wx(hv.c) + 1.5, wy(hv.r) + 1.5, CELL - 3, CELL - 3, 6).stroke({ width: 1.5, color: ivory, alpha: 0.6 * k });
+      O.hover.roundRect(wx(hv.c) + 2.5, wy(hv.r) + 2.5, CELL - 5, CELL - 5, 6).stroke({ width: 1.5, color: ivory, alpha: 0.6 * k });
       O.hoverHalo.position.set(wx(hv.c) + CELL / 2, wy(hv.r) + CELL / 2); O.hoverHalo.scale.set(CELL * 1.7 / 128); O.hoverHalo.alpha = 0.14 * k;
     } else { S.hoverKey = null; O.hoverHalo.alpha = 0; }
 
-    // selection: brackets drawing in over 160 ms, breathing 2 px on a 3 s sine, focus glow
+    // selection: brackets on the pad drawing in over 160 ms, breathing 2 px on a 3 s sine, focus glow
     O.sel.clear();
     const sel = S.selected;
     if (sel && s.grid[sel.r] && s.grid[sel.r][sel.c]) {
@@ -833,7 +762,6 @@ const EngineWorld = (() => {
     const occ = !!s.grid[h.r][h.c], claimed = inPlot(h.r, h.c);
     const chk = claimed ? Sim.canPlace(id, h.r, h.c) : { ok: false, why: 'plot' };
     if (!occ && claimed) {
-      // preview spars at 40%
       const w = 0.16 * CELL;
       for (const [nr, nc] of neighbors(h.r, h.c)) {
         if (!Sim.occupied(nr, nc)) continue;
@@ -841,7 +769,6 @@ const EngineWorld = (() => {
         if (nr === h.r) O.lane.rect(Math.min(cx, nx), cy - w / 2, Math.abs(nx - cx), w); else O.lane.rect(cx - w / 2, Math.min(cy, ny), w, Math.abs(ny - cy));
       }
       O.lane.fill({ color: U.int(U.pal('truss')), alpha: 0.4 });
-      // dock: dotted ice lane two cells long on the open side
       if ((def.docks || 0) > 0) {
         const bp = Sim.berthPoint(h.r, h.c);
         if (bp) {
@@ -850,14 +777,18 @@ const EngineWorld = (() => {
           O.lane.fill({ color: U.int(U.pal('ice')), alpha: 0.7 });
         }
       }
-      const tex = plateTexture(id, 'normal', previewOpenSide(id, h.r, h.c), '', 1);
-      O.ghost.texture = tex.texture;
+      // ghost: the render at 45% with an ivory tint when the pack has it, else the baked plate
+      const art = ST.assets.texture(ST.assets.url('modules', id, 512));
       O.ghost.visible = true; O.ghost.alpha = 0.45;
-      O.ghost.tint = U.int(U.mix('#FFFFFF', U.famColor(id), 0.35));
-      O.ghost.scale.set(S.worldPerDev);
-      O.ghost.position.set(gx - S.pad * S.worldPerDev, gy - S.pad * S.worldPerDev);
+      if (art) {
+        O.ghost.texture = art; O.ghost.anchor.set(0.5, 1); O.ghost.tint = U.int(U.mix('#FFFFFF', U.pal('ivory'), 0.6));
+        O.ghost.width = O.ghost.height = miniW(id); O.ghost.position.set(cx, gy + CELL - MINI_LIFT * CELL);
+      } else {
+        O.ghost.texture = plateTexture(id, 'normal', previewOpenSide(id, h.r, h.c), '', 1).texture; O.ghost.anchor.set(0, 0);
+        O.ghost.tint = U.int(U.mix('#FFFFFF', U.famColor(id), 0.35));
+        O.ghost.scale.set(S.worldPerDev); O.ghost.position.set(gx - S.pad * S.worldPerDev, gy - S.pad * S.worldPerDev);
+      }
     } else O.ghost.visible = false;
-    // dashed outline: ivory, or bad on an illegal cell
     const col = chk.ok ? ivory : bad, dash = 5, gap = 3, per = CELL - 2, seg = dash + gap;
     for (let p = 0; p < per * 4; p += seg) {
       const p1 = Math.min(p + dash, per * 4);
@@ -866,7 +797,6 @@ const EngineWorld = (() => {
       O.lane.moveTo(a.x, a.y).lineTo(b.x, b.y);
     }
     O.lane.stroke({ width: 1.5, color: col, alpha: 0.9 });
-    // reason (bad) or advisory (warn) plate under the cell
     let text = null, color = null;
     if (!chk.ok) { text = mapReason(chk.why, def, s); color = U.pal('bad'); }
     else { const adv = advisoryFor(id, h.r, h.c, s); if (adv) { text = adv; color = U.pal('warn'); } }
@@ -888,7 +818,6 @@ const EngineWorld = (() => {
       const num = parseFloat(String(f.text).replace(/[^\d.-]/g, '')) || 0;
       const sign = String(f.text).trim()[0] === '-' ? -1 : 1;
       const e = { t0: nowM, x0: f.x, y0: f.y, value: Math.abs(num) * sign, sign, numeric: /\d/.test(f.text), handle: null };
-      // coalesce into a live floater within 300 ms and 0.3 cells with the same sign
       let merged = false;
       for (const o of list) {
         if (o === f) continue;
@@ -912,9 +841,6 @@ const EngineWorld = (() => {
   }
 
   // ---------------------------------------------------------------- plot / territory (A1.2)
-  // Ring list for a grid: data2.js plotRings(rows, cols, hub) when present, else the A1.2 rule
-  // (start plot around the hub; each ring grows one cell per side where the grid allows,
-  // width every step and height on odd steps when the grid is wider than tall).
   function ringsFor(rows, cols, hub) {
     if (typeof Sim !== 'undefined' && Sim && typeof Sim.plotRingsOf === 'function') {
       try { const r = Sim.plotRingsOf(); if (Array.isArray(r) && r.length > 1) return r; } catch (e) { /* fall through */ }
@@ -938,20 +864,14 @@ const EngineWorld = (() => {
     return out;
   }
   const inBounds = (b, r, c) => !!b && r >= b.r0 && r <= b.r1 && c >= b.c0 && c <= b.c1;
-  // Claimed test: Sim.inPlot when S provides it, else the plot bounds; without a plot the whole grid is claimed.
   function inPlot(r, c) {
     if (typeof Sim !== 'undefined' && Sim && typeof Sim.inPlot === 'function') { try { return !!Sim.inPlot(r, c); } catch (e) { /* fall through */ } }
     return !S.plot.bounds || inBounds(S.plot.bounds, r, c);
   }
-  // Ring index (into the ring list) that an unclaimed cell belongs to; -1 when none.
   function ringOf(r, c) {
     const rings = S.plot.rings;
     for (let i = 0; i < rings.length; i++) if (inBounds(rings[i], r, c)) return i;
     return -1;
-  }
-  function plotTimeText(ms) {
-    const secs = Math.max(0, Math.ceil(ms / 1000)), m = Math.floor(secs / 60), s2 = secs % 60;
-    return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}:${String(s2).padStart(2, '0')}`;
   }
   function debrisTexture(i) {
     return ST.bake('debris|' + i, 14, 14, g => {
@@ -977,7 +897,6 @@ const EngineWorld = (() => {
     ST.layers.world.scaffold.addChild(P.bandG, P.pill, P.label);
     ST.layers.world.emissive.addChild(P.sweep);
   }
-  // General rectangle perimeter walk (clockwise from the top-left), for dashed boundaries and the band.
   function perimPoint(x, y, w, h, p) {
     const per = 2 * (w + h); p = ((p % per) + per) % per;
     if (p < w) return { x: x + p, y };
@@ -994,8 +913,6 @@ const EngineWorld = (() => {
       g.moveTo(a.x, a.y).lineTo(b.x, b.y);
     }
   }
-
-  // Rebuild the unclaimed field, boundary and debris pool from the plot state (on any bounds / ring change).
   function rebuildPlot(s) {
     ensurePlotNodes();
     const P = S.plot, p = s.plot;
@@ -1009,30 +926,26 @@ const EngineWorld = (() => {
     if (P.bounds) {
       for (let r = 0; r < S.rows; r++) for (let c = 0; c < S.cols; c++) {
         if (inPlot(r, c)) continue;
-        const clearing = clearRing && inBounds(clearRing, r, c);
-        unclaimed.push({ r, c, clearing });
+        unclaimed.push({ r, c, clearing: !!(clearRing && inBounds(clearRing, r, c)) });
       }
-      // faint fill + hatch; the ring being cleared reads a step brighter
       for (const pass of [false, true]) {
         const cells = unclaimed.filter(u => u.clearing === pass);
         if (!cells.length) continue;
         for (const u of cells) g.rect(wx(u.c), wy(u.r), CELL, CELL);
-        g.fill({ color: ice, alpha: pass ? 0.05 : 0.025 });
+        g.fill({ color: ice, alpha: pass ? 0.035 : 0.015 });
         for (const u of cells) hatchCell(g, wx(u.c), wy(u.r), CELL / 5, 1);
-        g.stroke({ width: 1, color: ice, alpha: pass ? 0.13 : 0.075 });
+        g.stroke({ width: 1, color: ice, alpha: pass ? 0.07 : 0.03 });
       }
-      // plot edge: faint dashed ivory boundary
       const b = P.bounds;
       dashedRect(g, wx(b.c0) + 1, wy(b.r0) + 1, (b.c1 - b.c0 + 1) * CELL - 2, (b.r1 - b.r0 + 1) * CELL - 2, 8, 6);
       g.stroke({ width: 1.5, color: ivory, alpha: 0.35 });
     }
-    // debris pool: 1..3 small shards per unclaimed cell by tier, drifting inside their cell
     const per = DEBRIS_PER_CELL[ST.tier];
-    const want = Math.min(DEBRIS_CAP, unclaimed.length * per);
+    const want = Math.min(DEBRIS_CAP, Math.ceil(unclaimed.length * per));
     const scale = unclaimed.length ? Math.min(1, DEBRIS_CAP / (unclaimed.length * per)) : 1;
     let i = 0;
     for (const u of unclaimed) {
-      const n = Math.max(1, Math.round(per * scale * (0.6 + 0.8 * U.rng(u.r * 131 + u.c * 17)())));
+      const n = Math.round(per * scale * (0.6 + 0.8 * U.rng(u.r * 131 + u.c * 17)()));   // 0..2 shards; some cells stay empty
       for (let k = 0; k < n && i < want; k++, i++) {
         let d = P.debris[i];
         if (!d) { d = { sp: ST.sprite(debrisTexture(k % 3)) }; P.debrisRoot.addChild(d.sp); P.debris[i] = d; }
@@ -1041,20 +954,18 @@ const EngineWorld = (() => {
         d.x = wx(u.c) + 8 + rr() * (CELL - 16); d.y = wy(u.r) + 8 + rr() * (CELL - 16);
         d.vx = (rr() - 0.5) * 5; d.vy = (rr() - 0.5) * 5; d.vr = (rr() - 0.5) * 0.4;
         d.sp.texture = debrisTexture(Math.floor(rr() * 3));
-        d.sp.scale.set(0.45 + rr() * 0.55); d.sp.rotation = rr() * TAU; d.sp.alpha = u.clearing ? 0.5 : 0.28 + rr() * 0.17;
+        d.sp.scale.set((0.45 + rr() * 0.55) * 0.8); d.sp.rotation = rr() * TAU; d.sp.alpha = u.clearing ? 0.5 : 0.28 + rr() * 0.17;
         d.sp.tint = u.clearing ? 0xBFE8F4 : 0xB8C4D0; d.sp.visible = true; d.sp.position.set(d.x, d.y);
       }
     }
     for (; i < P.debris.length; i++) P.debris[i].sp.visible = false;
     P.bandG.clear(); P.pill.clear(); P.label.visible = false; P.sweep.alpha = 0; P.lastText = '';
   }
-
   function updatePlot(s, dt) {
     const P = S.plot, p = s.plot;
     const key = p && p.r0 != null ? [p.ring, p.r0, p.c0, p.r1, p.c1, p.clearing ? p.clearing.ring : '-', S.rows, S.cols, ST.tier].join(',') : 'none|' + S.rows + ',' + S.cols;
     if (key !== P.key) { P.key = key; rebuildPlot(s); }
     if (!P.bounds) return;
-    // debris drift (bounce inside the cell); static at tier 0 and under reduced motion
     if (ST.tier > 0 && !ST.reduced) {
       for (const d of P.debris) {
         if (!d.sp.visible) continue;
@@ -1065,7 +976,6 @@ const EngineWorld = (() => {
         d.sp.position.set(d.x, d.y);
       }
     }
-    // clearing band + timer along the ring being cleared
     const g = P.bandG; g.clear(); P.pill.clear();
     const cl = P.clearing, ring = cl ? P.rings[cl.ring] : null;
     if (ring) {
@@ -1074,16 +984,13 @@ const EngineWorld = (() => {
       const prog = cl.totalMs > 0 ? U.clamp(1 - (cl.endsAt - now) / cl.totalMs, 0, 1) : 0;
       const ice = U.int(U.pal('ice')), hi = U.int(U.pal('ice-hi'));
       g.rect(x, y, w, h).stroke({ width: 1, color: ice, alpha: 0.22 });
-      // progress portion, clockwise from the top-left, as short segments so corners stay sharp
       const len = prog * per, step = 10;
       for (let q = 0; q < len; q += step) { const a = perimPoint(x, y, w, h, q), b = perimPoint(x, y, w, h, Math.min(q + step, len)); g.moveTo(a.x, a.y).lineTo(b.x, b.y); }
       if (len > 0) g.stroke({ width: 4, color: ice, alpha: 0.55 });
-      // sweeping light: one lap of the perimeter every 4 s (emissive, so it blooms)
       const sw = ((ST.time / 4) % 1) * per, sp = perimPoint(x, y, w, h, sw), sq = perimPoint(x, y, w, h, sw - 6);
       P.sweep.position.set(sp.x, sp.y); P.sweep.rotation = Math.atan2(sp.y - sq.y, sp.x - sq.x);
       P.sweep.alpha = ST.tier > 0 && !ST.reduced ? 0.8 : 0.35;
-      // mono timer in a dark pill under the plot's bottom edge
-      const b = P.bounds, txt = plotTimeText(cl.endsAt - now);
+      const b = P.bounds, txt = timeText(cl.endsAt - now);
       if (txt !== P.lastText) { P.lastText = txt; P.label.text = txt; }
       P.label.visible = true;
       P.label.position.set((wx(b.c0) + wx(b.c1 + 1)) / 2, wy(b.r1 + 1) + 7);
@@ -1091,7 +998,6 @@ const EngineWorld = (() => {
       P.pill.roundRect(P.label.x - pw / 2, P.label.y - 3, pw, ph, 3).fill({ color: 0x04050A, alpha: 0.78 });
       ST.setTextColor(P.label, hi);
     } else { P.label.visible = false; P.sweep.alpha = 0; }
-    // reveal flash on the ring just cleared (700 ms) and the staggered pulses
     if (P.reveal) {
       const k = (ST.time - P.reveal.t0) / 0.7, rb = P.reveal.bounds;
       if (k >= 1) P.reveal = null;
@@ -1103,7 +1009,6 @@ const EngineWorld = (() => {
     }
     while (P.pulses.length && P.pulses[0].at <= ST.time) { const q = P.pulses.shift(); EngineFX.facade.pulse(q.r, q.c, U.pal('ice')); }
   }
-
   // Sim event `plot {state:'start'|'done'|'skip', ring, bounds}`: the field follows Sim.state.plot every frame;
   // `done` and `skip` (Meta's paid completion) add the reveal: band flash, debris blown outward, pulses over 400 ms.
   function onPlot(d) {
@@ -1139,28 +1044,25 @@ const EngineWorld = (() => {
     updatePlot(s, dt);
     const band = ST.bandFor(CAM.zoom);
     if (band !== S.band || !S.cellDev) setBand(band);
-    const short = S.T.efficiency < 1, tier = ST.tier, nowM = U.nowMs();
-    const interval = 1 / LIVE_FPS[tier];
-    const n = S.cells.length || 1;
-    for (let i = 0; i < n; i++) {
-      const rec = S.cells[i];
-      if (!rec) continue;
-      const offline = rec.id === 'solar' && S.T.flare;
+    const T = S.T, short = T.efficiency < 1, nowM = U.nowMs();
+    const load = T.produced > 0 ? T.used / T.produced : (T.used > 0 ? 2 : 0);
+    let padsKey = liveryId();
+    for (const rec of S.cells) {
+      const offline = rec.id === 'solar' && T.flare;
       const up = metaUpgrade(rec.r, rec.c);
       rec.lvl = up && up.lvl ? Math.max(1, Math.min(3, up.lvl | 0)) : 1;
-      refreshBake(rec, offline ? 'offline' : 'normal');
-      // scaffold (under construction): dim plate, no live layer
+      padsKey += '|' + rec.lvl;
+      // construction state (Meta.build)
       const b = metaBuild(rec.r, rec.c);
       const building = !!(b && b.building);
       if (building !== rec.building) { rec.building = building; if (!building) hideScaffold(rec); }
       if (building) showScaffold(rec, b);
-      rec.plate.alpha = building ? 0.35 : 1;
-      rec.shadow.alpha = building ? 0.15 : 0.35;
-      rec.live.sprite.visible = !building;
-      if (rec.glow) rec.glow.visible = !building;
-      // bank chip
-      const h = building ? null : metaHopper(rec.r, rec.c);
-      if (h && h.ready) showBank(rec, h); else hideBank(rec);
+      // render arrival and the 240 ms cross-fade from the plate
+      adoptArt(rec);
+      let artK = rec.artState === 'art' ? 1 : 0;
+      if (rec.artState === 'fading') { artK = U.clamp((nowM - rec.fadeT0) / FADE_MS, 0, 1); if (artK >= 1) rec.artState = 'art'; }
+      if (rec.artState === 'none' || artK < 1) refreshBake(rec, offline ? 'offline' : 'normal');
+      rec.plate.visible = artK < 1;
       // commit pop / landing
       let scale = 1;
       const pop = S.pops.get(rec.key);
@@ -1169,39 +1071,31 @@ const EngineWorld = (() => {
         if (k >= 1) S.pops.delete(rec.key);
         else scale = pop.kind === 'land' ? 1.15 - 0.15 * U.easeOutBack(k) : 0.7 + 0.3 * U.easeOutBack(k);
       }
-      applyScale(rec, scale);
-      // live layer (lit + tell + status overlays)
-      if (!building) {
-        const powered = !offline && (rec.def.power >= 0 || !short);
-        const st = buildSt(rec, s, powered);
-        const sk = liveStaticKey(rec, st, powered, offline);
-        const approachChase = !!(st.dock && st.dock.approaching && !st.dock.docked);
-        const due = ST.time >= rec.liveNext || sk !== rec.liveKey;
-        if (due && (tier > 0 || sk !== rec.liveKey || approachChase || rec.id === 'hub')) {
-          rec.liveKey = sk;
-          rec.liveNext = ST.time + (tier > 0 ? interval : (approachChase ? 0.25 : 1)) + (i % 7) * 0.004;
-          redrawLive(rec, s, st, powered, offline);
-        }
-        if (rec.glow) {
-          const hero = HERO[rec.id];
-          rec.glow.alpha = hero.a * (powered ? 1 : 0.5) * (0.9 + 0.1 * Math.sin(ST.tellTime * 1.3 + rec.r));
-        }
-      }
+      if (rec.plate.visible) placeCellSprite(rec.plate, rec.r, rec.c, scale);
+      if (rec.mini.visible) placeMini(rec.mini, rec.r, rec.c, rec.id, scale);
+      // treatments: construction (35%, desaturated), overdrawn power / flare-dark solar (grey at 70%)
+      const powered = !offline && (rec.def.power >= 0 || !short);
+      let alpha = 1, tint = 0xFFFFFF;
+      if (building) { alpha = 0.35; tint = TINT_BUILDING; }
+      else if (!powered) { alpha = 0.7; tint = TINT_OVERDRAW; }
+      rec.mini.alpha = alpha * artK; rec.mini.tint = tint;
+      rec.plate.alpha = alpha * (1 - artK); rec.plate.tint = tint;
+      rec.shadow.alpha = building ? 0.11 : 0.27;
+      // glow: one soft additive light per module; the reactor breathes with its load; dark while building
+      const breathe = rec.id === 'reactor' ? 0.85 + 0.15 * Math.sin(ST.tellTime * TAU * (0.5 + 0.5 * Math.min(load, 1))) : 1;
+      rec.glow.scale.set(rec.glowR * CELL * 2 / 64 * breathe);
+      rec.glow.alpha = building ? 0 : rec.glowA * (powered ? 1 : 0.35) * breathe;
+      if (rec.chase) updateChase(rec, S.dockInfo.get(rec.key), S.shipsByDock.get(rec.key));
+      // bank chip above the render's top edge
+      const h = building ? null : metaHopper(rec.r, rec.c);
+      if (h && h.ready) showBank(rec, h); else hideBank(rec);
     }
-    // trusses: rebuild when dirty or growing; seam pulses with healthy power
+    if (padsKey !== S.padsKey) { S.padsKey = padsKey; drawPads(); }
     if (S.trussDirty || !S.trussG) drawTruss();
     if (S.seamG) S.seamG.alpha = short ? 0.08 : 0.28 + 0.22 * (0.5 + 0.5 * Math.sin(ST.tellTime * TAU / 3));
     updateRunLights();
     drawOverlay(s, dt);
     handFloaters(s);
-  }
-  function applyScale(rec, scale) {
-    const cx = wx(rec.c) + CELL / 2, cy = wy(rec.r) + CELL / 2;
-    for (const sp of [rec.plate, rec.live && rec.live.sprite]) {
-      if (!sp) continue;
-      sp.scale.set(S.worldPerDev * scale);
-      sp.position.set(cx - (S.cellDev / 2 + S.pad) * S.worldPerDev * scale, cy - (S.cellDev / 2 + S.pad) * S.worldPerDev * scale);
-    }
   }
 
   // ---------------------------------------------------------------- Sim / Meta event hooks (called by index.js)
@@ -1225,6 +1119,7 @@ const EngineWorld = (() => {
   function onUpgrade(d) {
     if (!d) return;
     S.pops.set(keyOf(d.r, d.c), { t0: U.nowMs(), ms: 280, kind: 'land' });
+    S.padsKey = '';
     EngineFX.facade.pulse(d.r, d.c, U.pal('ivory'));
   }
   function onHopper(d) { if (d) { const rec = S.byKey.get(keyOf(d.r, d.c)); if (rec && rec.bank) rec.bank.t0 = ST.time; } }
@@ -1246,6 +1141,16 @@ const EngineWorld = (() => {
     const path = []; let cur = found;
     while (cur) { path.unshift({ x: wx(cur[1] + 0.5), y: wy(cur[0] + 0.5) }); cur = parent.get(keyOf(cur[0], cur[1])); }
     return path;
+  }
+  // Nearest module of `id` within `radius` cells (Chebyshev) of a cell; null when none. Used by traffic for the people roles.
+  function nearModule(r, c, id, radius) {
+    let best = null, bd = Infinity;
+    for (const rec of S.cells) {
+      if (rec.id !== id) continue;
+      const d = Math.max(Math.abs(rec.r - r), Math.abs(rec.c - c));
+      if (d <= radius && d < bd) { bd = d; best = { r: rec.r, c: rec.c }; }
+    }
+    return best;
   }
 
   // ---------------------------------------------------------------- thumbnail (v1 port; state.grid only, no Sim calls)
@@ -1285,12 +1190,13 @@ const EngineWorld = (() => {
   function init() {
     setBand(ST.bandFor(1));
     ensureOverlay();
+    ensurePads();
     ST.onFonts(() => { for (const rec of S.cells) rec.bakeKey = ''; });
   }
 
   return {
     init, update, rebuild, thumbnail,
-    cellAt, cellCentre, occupied, bankAt, readyBanksNear, isScaffold, pathToStorage, inPlot, ringOf,
+    cellAt, cellCentre, cellBounds, occupied, bankAt, readyBanksNear, isScaffold, pathToStorage, nearModule, inPlot, ringOf,
     onBuilt, onDemolished, onBuildDone, onUpgrade, onHopper, onPlot,
     setLivery, get livery() { return livery(); },                      // A5
     setPointer(p) { S.pointer = p; },
@@ -1299,5 +1205,6 @@ const EngineWorld = (() => {
     get hover() { return S.hover; }, set hover(v) { S.hover = v || null; },
     get station() { return S.station; },
     get band() { return S.band; },
+    get artReady() { return S.cells.length > 0 && S.cells.every(r => r.artState !== 'none' || !r.artUrl); },
   };
 })();

@@ -8,9 +8,10 @@
 // Additions beyond 0.3 (marked): Engine.emit (used by fx for
 // 'fx-arrive'), Engine.perf.setTier(t|null) (harness / settings
 // override), Engine.ready, the 'fx-arrive' event, the A1.2
-// 'plot-click' {r, c, ring} event for unclaimed cells, and Engine.livery
+// 'plot-click' {r, c, ring} event for unclaimed cells, Engine.livery
 // (A5: the active livery definition; the engine rebakes on the Sim bus
-// event `livery {id}`).
+// event `livery {id}`), and for A6 Engine.loading, Engine.art,
+// Engine.cellBounds and the 'loading' event when the preload completes.
 // Classic script: exports the global `Engine`.
 // ============================================================
 'use strict';
@@ -52,9 +53,23 @@ const Engine = (() => {
       subscribeSim();
       const s = (typeof Sim !== 'undefined' && Sim) ? Sim.state : null;
       setSector((s && s.sector) || 'home', s);
+      preloadArt();
       S.ready = true;
     })();
     return S.initPromise;
+  }
+
+  // A6: per-group preload of the renders the first screen needs (modules, the gangway, the people sheets);
+  // progress is Engine.loading. Ships load lazily per class on first spawn (traffic.js). Not awaited: the
+  // procedural bake draws until each texture arrives.
+  function preloadArt() {
+    const A = ST.assets;
+    if (!A.active) return;
+    const urls = [];
+    for (const id of (A.ids('modules') || [])) urls.push(A.url('modules', id, 512));
+    urls.push(A.url('props', 'gangway', 256));
+    for (const id of ['crew', 'officer', 'dockworker', 'passenger_a', 'passenger_b', 'security', 'trader_alien']) { const sh = A.sheet(id); if (sh) urls.push(sh.url); }
+    A.preload(urls).then(() => emit('loading', A.loading));
   }
 
   function subscribeSim() {
@@ -89,6 +104,12 @@ const Engine = (() => {
   function resize() { ST.resize(); }
   function cellAt(sx, sy) { const w = CAM.screenToWorld(sx, sy); return EngineWorld.cellAt(w.x, w.y); }
   function cellToScreen(r, c) { const p = EngineWorld.cellCentre(r, c); return CAM.worldToScreen(p.x, p.y); }
+  // addition (A6): the screen rect of what a cell shows (the render's box, 1.22 cells wide and rising into the
+  // cell above, or the cell itself before the pack is in), for DOM tooltips that should clear the miniature
+  function cellBounds(r, c) {
+    const b = EngineWorld.cellBounds(r, c), a = CAM.worldToScreen(b.x, b.y), z = CAM.zoom;
+    return { x: a.x, y: a.y, width: b.width * z, height: b.height * z };
+  }
   function thumbnail(state, w, h) { return EngineWorld.thumbnail(state, w, h); }
 
   const perf = {
@@ -108,11 +129,13 @@ const Engine = (() => {
     set selected(v) { EngineWorld.selected = v; },
     get hover() { return EngineWorld.hover; },
     get camera() { return CAM.facade; },
-    cellAt, cellToScreen,
-    on, off, emit,                                        // emit is an addition (fx uses it for 'fx-arrive')
+    cellAt, cellToScreen, cellBounds,
+    on, off, emit,                                        // emit is an addition (fx uses it for 'fx-arrive' and 'loading')
     get fx() { return EngineFX.facade; },
     thumbnail,
     perf,
+    get loading() { return ST.assets.loading; },         // A6: {done, total, pct} of the init preload (100 without the pack)
+    get art() { return { active: ST.assets.active, ready: EngineWorld.artReady }; },   // addition (A6)
     get ready() { return S.ready; },                      // addition
     get sector() { return S.sector; },                    // addition
     get livery() { return EngineWorld.livery; },          // addition (A5): the active livery definition

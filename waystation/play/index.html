@@ -18,9 +18,9 @@
 <meta property="og:description" content="A space station builder for the browser. Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate.">
 <meta property="og:url" content="https://joshanderson051.github.io/waystation/play/">
 <meta property="og:image" content="https://joshanderson051.github.io/waystation/assets/og.jpg">
-<meta property="og:image:width" content="1440">
-<meta property="og:image:height" content="756">
-<meta property="og:image:alt" content="The Waystation bridge console: a station in plan view beside the build panel">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Waystation key art: a vast lit space station with radial docking arms above an amber world">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Waystation">
 <meta name="twitter:description" content="A space station builder for the browser. Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate.">
@@ -77,6 +77,7 @@
   <div class="title-band glass"><i class="sweep"></i>
     <h1 class="wordmark hero">Waystation</h1>
     <div class="title-sub">Station commissioning</div>
+    <div class="title-loading" id="title-loading" hidden><i class="pulse-dot"></i><span id="title-loading-text">Lighting the station</span></div>
     <div class="title-account" id="title-account"></div>
   </div>
   <div class="commission glass cut" data-hue="amber"><i class="spine"></i>
@@ -84,7 +85,7 @@
       <button type="button" id="btn-resume" class="resume-card">
         <canvas id="title-thumb" width="200" height="120" aria-hidden="true"></canvas>
         <span class="resume-main">
-          <span id="resume-rank" class="resume-rank">Commander</span>
+          <span class="resume-rank-row"><img id="resume-badge" class="resume-badge" hidden width="44" height="44" alt="" decoding="async"><span id="resume-rank" class="resume-rank">Commander</span></span>
           <span id="resume-name" class="resume-name">&mdash;</span>
           <span id="resume-meta" class="resume-meta"></span>
           <span class="resume-cta">Resume <span class="ic-slot" data-icon="chevron-right"></span></span>

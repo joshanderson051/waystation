@@ -123,6 +123,39 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       console.log('fps tier', tier, 'samples', samples.join(' '), JSON.stringify(info));
     }
   }
+  if (want('art')) {
+    // A6: the illustrated station at three zooms, every ship class + a named ship, two docked ships with people,
+    // placing mode, overdraw, construction, and the v1 bake fallback (?art=0) for comparison
+    const waitArt = async () => { await page.waitForFunction(() => Engine.loading.pct === 100 && Engine.art.ready, { timeout: 30000 }); await sleep(1200); };
+    await open('sector=home&panel=0'); await waitArt();
+    const info = await page.evaluate(() => ({ loading: Engine.loading, ships: Sim.state.ships.map(s => ({ id: s.id, cls: s.cls, co: s.company, render: EngineTraffic.renderOf(s), named: EngineTraffic.isNamed(s) })) }));
+    console.log('art', JSON.stringify(info));
+    for (const z of [0.75, 1.0, 1.6]) {
+      await page.evaluate(zz => Engine.camera.focusCell(Sim.state.hub.r, Sim.state.hub.c, { zoom: zz, ms: 0 }), z);
+      await sleep(900);
+      await shot('art-' + String(z).replace(/^1$/, '1.0'));
+    }
+    await page.evaluate(() => { Engine.camera.focusCell(Sim.state.hub.r, Sim.state.hub.c, { zoom: 1.0, ms: 0 }); harness.fire('dock two'); });
+    await sleep(2600);
+    await shot('art-ships');
+    const dk = await page.evaluate(() => { const d = Sim.state.ships.find(s => s.state === 'docked' && s.dock); return d ? d.dock : null; });
+    if (dk) { await page.evaluate(d => Engine.camera.focusCell(d.r, d.c, { zoom: 1.6, ms: 0 }), dk); await sleep(1500); await shot('art-docked'); }
+    console.log('people', await page.evaluate(() => EngineTraffic.people));
+    await page.evaluate(() => { Engine.camera.focusCell(Sim.state.hub.r, Sim.state.hub.c, { zoom: 1.3, ms: 0 }); Engine.placing = 'habitat'; });
+    await page.mouse.move(W / 2 + 180, H / 2 + 120); await sleep(900);
+    await shot('art-placing');
+    await page.evaluate(() => { Engine.placing = null; harness.fire('overdraw'); });
+    await page.mouse.move(W / 2, 30); await sleep(900);
+    await shot('art-overdraw');
+    await page.evaluate(() => { harness.fire('overdraw'); Engine.camera.focusCell(Sim.state.hub.r + 3, Sim.state.hub.c, { zoom: 1.6, ms: 0 }); });
+    await sleep(900);
+    await shot('art-construction');
+    const onMs = []; for (let i = 0; i < 6; i++) { await sleep(400); onMs.push(await page.evaluate(() => Engine.perf.frameMs)); }
+    await open('sector=home&panel=0&art=0'); await sleep(2500);
+    await shot('art-fallback');
+    const offMs = []; for (let i = 0; i < 6; i++) { await sleep(400); offMs.push(await page.evaluate(() => Engine.perf.frameMs)); }
+    console.log('frameMs art on', onMs.join(' '), '| v1 bake', offMs.join(' '));
+  }
   if (want('plot')) {
     // A1.2: 9x7 plot on the 15x9 grid with ring 2 clearing (staged by the harness)
     await open('sector=home&panel=0');

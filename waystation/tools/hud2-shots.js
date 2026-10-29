@@ -87,6 +87,8 @@ const SHOTS = [
   ['1024-bridge', [1024, 768], async () => {}, 800],
   ['1024-build', [1024, 768], click('[data-h="panel:build"]'), 700],
   ['1024-store', [1024, 768], click('[data-h="panel:store"]'), 700],
+  // A6.3 the illustrated look at 1440, 1180 and 390
+  ...artShots(),
   // A4 phone layout: 390x844 (iPhone 14 class) in full, 430x932 (Pro Max class) as a spot check
   ...phoneShots('phone', [390, 844]),
   ...phoneShots('phone430', [430, 932], true),
@@ -127,6 +129,61 @@ function phoneShots(tag, vp, brief) {
   if (!brief) return all;
   const keep = new Set(['bridge', 'panel-build', 'panel-station', 'panel-map', 'panel-missions', 'panel-store', 'more', 'menu', 'placing', 'sheet-daily', 'celebrate-rank', 'title', 'tour-4', 'tour-13']);
   return all.filter(([name]) => keep.has(name.slice(tag.length + 1)));
+}
+
+// A6.3: every place a picture went in, plus the title with the key art and the loading line
+function artShots() {
+  const D = [1440, 900], M = [1180, 700], P = [390, 844];
+  const open = id => click(`[data-h="panel:${id}"]`);
+  return [
+    ['art-bridge', D, async () => {}, 900],
+    ['art-build', D, open('build'), 800],
+    ['art-station', D, open('station'), 800],
+    ['art-station-selected', D, click('[data-h="select:bank"]'), 800],
+    ['art-market', D, open('market'), 800],
+    ['art-fleet', D, open('fleet'), 800],
+    ['art-expeditions', D, open('expeditions'), 800],
+    ['art-map', D, open('map'), 800],
+    ['art-map-sable', D, click('[data-h="art:map-sable"]'), 800],
+    ['art-map-aurelia', D, click('[data-h="art:map-aurelia"]'), 800],
+    ['art-missions', D, open('missions'), 700],
+    ['art-achievements', D, click('[data-h="panel:achievements"]'), 800],
+    ['art-registry-ships', D, click('[data-h="art:registry-ships"]'), 900],
+    ['art-registry-species', D, click('[data-h="art:registry-species"]'), 900],
+    ['art-registry-artifacts', D, click('[data-h="art:registry-artifacts"]'), 900],
+    ['art-registry-detail', D, click('[data-h="art:detail-ship"]'), 900],
+    ['art-registry-detail-species', D, click('[data-h="art:detail-species"]'), 900],
+    ['art-registry-detail-unfound', D, click('[data-h="art:detail-unfound"]'), 900],
+    ['art-store', D, open('store'), 800],
+    ['art-settings', D, async p => { await click('[data-h="livery:own"]')(p); await click('[data-h="livery:sable"]')(p); await open('settings')(p); }, 800],
+    ['art-sheet-daily', D, click('[data-h="sheet:daily"]'), 700],
+    ['art-celebrate-rank', D, click('[data-h="cele:rank"]'), 1200],
+    ['art-celebrate-level', D, click('[data-h="cele:level"]'), 1200],
+    ['art-celebrate-unlock', D, click('[data-h="cele:unlock"]'), 1200],
+    ['art-celebrate-achievement', D, click('[data-h="cele:achievement"]'), 1200],
+    ['art-celebrate-expedition', D, async p => { await open('expeditions')(p); await frames(p, 300); await click('[data-h="cele:expedition"]')(p); }, 1200],
+    ['art-toasts', D, async p => { await click('[data-h="ev:discover"]')(p); await click('[data-h="art:toast-trade"]')(p); }, 800],
+    ['art-title', D, click('[data-h="title"]'), 1800],
+    ['art-title-loading', D, click('[data-h="title"]'), 1200, 'loading=hold'],
+    ['art-title-form', D, async p => { await click('[data-h="title"]')(p); await p.$eval('#btn-newstation', el => el.click()); }, 1200, 'loading=hold'],
+    ['art-tour-4', D, click('[data-h="tour:4"]'), 700],
+    ['art-1180-bridge', M, async () => {}, 800],
+    ['art-1180-build', M, open('build'), 800],
+    ['art-1180-registry', M, click('[data-h="art:registry-ships"]'), 900],
+    ['art-1180-map', M, open('map'), 800],
+    ['art-1180-title', M, click('[data-h="title"]'), 1800],
+    ['art-phone-bridge', P, async () => {}, 900],
+    ['art-phone-build', P, open('build'), 800],
+    ['art-phone-station-selected', P, click('[data-h="select:bank"]'), 800],
+    ['art-phone-registry', P, click('[data-h="art:registry-ships"]'), 900],
+    ['art-phone-registry-detail', P, click('[data-h="art:detail-ship"]'), 900],
+    ['art-phone-map', P, open('map'), 800],
+    ['art-phone-store', P, open('store'), 800],
+    ['art-phone-settings', P, open('settings'), 800],
+    ['art-phone-title', P, click('[data-h="title"]'), 1800],
+    ['art-phone-title-loading', P, click('[data-h="title"]'), 1200, 'loading=hold'],
+    ['art-phone-celebrate-level', P, click('[data-h="cele:level"]'), 1200],
+  ];
 }
 
 (async () => {

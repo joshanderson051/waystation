@@ -469,6 +469,7 @@ const ARTPACK = {
  "built": "2026-10-29"
 };
 ARTPACK.url = function (group, id, size) {
+  if (group === 'props' || group === 'people') return (this.sheets[id] || (this.groups.props && this.groups.props.ids.includes(id))) ? this.base + group + '/' + id + '.webp' : null;   // flat groups
   const g = this.groups[group]; if (!g || !g.ids.includes(id)) return null;
   const s = size && g.sizes.includes(size) ? size : g.sizes[0];
   return this.base + group + '/' + s + '/' + id + '.webp';

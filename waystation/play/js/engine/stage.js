@@ -283,10 +283,11 @@ const EngineStage = (() => {
       },
       cam: C(),
       lanes: C(),
-      world: { shadow: C(), truss: C(), plates: C(), scaffold: C(), emissive: C() },
+      world: { shadow: C(), truss: C(), plates: C(), minis: C(), scaffold: C(), emissive: C() },
       bloomGroup: C(),
       trafficGlow: C(),
       traffic: C(),
+      people: C(),
       fx: C(),
       overlay: C(),
       fxScreen: C(),
@@ -294,7 +295,8 @@ const EngineStage = (() => {
     };
     for (const k of ['far', 'mid']) { L.space[k].root.addChild(L.space[k].fixed, L.space[k].moving); L.space[k].root.label = 'space.' + k; }
     L.bloomGroup.addChild(L.world.emissive, L.trafficGlow);
-    L.cam.addChild(L.lanes, L.world.shadow, L.world.truss, L.world.plates, L.world.scaffold, L.bloomGroup, L.traffic, L.fx, L.overlay);
+    // A6: `world.minis` holds the module renders (painter's order) above the pads; `people` walks above the ships
+    L.cam.addChild(L.lanes, L.world.shadow, L.world.truss, L.world.plates, L.world.minis, L.world.scaffold, L.bloomGroup, L.traffic, L.people, L.fx, L.overlay);
     L.cam.label = 'cam'; L.bloomGroup.label = 'bloom'; L.fxScreen.label = 'fxScreen'; L.post.label = 'post';
     for (const k in L.world) L.world[k].label = 'world.' + k;
     L.cam.eventMode = 'none'; L.post.eventMode = 'none'; L.fxScreen.eventMode = 'none';
@@ -480,6 +482,57 @@ const EngineStage = (() => {
     return sp;
   }
 
+  // ---------------------------------------------------------------- art pack assets (A6)
+  // WebP renders from play/assets/art through PIXI.Assets. `texture(url)` is the synchronous lookup the
+  // layers poll each frame (null until the file is in); `preload` counts toward Engine.loading. A failed
+  // file resolves to null and is counted done, so the procedural fallback simply stays. `enabled = false`
+  // (harness) keeps every layer on the v1 bake.
+  const A = { enabled: true, textures: new Map(), pending: new Map(), frames: new Map(), total: 0, done: 0 };
+  const hasPack = () => A.enabled && typeof ARTPACK !== 'undefined' && ARTPACK && typeof ARTPACK.url === 'function';
+  function packUrl(group, id, size) {
+    if (!hasPack()) return null;
+    // props ship flat (props/<id>.webp); ARTPACK.url would insert a size folder that does not exist in the pack
+    if (group === 'props') { const g = ARTPACK.groups && ARTPACK.groups.props; return g && g.ids.includes(id) ? ARTPACK.base + 'props/' + id + '.webp' : null; }
+    try { return ARTPACK.url(group, id, size); } catch (e) { return null; }
+  }
+  function packIds(group) { if (!hasPack() || !ARTPACK.groups || !ARTPACK.groups[group]) return null; return ARTPACK.groups[group].ids; }
+  function sheet(id) { if (!hasPack() || typeof ARTPACK.sheet !== 'function') return null; try { return ARTPACK.sheet(id); } catch (e) { return null; } }
+  function texture(url) { return (url && A.textures.get(url)) || null; }
+  function loadTexture(url) {
+    if (!url) return Promise.resolve(null);
+    const have = A.textures.get(url);
+    if (have !== undefined) return Promise.resolve(have);
+    let p = A.pending.get(url);
+    if (p) return p;
+    p = PIXI.Assets.load(url).then(tex => {
+      if (tex && tex.source) { tex.source.autoGenerateMipmaps = true; tex.source.scaleMode = 'linear'; }
+      A.textures.set(url, tex || null);
+      return tex || null;
+    }, e => { reportError('asset ' + url, e); A.textures.set(url, null); return null; });
+    p.finally(() => A.pending.delete(url));
+    A.pending.set(url, p);
+    return p;
+  }
+  function preload(urls) {
+    const list = urls.filter(Boolean);
+    A.total += list.length;
+    return Promise.all(list.map(u => loadTexture(u).then(t => { A.done++; return t; })));
+  }
+  // Sub-rectangle of a sprite sheet as its own texture (cached by url + rect).
+  function frameTexture(url, x, y, w, h) {
+    const base = texture(url); if (!base) return null;
+    const key = url + '|' + x + ',' + y + ',' + w + ',' + h;
+    let t = A.frames.get(key);
+    if (!t) { t = new PIXI.Texture({ source: base.source, frame: new PIXI.Rectangle(x, y, w, h) }); A.frames.set(key, t); }
+    return t;
+  }
+  const assets = {
+    get enabled() { return A.enabled; }, set enabled(v) { A.enabled = !!v; },
+    get active() { return hasPack(); },
+    get loading() { return { done: A.done, total: A.total, pct: A.total ? Math.round(100 * A.done / A.total) : 100 }; },
+    url: packUrl, ids: packIds, sheet, texture, load: loadTexture, preload, frame: frameTexture,
+  };
+
   // Zoom band for a camera zoom: the bake scale (>= zoom) so sprites are never upscaled.
   function bandFor(zoom) {
     for (const b of BANDS) if (zoom <= b + 1e-6) return b;
@@ -491,7 +544,7 @@ const EngineStage = (() => {
     CELL, BANDS,
     init, resize, onResize, onFrame, onTier, onFonts,
     makeText, setTextColor, bake, glowTexture, textureFromCanvas, updateTexture, destroyTexture, sprite, bandFor,
-    setTier, reportError,
+    setTier, reportError, assets,
     get app() { return S.app; },
     get canvas() { return S.canvas; },
     get host() { return S.host; },

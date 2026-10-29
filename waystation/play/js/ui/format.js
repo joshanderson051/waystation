@@ -77,6 +77,47 @@ if (typeof ICONS !== 'undefined' && ICONS) {
   for (const k of Object.keys(UI_ICONS)) if (!Object.prototype.hasOwnProperty.call(ICONS, k)) ICONS[k] = UI_ICONS[k];
 }
 
+// ------------------------------------------------------------
+// 2b. Art (Addendum A6): the illustrated pack through ARTPACK (js/artpack.js).
+//     Every helper returns null / '' when the pack or the id is missing, so a
+//     caller keeps its procedural fallback (plates, planets, silhouettes).
+// ------------------------------------------------------------
+const Art = {
+  ok() { return typeof ARTPACK !== 'undefined' && !!ARTPACK && !!ARTPACK.groups && typeof ARTPACK.url === 'function'; },
+  has(group, id) { return this.ok() && !!ARTPACK.groups[group] && Array.isArray(ARTPACK.groups[group].ids) && ARTPACK.groups[group].ids.includes(id); },
+  // the smallest render at least twice the CSS size (crisp on 2x screens), else the largest the group has
+  url(group, id, px) {
+    if (!this.has(group, id)) return null;
+    const sizes = (ARTPACK.groups[group].sizes || []).slice().sort((a, b) => a - b), want = Math.max(1, Math.round(px || 0)) * 2;
+    return ARTPACK.url(group, id, sizes.find(s => s >= want) || sizes[sizes.length - 1]);
+  },
+  // <img> markup: width and height set, alt text, lazy unless o.eager (first-screen images); o.fallback comes back when the id has no render
+  img(group, id, px, o = {}) {
+    const url = this.url(group, id, px); if (!url) return o.fallback || '';
+    const w = o.w || px, h = o.h || px;
+    return `<img class="art${o.cls ? ' ' + o.cls : ''}" src="${url}" width="${w}" height="${h}" alt="${esc(o.alt == null ? '' : o.alt)}"${o.eager ? '' : ' loading="lazy"'} decoding="async" draggable="false"${o.attrs || ''}>`;
+  },
+  keyart(small) { return this.ok() && typeof ARTPACK.keyartUrl === 'function' ? ARTPACK.keyartUrl(!!small) : null; },
+  rankId(level) { return 'rank_' + String(Math.max(1, Math.min(10, Number(level) || 1))).padStart(2, '0'); },
+  tierId(level) { return 'tier_' + Math.max(1, Math.min(5, Number(level) || 1)); },
+  achId(tier) { const t = typeof tier === 'string' ? tier.toLowerCase() : (tier >= 3 ? 'gold' : tier === 2 ? 'silver' : 'bronze'); return 'ach_' + (t === 'gold' || t === 'silver' ? t : 'bronze'); },
+  // A6.2 render pick for a ship: a named render carried on the ship, then company_class, then the class default
+  shipId(ship) {
+    if (!ship) return null;
+    for (const k of ['render', 'art', 'named']) if (typeof ship[k] === 'string' && this.has('ships', ship[k])) return ship[k];
+    const co = `${ship.company}_${ship.cls}`; if (this.has('ships', co)) return co;
+    const dflt = { courier: 'kestrel_courier', freighter: 'halvorsen_freighter', hauler: 'halvorsen_hauler', liner: 'aurelian_liner' }[ship.cls] || null;
+    return dflt && this.has('ships', dflt) ? dflt : null;
+  },
+  // a company's flagship: its first class with a render, else any render carrying the company's id
+  flagship(companyId) {
+    const co = (typeof COMPANIES !== 'undefined' ? COMPANIES : []).find(c => c.id === companyId);
+    for (const cls of (co && co.ships) || ['freighter', 'hauler', 'courier', 'liner']) if (this.has('ships', `${companyId}_${cls}`)) return `${companyId}_${cls}`;
+    if (!this.ok()) return null;
+    return ARTPACK.groups.ships.ids.find(id => id.startsWith(companyId + '_')) || null;
+  },
+};
+
 // Inline SVG icon through the library; the fallback mirrors Icons.svg exactly.
 function icon(id, size = 16, cls = '') {
   if (typeof Icons !== 'undefined' && Icons && typeof Icons.svg === 'function') return Icons.svg(id, size, cls);

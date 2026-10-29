@@ -186,24 +186,28 @@ const Overlays = {
       if (!Object.keys(r).length && reward.label) r.label = reward.label;
       reward = r;
     }
-    const out = [];
-    if (reward.creditsMin) out.push(`<span class="rchip amber${size ? ' ' + size : ''}">${icon('credits', 14)}<span>${Fmt.n(reward.creditsMin)}+ cr</span></span>`);
-    const chip = (cls, ic, text) => `<span class="rchip ${cls}${size ? ' ' + size : ''}">${icon(ic, 14)}<span>${text}</span></span>`;
-    if (reward.credits) out.push(chip('amber', 'credits', `${Fmt.n(reward.credits)} cr`));
-    if (reward.am) out.push(chip('am', 'am', `${Fmt.n(reward.am)} AM`));
+    const out = [], px = size ? 14 : 16;
+    // A6.3: chips carry the pack's icons (credits, antimatter, chart, cargo), the goods renders and the badges; the glyph is the fallback
+    const chip = (cls, ic, text, art) => `<span class="rchip ${cls}${size ? ' ' + size : ''}">${art ? Art.img(art[0], art[1], px, { alt: '', fallback: icon(ic, 14) }) : icon(ic, 14)}<span>${text}</span></span>`;
+    if (reward.creditsMin) out.push(chip('amber', 'credits', `${Fmt.n(reward.creditsMin)}+ cr`, ['icons', 'credits']));
+    if (reward.credits) out.push(chip('amber', 'credits', `${Fmt.n(reward.credits)} cr`, ['icons', 'credits']));
+    if (reward.am) out.push(chip('am', 'am', `${Fmt.n(reward.am)} AM`, ['icons', 'antimatter']));
     if (reward.xp) out.push(chip('ice', 'xp', `${Fmt.n(reward.xp)} XP`));
-    if (reward.chart) out.push(chip('ice', 'chart', reward.chart === true ? 'Chart' : `${reward.chart} chart${reward.chart === 1 ? '' : 's'}`));
+    if (reward.chart) out.push(chip('ice', 'chart', reward.chart === true ? 'Chart' : `${reward.chart} chart${reward.chart === 1 ? '' : 's'}`, ['icons', 'chart']));
     if (reward.goods) {
-      if (typeof reward.goods === 'string') out.push(chip('sage', 'warehouse', esc(reward.goods)));
+      if (typeof reward.goods === 'string') out.push(chip('sage', 'warehouse', esc(reward.goods), ['icons', 'cargo']));
       else for (const [g, q] of Object.entries(reward.goods)) {
         const name = (typeof GOODS !== 'undefined' && GOODS[g]) ? GOODS[g].name : g;
-        out.push(chip('sage', (typeof ICONS !== 'undefined' && ICONS[g]) ? g : 'warehouse', `${Fmt.n(q)} ${esc(name)}`));
+        out.push(chip('sage', (typeof ICONS !== 'undefined' && ICONS[g]) ? g : 'warehouse', `${Fmt.n(q)} ${esc(name)}`, ['goods', g]));
       }
     }
     if (reward.livery) out.push(chip('rose', 'ship', esc(typeof reward.livery === 'string' ? reward.livery : 'Livery token')));
     if (reward.title) out.push(chip('ivory', 'rep', esc(reward.title)));
-    if (reward.tier) out.push(`<span class="rchip tier ${esc(reward.tier)}${size ? ' ' + size : ''}">${icon('award', 14)}<span>${esc(Fmt.cap(reward.tier))}</span></span>`);
-    if (reward.discover) out.push(chip('rose', reward.discover.kind === 'species' ? 'species' : reward.discover.kind === 'ships' || reward.discover.kind === 'ship' ? 'ship' : 'artifact', esc(reward.discover.name || 'Discovery')));
+    if (reward.tier) out.push(`<span class="rchip tier ${esc(reward.tier)}${size ? ' ' + size : ''}">${Art.img('badges', Art.achId(reward.tier), px, { alt: '', fallback: icon('award', 14) })}<span>${esc(Fmt.cap(reward.tier))}</span></span>`);
+    if (reward.discover) {
+      const dk = reward.discover.kind, grp = dk === 'species' ? 'species' : (dk === 'ships' || dk === 'ship') ? 'ships' : 'artifacts';
+      out.push(chip('rose', grp === 'species' ? 'species' : grp === 'ships' ? 'ship' : 'artifact', esc(reward.discover.name || 'Discovery'), reward.discover.id && Art.has(grp, reward.discover.id) ? [grp, reward.discover.id] : ['icons', 'discovery']));
+    }
     if (reward.label && !out.length) out.push(chip('ink', 'info', esc(reward.label)));
     return out.join('');
   },
@@ -264,7 +268,8 @@ const Overlays = {
     const el = document.createElement('div');
     el.className = 'toast glass' + (kind ? ' ' + kind : '');
     const chip = o.chip || TOAST_CHIP.find(([, re]) => re.test(msg))?.[0] || (kind === 'bad' ? 'Alert' : kind === 'gold' ? 'Event' : 'Notice');
-    el.innerHTML = `<i class="spine"></i><span class="toast-ic">${icon(o.icon || TOAST_ICON[kind] || 'info', 16)}</span>` +
+    // A6.3: o.img (a render URL) replaces the glyph with a 40px picture (discoveries, trade notices)
+    el.innerHTML = `<i class="spine"></i><span class="toast-ic${o.img ? ' has-img' : ''}">${o.img ? `<img class="toast-img" src="${esc(o.img)}" width="40" height="40" alt="" loading="lazy" decoding="async" draggable="false">` : icon(o.icon || TOAST_ICON[kind] || 'info', 16)}</span>` +
       `<div class="toast-main"><span class="toast-chip">${esc(chip)}</span><span class="toast-msg">${esc(msg)}</span></div>` +
       (o.action ? `<button type="button" class="btn toast-act" data-toast-act="1">${esc(o.action.label)}</button>` : '') +
       `<button type="button" class="toast-close" aria-label="Dismiss">${icon('close', 12)}</button><i class="toast-drain"></i>`;
@@ -334,7 +339,7 @@ const Overlays = {
     const { kind, data } = item;
     const reduced = document.body.getAttribute('data-motion') === 'reduced';
     host.innerHTML = `<div class="cele-wrap"><div class="cele-band glass" data-kind="${esc(kind)}" data-hue="${esc(data.hue || 'amber')}"><i class="spine"></i>` +
-      `<div class="cele-inner"><div class="cele-kicker">${esc(data.kicker || '')}</div><div class="cele-title">${esc(data.title || '')}</div>` +
+      `<div class="cele-inner">${data.img ? `<img class="cele-img${data.imgCls ? ' ' + data.imgCls : ''}" src="${esc(data.img)}" width="96" height="96" alt="${esc(data.imgAlt || '')}" decoding="async" draggable="false">` : ''}<div class="cele-kicker">${esc(data.kicker || '')}</div><div class="cele-title">${esc(data.title || '')}</div>` +
       (data.sub ? `<div class="cele-sub">${esc(data.sub)}</div>` : '') +
       `<div class="cele-rewards">${this.rewardChips(data.reward)}</div></div></div></div>`;
     void host.offsetWidth;

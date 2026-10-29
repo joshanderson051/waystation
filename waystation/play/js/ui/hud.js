@@ -119,6 +119,16 @@ const EngineAdapter = {
   focusCell(r, c, o) { const cam = this.camera(); if (cam && typeof cam.focusCell === 'function') cam.focusCell(r, c, o || { zoom: 1.6, ms: 600 }); },
   avoid(rect) { const cam = this.camera(); if (cam && typeof cam.avoid === 'function') cam.avoid(rect); },
   fx(name, ...args) { if (!this.present() || !Engine.fx || typeof Engine.fx[name] !== 'function') return null; try { return Engine.fx[name](...args); } catch (e) { return null; } },
+  // A6.2 texture preload: Engine.loading -> { done, total, pct } (a plain object or a getter/function); null when the engine has none
+  loading() {
+    if (!this.present() || Engine.loading == null) return null;
+    let o; try { o = typeof Engine.loading === 'function' ? Engine.loading() : Engine.loading; } catch (e) { return null; }
+    if (!o || typeof o !== 'object') return null;
+    const total = Number(o.total) || 0, done = Number(o.done) || 0;
+    let pct = total > 0 ? done / total * 100 : (o.pct != null ? Number(o.pct) : 100);
+    if (total <= 0 && pct > 0 && pct <= 1) pct *= 100;
+    return { done, total, pct: Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 100 };
+  },
 };
 
 // Store (7.2)
@@ -313,6 +323,33 @@ const UI = {
 
     this.refreshTop();
     this.refreshAccount();
+    this.initTitleArt();
+  },
+
+  // ---------------------------------------------------------- A6.3 title: key art backdrop and the texture loading line
+  // Engine.loading -> { done, total, pct }; the Commission button enables when the module textures are in.
+  // No engine or no preload: the line stays hidden and the button is live at once.
+  titleReady: true,
+  initTitleArt() {
+    const t = $('#title'), ka = Art.keyart(window.innerWidth < 1100);
+    // absolute: a url() that arrives through var() is resolved against the stylesheet that consumes it, not the document
+    if (t && ka) { let abs = ka; try { abs = new URL(ka, document.baseURI).href; } catch (e) { /* keep the relative path */ } t.style.setProperty('--keyart', `url("${abs}")`); }
+    // Enter in the name field reaches main.js's commission() directly: hold it while the textures load
+    window.addEventListener('keydown', e => { if (e.key === 'Enter' && !this.titleReady && e.target && e.target.id === 'title-name') { e.preventDefault(); e.stopPropagation(); } }, true);
+    this.titleLoading();
+  },
+  titleLoading() {
+    clearTimeout(this._loadTimer);
+    const line = $('#title-loading'), txt = $('#title-loading-text'), btn = $('#btn-commission');
+    const L = EngineAdapter.loading();
+    if (!this._loadT0) this._loadT0 = performance.now();
+    // a preload that never completes (a texture 404, a stalled network) must not hold the Commission button hostage: 20 s and the button is live
+    const ready = !L || L.pct >= 100 || performance.now() - this._loadT0 > 20000;
+    if (line) line.hidden = ready;
+    if (txt && L && !ready) { const s2 = `Lighting the station ${MID2} ${Math.round(L.pct)}%`; if (txt.textContent !== s2) txt.textContent = s2; }
+    if (btn) { btn.disabled = !ready; if (ready) btn.removeAttribute('title'); else btn.title = 'Lighting the station'; }
+    this.titleReady = ready;
+    if (!ready) this._loadTimer = setTimeout(() => this.titleLoading(), 150);
   },
 
   // ---------------------------------------------------------- DOM builders (2.4)
@@ -322,14 +359,14 @@ const UI = {
       `<div class="sb-left"><span class="wordmark" aria-label="Waystation">Waystation</span>` +
       `<button type="button" id="sb-sector" class="sb-sector" title="Open the galaxy map (G)"><span class="sb-sector-name" id="sb-sector-name">—</span><span class="sb-station micro" id="sb-station">—</span></button></div>` +
       `<div class="sb-center">` +
-      `<div class="ro credits" id="ro-credits" data-tip="Credits · shared across every sector"><span class="ro-ic">${icon('credits', 20)}</span><div class="ro-main"><div class="ro-top"><span class="ro-lbl">Credits</span><span class="ro-sub" id="v-income-wrap"><i class="tri up" id="v-income-tri"></i><span class="num" id="v-income">+0</span><small>/day</small></span></div><span class="ro-val hero" id="v-credits">0</span></div></div>` +
-      `<div class="ro am" id="ro-am" data-tip="Antimatter · the premium currency: skips, early returns, early unlocks" data-tip-hue="var(--am)"><span class="ro-ic">${icon('am', 20)}</span><div class="ro-main"><div class="ro-top"><span class="ro-lbl">Antimatter</span></div><span class="ro-val big" id="v-am">0</span></div><button type="button" class="plus" id="btn-am-plus" title="Get Antimatter" aria-label="Open the store">${icon('new', 14)}</button></div>` +
+      `<div class="ro credits" id="ro-credits" data-tip="Credits · shared across every sector"><span class="ro-ic">${Art.img('icons', 'credits', 22, { alt: '', eager: true, fallback: icon('credits', 20) })}</span><div class="ro-main"><div class="ro-top"><span class="ro-lbl">Credits</span><span class="ro-sub" id="v-income-wrap"><i class="tri up" id="v-income-tri"></i><span class="num" id="v-income">+0</span><small>/day</small></span></div><span class="ro-val hero" id="v-credits">0</span></div></div>` +
+      `<div class="ro am" id="ro-am" data-tip="Antimatter · the premium currency: skips, early returns, early unlocks" data-tip-hue="var(--am)"><span class="ro-ic">${Art.img('icons', 'antimatter', 22, { alt: '', eager: true, fallback: icon('am', 20) })}</span><div class="ro-main"><div class="ro-top"><span class="ro-lbl">Antimatter</span></div><span class="ro-val big" id="v-am">0</span></div><button type="button" class="plus" id="btn-am-plus" title="Get Antimatter" aria-label="Open the store">${icon('new', 14)}</button></div>` +
       `<div class="ro power" id="ro-power" data-tip="Power used / produced" data-tip-hue="var(--ice)"><span class="ro-ic">${icon('power', 20)}</span><div class="ro-main"><div class="ro-top"><span class="ro-lbl">Power</span><span class="ro-sub" id="power-pips"></span></div><span class="ro-val" id="v-power">0 / 0</span></div></div>` +
       `<div class="ro people" id="ro-people" data-tip="Residents / homes · visitors aboard" data-tip-hue="var(--sage)"><span class="ro-ic">${icon('people', 20)}</span><div class="ro-main"><div class="ro-top"><span class="ro-lbl">Residents</span><span class="ro-sub num" id="v-visitors">0 aboard</span></div><span class="ro-val" id="v-residents">0 / 0</span></div></div>` +
       `<div class="ro rep" id="ro-rep" data-tip="Reputation out of 5"><span class="ro-ic">${icon('rep', 20)}</span><div class="ro-main"><div class="ro-top"><span class="ro-lbl">Reputation</span><span class="ro-sub" id="rep-pips">${'<i class="pip"><b></b></i>'.repeat(5)}</span></div><span class="ro-val" id="v-rep">0.0</span></div></div>` +
       `</div>` +
       `<div class="sb-right">` +
-      `<div class="rank" id="ro-rank" data-tip="Commander rank · XP from banks, ships, missions and expeditions"><span class="rank-ring">${'<svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true"><circle class="ring-track" cx="20" cy="20" r="17"/><circle class="ring-arc" id="rank-arc" cx="20" cy="20" r="17" stroke-dasharray="106.81" stroke-dashoffset="106.81"/></svg>'}<span class="rank-level num" id="v-rank-level">1</span></span><div class="rank-main"><span class="ro-lbl" id="v-rank-lbl">Rank 1</span><span class="rank-title" id="v-rank-title">Ensign</span></div></div>` +
+      `<div class="rank" id="ro-rank" data-tip="Commander rank · XP from banks, ships, missions and expeditions"><span class="rank-ring">${'<svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true"><circle class="ring-track" cx="20" cy="20" r="17"/><circle class="ring-arc" id="rank-arc" cx="20" cy="20" r="17" stroke-dasharray="106.81" stroke-dashoffset="106.81"/></svg>'}<img id="rank-badge" class="rank-badge" hidden width="30" height="30" alt="" decoding="async" draggable="false"><span class="rank-level num" id="v-rank-level">1</span></span><div class="rank-main"><span class="ro-lbl" id="v-rank-lbl">Rank 1</span><span class="rank-title" id="v-rank-title">Ensign</span></div></div>` +
       `<button type="button" class="sb-btn cloud" id="btn-cloud" data-state="off" hidden title="Cloud save" aria-label="Cloud save">${icon('cloud', 20)}<i class="dot" hidden></i></button>` +
       `<button type="button" class="sb-btn" id="btn-daily" title="Daily reward" aria-label="Daily reward">${icon('calendar', 20)}<i class="dot" hidden></i></button>` +
       `<div id="speed" class="seg" role="group" aria-label="Game speed"><button type="button" data-speed="0" title="Pause (Space)" aria-label="Pause">${icon('pause', 14)}</button><button type="button" data-speed="1" class="on" title="Run (1)">1${GLYPH.times}</button></div>` +
@@ -437,6 +474,13 @@ const UI = {
     setText('#v-rank-level', String(rk.level));
     setText('#v-rank-lbl', `Rank ${rk.level}`);
     setText('#v-rank-title', rk.title || '');
+    // A6.3: the rank badge sits inside the arc; the level figure stays as the fallback when the pack is absent
+    const badge = $('#rank-badge');
+    if (badge) {
+      const url = Art.url('badges', Art.rankId(rk.level), 30);
+      if (url) { if (badge.dataset.level !== String(rk.level)) { badge.dataset.level = String(rk.level); badge.src = url; badge.alt = `Rank ${rk.level} badge`; } badge.hidden = false; badge.parentElement.classList.add('has-badge'); }
+      else { badge.hidden = true; badge.parentElement.classList.remove('has-badge'); }
+    }
     const arc = $('#rank-arc'); if (arc) { const c = 106.81, off = (c * (1 - Math.max(0, Math.min(1, rk.pct || 0)))).toFixed(2); if (arc.getAttribute('stroke-dashoffset') !== off) arc.setAttribute('stroke-dashoffset', off); }
     const rankEl = $('#ro-rank');
     if (rankEl) {
@@ -902,7 +946,15 @@ const UI = {
   modalOpen() { return Overlays.anyOpen(); },
   escModal() { Overlays.escModal(); },
   confirm(title, html, fn, o) { return Overlays.confirm(title, html, fn, o); },
-  toast(msg, kind, o) { return Overlays.toast(msg, kind, o); },
+  toast(msg, kind, o) {
+    o = o || {};
+    // A6.3 trade notices: when a good is named and nothing else claims the icon, its render rides on the toast
+    if (!o.img && !o.icon && typeof GOODS !== 'undefined' && typeof GOOD_IDS !== 'undefined' && typeof msg === 'string' && /sold|bought|paid|cargo|crate|broker|lost|delivered/i.test(msg)) {
+      const low = msg.toLowerCase();
+      for (const g of GOOD_IDS) { const nm = GOODS[g] && GOODS[g].name; if (nm && low.includes(nm.toLowerCase())) { o.img = Art.url('goods', g, 40); break; } }
+    }
+    return Overlays.toast(msg, kind, o);
+  },
   anchor(name) { return $(name === 'credits' ? '#ro-credits .ro-val' : name === 'am' ? '#v-am' : name === 'rank' ? '#ro-rank' : '#ro-credits'); },
   // a glyph landed on an anchor: 1.0 → 1.08 → 1.0 over 260ms, later hits a short pulse (2.6)
   anchorHit(name) {
@@ -919,14 +971,15 @@ const UI = {
     const fxLevel = () => EngineAdapter.fx('levelUp');
     let spec;
     switch (kind) {
-      case 'rank': spec = { kicker: 'Commander promoted', title: `Rank ${d.level || MetaAdapter.rank().level} ${MID2} ${d.title || MetaAdapter.rank().title}`, reward: d.reward || { am: 10 * (d.level || 1) }, hue: 'amber', fx: fxLevel }; break;
-      case 'level': spec = { kicker: 'Station threshold', title: `Level ${d.level} ${MID2} ${TIER_NAMES[d.level] || 'Galactic Hub'}`, sub: 'New modules unlocked', hue: 'amber', fx: fxLevel }; break;
-      case 'unlock': spec = { kicker: 'Route charted', title: `Sector unlocked ${MID2} ${MetaAdapter.sectorDef(d.id).name || d.id}`, hue: 'ice', fx: fxLevel }; break;
+      // A6.3: each band carries its picture (rank and tier badges, the sector card, the achievement badge, the pack's icons)
+      case 'rank': { const lv = d.level || MetaAdapter.rank().level; spec = { kicker: 'Commander promoted', title: `Rank ${lv} ${MID2} ${d.title || MetaAdapter.rank().title}`, reward: d.reward || { am: 10 * (d.level || 1) }, hue: 'amber', fx: fxLevel, img: Art.url('badges', Art.rankId(lv), 96), imgAlt: `Rank ${lv} badge` }; break; }
+      case 'level': spec = { kicker: 'Station threshold', title: `Level ${d.level} ${MID2} ${TIER_NAMES[d.level] || 'Galactic Hub'}`, sub: 'New modules unlocked', hue: 'amber', fx: fxLevel, img: Art.url('badges', Art.tierId(d.level), 96), imgAlt: `Level ${d.level} badge` }; break;
+      case 'unlock': spec = { kicker: 'Route charted', title: `Sector unlocked ${MID2} ${MetaAdapter.sectorDef(d.id).name || d.id}`, hue: 'ice', fx: fxLevel, img: Art.url('sectors', d.id, 96), imgCls: 'round', imgAlt: MetaAdapter.sectorDef(d.id).name || '' }; break;
       case 'mission': spec = { kicker: 'Mission complete', title: d.title || 'Mission complete', reward: d.reward, hue: 'amber' }; break;
-      case 'expedition': spec = { kicker: 'Expedition returned', title: MetaAdapter.sectorDef(d.sector).name || d.title || 'Debrief', reward: d.loot || d.reward, hue: 'ice' }; break;
-      case 'purchase': spec = { kicker: 'Vault credited', title: d.title || (d.granted && d.granted.am ? `+${Fmt.n(d.granted.am)} Antimatter` : d.name || 'Purchase complete'), reward: d.granted || d.reward, hue: 'am' }; break;
-      case 'daily': spec = { kicker: `Day ${(d.dayIndex != null ? d.dayIndex + 1 : d.streak) || 1} of your streak`, title: 'Daily reward', reward: d.reward, hue: 'amber' }; break;
-      case 'achievement': { const tier = tierName(d.tier); spec = { kicker: 'Achievement', title: d.title || 'Achievement', reward: Object.assign({}, d.am ? { am: d.am } : {}, tier ? { tier } : {}), hue: 'amber' }; break; }
+      case 'expedition': spec = { kicker: 'Expedition returned', title: MetaAdapter.sectorDef(d.sector).name || d.title || 'Debrief', reward: d.loot || d.reward, hue: 'ice', img: Art.url('sectors', d.sector, 96), imgCls: 'round', imgAlt: MetaAdapter.sectorDef(d.sector).name || '' }; break;
+      case 'purchase': { const amG = (d.granted && d.granted.am) || (d.reward && d.reward.am); spec = { kicker: 'Vault credited', title: d.title || (d.granted && d.granted.am ? `+${Fmt.n(d.granted.am)} Antimatter` : d.name || 'Purchase complete'), reward: d.granted || d.reward, hue: 'am', img: amG ? Art.url('icons', 'antimatter', 96) : null, imgAlt: 'Antimatter' }; break; }
+      case 'daily': spec = { kicker: `Day ${(d.dayIndex != null ? d.dayIndex + 1 : d.streak) || 1} of your streak`, title: 'Daily reward', reward: d.reward, hue: 'amber', img: Art.url('icons', d.reward && d.reward.am ? 'antimatter' : d.reward && d.reward.goods ? 'cargo' : 'credits', 96) }; break;
+      case 'achievement': { const tier = tierName(d.tier); spec = { kicker: 'Achievement', title: d.title || 'Achievement', reward: Object.assign({}, d.am ? { am: d.am } : {}, tier ? { tier } : {}), hue: 'amber', img: Art.url('badges', Art.achId(tier || 'bronze'), 96), imgAlt: tier ? `${Fmt.cap(tier)} badge` : 'Badge' }; break; }
       case 'plot': spec = { kicker: 'Territory expanded', title: `Ring ${d.ring} cleared`, sub: d.cells ? `${Fmt.n(d.cells)} new cells to build on` : 'New cells to build on', hue: 'ice', fx: fxLevel }; break;
       default: spec = { kicker: d.kicker || '', title: d.title || kind, reward: d.reward, hue: d.hue || 'amber' };
     }
@@ -1055,7 +1108,8 @@ const UI = {
     if (!d) return;
     const col = MetaAdapter.collection(), list = col[d.kind] || col[d.kind + 's'] || [];
     const it = list.find(x => x.id === d.id);
-    this.toast(`New in the registry: ${it ? it.name : d.id}`, 'gold', { icon: 'registry', chip: 'Registry', action: { label: 'View', fn: () => this.openPanel('registry') } });
+    const grp = col[d.kind] ? d.kind : col[d.kind + 's'] ? d.kind + 's' : d.kind;   // A6.3: the discovery's own render rides on the toast
+    this.toast(`New in the registry: ${it ? it.name : d.id}`, 'gold', { icon: 'registry', img: Art.url(grp, d.id, 40), chip: 'Registry', ms: 7000, action: { label: 'View', fn: () => this.openPanel('registry') } });
     this.refreshBadges();
   },
   // Store bus payload (7.2): { sku, granted, mode, grantId, pending, cancelled, error, message, restored }
@@ -1448,6 +1502,8 @@ const UI = {
     const meta = $('#resume-meta'), rank = $('#resume-rank'), name = $('#resume-name'), thumb = $('#title-thumb');
     const livery = data.livery || (MetaAdapter.livery() || {}).name || '';                       // A5: the active livery name
     if (rank) rank.textContent = data.rank ? `Commander ${MID2} Rank ${data.rank.level} ${data.rank.title}` : 'Commander';
+    const badge = $('#resume-badge');   // A6.3: the rank badge on the resume card
+    if (badge) { const url = data.rank ? Art.url('badges', Art.rankId(data.rank.level), 44) : null; if (url) { badge.src = url; badge.alt = `Rank ${data.rank.level} badge`; badge.hidden = false; } else badge.hidden = true; }
     if (name) name.textContent = data.name || '';
     if (meta) meta.innerHTML = `<span>${esc(MetaAdapter.sectorDef(data.sector || 'home').name || 'Home')}</span><span>${Fmt.day(data.day || 1)}</span><span>L${data.level || 1} ${esc(TIER_NAMES[data.level || 1] || '')}</span><span class="c-amber-hi">${Fmt.n(data.credits || 0)} cr</span><span class="c-am">${Fmt.n(data.am || 0)} AM</span>${data.banked ? `<span class="c-good">${Fmt.n(data.banked)} cr waiting</span>` : ''}${livery ? `<span class="c-rose resume-livery">${esc(livery)} livery</span>` : ''}`;
     if (thumb && data.thumb) { thumb.width = data.thumb.width; thumb.height = data.thumb.height; thumb.getContext('2d').drawImage(data.thumb, 0, 0); }

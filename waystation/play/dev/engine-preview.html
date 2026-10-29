@@ -80,6 +80,7 @@
 <script src="https://cdn.jsdelivr.net/npm/pixi-filters@6.1.5/dist/pixi-filters.min.js"></script>
 <script src="../js/data.js"></script>
 <script src="../js/data2.js"></script>
+<script src="../js/artpack.js"></script>
 <script src="../js/sim.js"></script>
 <script src="../js/meta.js"></script>
 <script src="../js/art.js"></script>
@@ -108,6 +109,9 @@
 // ------------------------------------------------------------
 const $ = s => document.querySelector(s);
 const q = new URLSearchParams(location.search);
+// A6: the pack lives at play/assets/art; this page sits in play/dev. ?art=0 keeps the engine on the v1 bake.
+if (typeof ARTPACK !== 'undefined') ARTPACK.base = '../assets/art/';
+if (q.get('art') === '0') EngineStage.assets.enabled = false;
 const logEl = $('#log');
 function log(msg) { const d = document.createElement('div'); d.textContent = msg; logEl.appendChild(d); while (logEl.children.length > 6) logEl.removeChild(logEl.firstChild); }
 const ck = (r, c) => r + ',' + c;
@@ -162,9 +166,9 @@ const HUB = Sim.state.hub;
 const PLAN = [
   ['warehouse', 0, -1], ['market', 0, 1], ['comms', -1, 0], ['quarters', 1, 0],
   ['fuel', 0, -2], ['warehouse', 0, 2], ['solar', -1, -1], ['solar', -1, 1], ['hydro', 1, -1], ['clinic', 1, 1],
-  ['dock', 0, -3], ['dock', 0, 3], ['dock', -2, 0], ['reactor', -1, -2], ['customs', -1, 2], ['rec', 1, -2], ['security', 1, 2],
+  ['dock', 0, -3], ['dock', 0, 3], ['dock', -2, 0], ['reactor', -1, -2], ['reactor', -1, 2], ['rec', 1, -2], ['security', 1, 2],
   ['bank', -2, -1], ['shipyard', -2, 1], ['cantina', 2, 0], ['quarters', 2, -1], ['habitat', 2, 1], ['dock', 2, -2], ['refinery', 2, 2],
-  ['habitat', 3, 0], ['plaza', 3, 1], ['school', 3, -1], ['gate', 3, 2],
+  ['habitat', 3, 0], ['plaza', 3, 1], ['customs', 3, -1], ['gate', 3, 2],
 ].map(([id, dr, dc]) => [id, HUB.r + dr, HUB.c + dc]);
 const at = (dr, dc) => [HUB.r + dr, HUB.c + dc];
 // plot (A1.2): a 9x7 plot around the hub (ring 1 on the 15x9 grid) with ring 2 clearing; written directly to Sim.state,
@@ -201,7 +205,18 @@ Sim.state.credits = 48250;
 for (const g of Object.keys(Sim.state.stock)) Sim.state.stock[g] = Math.floor(Math.random() * 30);
 Sim.state.stock.ore = 40; Sim.state.stock.xenofauna = 6;
 Sim.recomputeLevel(); Sim.state.nextEventDay = 1e9;
-for (let i = 0; i < 6; i++) Sim.spawnShip();
+// ships: every class, and at least one deterministic "named ship" (A6: 1-in-6 by ship id, the same hash traffic.js uses)
+const isNamedId = id => (Math.imul(id | 0, 2654435761) >>> 0) % 6 === 0;
+function spawnOne(company, cls, named) {
+  for (let tries = 0; tries < 24; tries++) {
+    const sh = Sim.spawnShip(company);
+    if ((!cls || sh.cls === cls) && (!named || isNamedId(sh.id))) return sh;
+    Sim.state.ships.splice(Sim.state.ships.indexOf(sh), 1);
+  }
+  return null;
+}
+spawnOne('kestrel', 'courier'); spawnOne('halvorsen', 'freighter'); spawnOne('halvorsen', 'hauler'); spawnOne('aurelian', 'liner');
+spawnOne('halvorsen', 'hauler', true); spawnOne('ouroboros', 'freighter');
 // banks: 5 ready, 2 of them full; scaffolds: 3 timers; upgrades: 2 modules
 Stage.setBank(...at(0, -1), 1); Stage.setBank(...at(0, 2), 1); Stage.setBank(...at(0, 1), 0.6); Stage.setBank(...at(2, 2), 0.4); Stage.setBank(...at(-2, -1), 0.5);
 Stage.startBuild(...at(3, -1), 45 * 1000); Stage.startBuild(...at(3, 1), 4 * 60 * 1000); Stage.startBuild(...at(4, 0), 15 * 60 * 1000);
@@ -252,6 +267,27 @@ const FXB = {
   warp: () => Engine.fx.warp().then(() => log('warp resolved')),
   comet: () => EngineSpace.comet(),
   'skip build': () => Stage.skip(...at(3, -1)),
+  // A6: park two approaching / queued ships at free berths right now (Sim.onDock trades and emits `dock`, which lays the gangways)
+  'dock two': () => {
+    let n = 0;
+    for (const sh of Sim.state.ships) {
+      if (n >= 2 || sh.state === 'docked') continue;
+      // an approaching ship already holds a berth; a queued one takes the first free berth
+      const b = (sh.dock && sh.target) ? { dock: sh.dock, berth: sh.target } : Sim.findBerth();
+      if (!b) continue;
+      sh.dock = b.dock; sh.target = b.berth; sh.x = b.berth.x; sh.y = b.berth.y; sh.state = 'docked';
+      if (typeof Sim.onDock === 'function') Sim.onDock(sh, Sim.totals()); else Sim.emit('dock', sh);
+      sh.dockedUntil = Sim.now() + 1.5; n++;
+    }
+    log(`docked ${n} ships`);
+  },
+  // A6: overdraw the grid by silencing the reactors (restored by the second press)
+  overdraw: () => {
+    const def = MODULES.reactor;
+    if (def._power == null) { def._power = def.power; def.power = 0; log('reactors silenced: grid overdrawn'); }
+    else { def.power = def._power; delete def._power; log('reactors back'); }
+    Sim.emit('change');
+  },
   'plot done': () => Plot.done(),
   'plot start': () => { const p = Sim.state.plot; if (p) Plot.start(p.ring + 1, 90e3); },
   'plot skip': () => Plot.skip(),
@@ -338,7 +374,9 @@ Sim.on('toast', d => log('toast: ' + d.msg));
       acc = 0;
       credits.textContent = fmtC(Sim.state.credits);
       const h = Engine.hover;
-      readout.innerHTML = `<span>fps</span><b>${Engine.perf.fps}</b><span>tier</span><b>${Engine.perf.tier}${Engine.perf.bloom ? ' · bloom' : ' · no bloom'}</b>` +
+      const ld = Engine.loading;
+      readout.innerHTML = `<span>fps</span><b>${Engine.perf.fps} · ${Engine.perf.frameMs} ms</b><span>tier</span><b>${Engine.perf.tier}${Engine.perf.bloom ? ' · bloom' : ' · no bloom'}</b>` +
+        `<span>art</span><b>${Engine.art.active ? (ld.pct < 100 ? 'loading ' + ld.pct + '%' : 'pack') : 'v1 bake'} · ${EngineTraffic.people} people</b>` +
         `<span>zoom</span><b>${Engine.camera.zoom.toFixed(2)}</b><span>particles</span><b>${Engine.perf.particles}</b>` +
         `<span>ships</span><b>${Sim.state.ships.length}</b><span>cell</span><b>${h ? h.r + ':' + String(h.c).padStart(2, '0') : '—'}</b>` +
         `<span>sector</span><b>${Sim.state.sector}</b><span>day</span><b>${Sim.state.day}</b>`;

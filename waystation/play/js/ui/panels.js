@@ -183,7 +183,8 @@ const pips = (power) => {
   h += (power > 0 ? '<i class="pip"></i>' : '<i class="pip off"></i>').repeat(n);
   return `<span class="pips">${h}</span>`;
 };
-const plate = (id, size = 22) => `<span class="plate" style="--hue:${famHue(id)}">${icon(id, size)}</span>`;
+// A6.3: the module render (modules/256 at 64px) on the family plate; the glyph plate stays as the fallback
+const plate = (id, size = 22) => { const img = Art.img('modules', id, 64, { alt: MODULES[id] ? MODULES[id].name : id }); return `<span class="plate${img ? ' art-plate' : ''}" style="--hue:${famHue(id)}">${img || icon(id, size)}</span>`; };
 const countdown = (until, cls = '') => `<span class="num cd ${cls}" data-until="${Math.round(until)}"></span>`;   // text filled by tickTimers
 const lvlTicks = lvl => `<span class="lvl" title="Level ${lvl}">${[1, 2, 3].map(i => `<i class="${i <= lvl ? 'on' : ''}"></i>`).join('')}<span class="lvl-n">L${lvl}</span></span>`;
 
@@ -239,6 +240,8 @@ function silhouette(group, idOrItem, index, found, hue) {
   const key = (item.silhouette && set[item.silhouette]) ? item.silhouette : (item.cls && set[item.cls]) ? item.cls : set[item.id] ? item.id : keys[(index || 0) % keys.length];
   return `<svg class="sil${found ? ' found' : ''}" viewBox="0 0 48 48" width="48" height="48" aria-hidden="true" style="--hue:${hue || 'var(--ivory)'}"><path d="${set[key]}"/></svg>`;
 }
+// A6.3 sector art (sectors/256 clipped to a circle) with the procedural planet as the fallback
+function sectorArt(id, def, size, cls = 'round') { return Art.img('sectors', id, size, { alt: (def && def.name) || id, cls, fallback: planetSvg(id, size, def) }); }
 
 // Signature-diffed render that keeps the scroll position and staggers rows on first paint (2.2).
 // Live values (countdowns, rings, hopper banks) are filled by tickTimers right after the paint and
@@ -410,6 +413,12 @@ const Panels = {
       F.setSub(`${esc(s.name)} ${MID} ${Fmt.day(s.day)} ${MID} L${s.level} ${esc(TIER_NAMES[s.level] || 'Galactic Hub')}`);
       const ready = ctx.meta.readyCells(), banked = ctx.meta.bankedTotal(), canAll = ctx.meta.canCollectAll();
       let h = `<div class="name-row"><input type="text" id="station-name-input" class="input" maxlength="28" value="${esc(s.name)}" aria-label="Station name" spellcheck="false"><button type="button" class="btn" data-act="rename">Rename</button></div>`;
+      // A6.3 the level block: the tier badge, the level name and what the next threshold asks
+      const tierImg = Art.img('badges', Art.tierId(s.level), 56, { alt: `Level ${s.level} badge` });
+      if (tierImg) {
+        const th = (typeof LEVEL_THRESHOLDS !== 'undefined' && Array.isArray(LEVEL_THRESHOLDS) ? LEVEL_THRESHOLDS : []).find(t => t.level === s.level + 1);
+        h += `<div class="level-strip"><i class="spine"></i>${tierImg}<div class="level-main"><span class="tile-lbl">Station level ${s.level}</span><span class="level-name">${esc(TIER_NAMES[s.level] || 'Galactic Hub')}</span><span class="bank-note">${th ? `Level ${th.level} at ${th.modules} modules and ${Number(th.rep).toFixed(1)} reputation` : 'Top level reached'}</span></div></div>`;
+      }
       h += `<div class="hero-row">` +
         `<div class="qol-card"><div class="qol-ring-wrap">${ring(q, 64, `var(--${qc})`, `<span class="num qol-pct">${Fmt.pct(q)}</span>`)}</div><div class="qol-meta"><span class="tile-lbl">Quality of life</span><span class="chip ${qc}" data-shape="${TIER_SHAPE[qc]}">${TIER_WORD[qc]}</span></div></div>` +
         `<div class="tiles col"><div class="tile"><span class="tile-lbl">Residents</span><span class="tile-val num c-sage">${s.residents} <small>/ ${T.homes} homes</small></span></div>` +
@@ -443,8 +452,12 @@ const Panels = {
       const d = MODULES[m.id], hp = ctx.meta.hopper(sel.r, sel.c), bd = ctx.meta.build(sel.r, sel.c), up = ctx.meta.upgrade(sel.r, sel.c);
       const lvl = up ? up.lvl : ((s.cells && s.cells[`${sel.r},${sel.c}`] && s.cells[`${sel.r},${sel.c}`].lvl) || 1);
       F.setSub(`Grid ${Fmt.grid(sel.r, sel.c)} ${MID} ${esc(famOf(m.id))} ${MID} <button type="button" class="linkish" data-act="back">${GLYPH.arrow} Station overview</button>`);
-      let h = `<div class="card bcard static" data-mod="${m.id}" data-fam="${famOf(m.id)}"><i class="spine"></i>${plate(m.id, 24)}<div class="card-main"><div class="name">${esc(d.name)} ${lvlTicks(lvl)}</div><div class="desc wrap">${esc(d.desc)}</div></div>` +
-        `<div class="card-side"><div class="cost">${Fmt.n(d.cost)}</div>${pips(d.power)}</div></div>`;
+      // A6.3: the 512 render as a 160px hero with the name over its lower edge; the static card is the fallback
+      const heroImg = Art.img('modules', m.id, 150, { alt: d.name, eager: true });
+      let h = heroImg
+        ? `<div class="mod-hero" data-fam="${famOf(m.id)}">${heroImg}<div class="mod-hero-cap"><div class="name">${esc(d.name)} ${lvlTicks(lvl)}</div><div class="card-side"><div class="cost">${Fmt.n(d.cost)}</div>${pips(d.power)}</div></div></div><p class="mod-desc">${esc(d.desc)}</p>`
+        : `<div class="card bcard static" data-mod="${m.id}" data-fam="${famOf(m.id)}"><i class="spine"></i>${plate(m.id, 24)}<div class="card-main"><div class="name">${esc(d.name)} ${lvlTicks(lvl)}</div><div class="desc wrap">${esc(d.desc)}</div></div>` +
+          `<div class="card-side"><div class="cost">${Fmt.n(d.cost)}</div>${pips(d.power)}</div></div>`;
       // tell state line
       if (d.docks && m.id !== 'hub') {
         h += Sim.dockUsable(sel.r, sel.c) ? `<p class="status good">${GLYPH.up} Berth clear</p>` : `<p class="status bad">${GLYPH.down} Berth blocked: no empty side for ships to pull up to</p>`;
@@ -531,7 +544,7 @@ const Panels = {
         const from = Object.values(PLANETS).filter(pl => pl.exports.includes(g)).map(pl => pl.name).join(', ');
         const to = Object.values(PLANETS).filter(pl => pl.imports.includes(g)).map(pl => pl.name).join(', ');
         const dis = T.hasMarket ? '' : ' disabled';
-        h += `<tr${rowCls} title="From: ${esc(from)}&#10;Wanted by: ${esc(to || 'nobody nearby')}" style="--hue:${kindHue(G.kind)}"><td class="kind"><i></i></td><td class="icon">${icon(g, 16)}</td><td class="gname">${esc(G.name)}</td>` +
+        h += `<tr${rowCls} title="From: ${esc(from)}&#10;Wanted by: ${esc(to || 'nobody nearby')}" style="--hue:${kindHue(G.kind)}"><td class="kind"><i></i></td><td class="icon">${Art.img('goods', g, 28, { alt: G.name, fallback: icon(g, 16) })}</td><td class="gname">${esc(G.name)}</td>` +
           `<td class="stock num">${stock}</td><td class="price num"><i class="tri ${tr}"></i><span class="prc">${p.toFixed(1)}</span>${mult}</td>` +
           `<td class="pol"><div class="seg small"><button type="button" data-g="${g}" data-k="buy" class="${pol.buy ? 'on' : ''}"${dis} title="Buy ${esc(G.name)} from ships">Buy</button><button type="button" data-g="${g}" data-k="sell" class="${pol.sell ? 'on' : ''}"${dis} title="Sell ${esc(G.name)} to ships">Sell</button></div></td>` +
           `<td class="act"><button type="button" class="btn icon small danger dump" data-dump="${g}" title="Sell all to a passing broker at half price"${stock ? '' : ' disabled'}>${icon('dump', 14)}</button></td></tr>`;
@@ -565,13 +578,15 @@ const Panels = {
         const co = coDef(sh.company), cls = SHIP_CLASSES[sh.cls], [word, wc] = STATE_WORD[sh.state] || ['In lane', 'ink'];
         const held = Object.values(sh.cargo || {}).reduce((a, q) => a + Math.max(0, q), 0);
         const extra = sh.state === 'docked' ? `leaves in ${Math.max(0, sh.dockedUntil - Sim.now()).toFixed(1)} d` : sh.state === 'queue' ? `${Math.max(0, Sim.now() - sh.waitStart).toFixed(1)} d for a berth` : sh.dock ? `Berth ${Fmt.grid(sh.dock.r, sh.dock.c)}` : '';
+        // A6.3: the ship render, picked with the engine's rule (A6.2); the glyph stays as the fallback
+        const sid = Art.shipId(sh), shipArt = sid ? `<span class="ship-art">${Art.img('ships', sid, 56, { alt: `${co ? co.name : sh.company} ${cls.name}`, w: 60, h: 56 })}</span>` : `<span class="ship-ic">${icon('ship', 18)}</span>`;
         h += `<div class="ship-row${focused === sh.id ? ' focused' : ''}" data-ship="${sh.id}" style="--hue:${coHue(sh.company)}" role="button" tabindex="0" title="Focus the camera on this ship">` +
-          `<span class="ship-dot"></span><span class="ship-ic">${icon('ship', 18)}</span><div class="ship-main"><span class="ship-name">${esc(co ? co.name : sh.company)} <span class="tag">${esc(cls.name)}</span></span><span class="ship-sub">${esc(sh.captain)} ${MID} hold ${held}/${cls.cargo}${extra ? ` ${MID} ${esc(extra)}` : ''}</span></div>` +
+          `<span class="ship-dot"></span>${shipArt}<div class="ship-main"><span class="ship-name">${esc(co ? co.name : sh.company)} <span class="tag">${esc(cls.name)}</span></span><span class="ship-sub">${esc(sh.captain)} ${MID} hold ${held}/${cls.cargo}${extra ? ` ${MID} ${esc(extra)}` : ''}</span></div>` +
           `<span class="chip ${wc}" data-shape="${wc === 'good' ? 'up' : wc === 'warn' ? 'sq' : 'sq'}">${word}</span></div>`;
       }
       const avg = Math.round(COMPANIES.reduce((a, c) => a + s.companies[c.id].trust, 0) / COMPANIES.length);
       h += shelf('Shipping companies', esc(`Trust avg ${avg}`), { hue: 'var(--sage)' });
-      const goodsRow = (label, ids) => `<div class="goods-row"><span class="lbl">${label}</span>${ids.map(g => `<span style="color:${kindHue(GOODS[g].kind)}" title="${esc(GOODS[g].name)}">${icon(g, 14)}</span>`).join('')}</div>`;
+      const goodsRow = (label, ids) => `<div class="goods-row"><span class="lbl">${label}</span>${ids.map(g => `<span style="color:${kindHue(GOODS[g].kind)}" title="${esc(GOODS[g].name)}">${Art.img('goods', g, 24, { alt: GOODS[g].name, fallback: icon(g, 14) })}</span>`).join('')}</div>`;
       for (const c of COMPANIES) {
         const co = s.companies[c.id], pl = PLANETS[c.home], locked = !!c.galactic && !T.galactic;
         let chips = '';
@@ -580,8 +595,9 @@ const Panels = {
         if (locked) chips += `<span class="chip ink" data-shape="sq">Needs Jump Gate</span>`;
         if (co.loan) chips += `<span class="chip amber" data-shape="sq">Loan ${Fmt.n(co.loan.remaining)} left ${MID} ${Fmt.n(co.loan.perDay)}/day</span>`;
         const tc = trustCls(co.trust), filled = Math.min(10, Math.floor(co.trust / 10));
+        const flag = Art.flagship(c.id), flagArt = flag ? Art.img('ships', flag, 84, { alt: `${c.name} flagship`, cls: 'co-art' }) : '';   // A6.3 the company flagship
         const lend = (!locked && !co.loan) ? `<button type="button" class="btn${T.hasBank ? ' primary' : ''}" data-lend="${c.id}"${T.hasBank ? '' : ' disabled title="Build a Mercantile Bank first"'}>${icon('lend', 14)}<span>Lend</span></button>` : '';
-        h += `<div class="co${locked ? ' locked' : ''}" style="--hue:${coHue(c.id)}"><i class="spine"></i><div class="co-head"><span class="name">${esc(c.name)}</span><span class="tag">${esc(pl.name)}</span></div>` +
+        h += `<div class="co${locked ? ' locked' : ''}" style="--hue:${coHue(c.id)}"><i class="spine"></i>${flagArt}<div class="co-head"><span class="name">${esc(c.name)}</span><span class="tag">${esc(pl.name)}</span></div>` +
           `<div class="co-chips">${chips}</div><p class="blurb">${esc(c.blurb)}</p>` +
           goodsRow('Brings', pl.exports) + goodsRow('Buys', pl.imports) +
           `<div class="trust" title="Trust ${co.trust} / 100"><div class="trust-bar">${'<i class="on"></i>'.repeat(filled)}${'<i></i>'.repeat(10 - filled)}</div><span class="trust-val num">${co.trust} / 100</span><span class="chip ${tc}" data-shape="${TIER_SHAPE[tc]}">${TIER_WORD[tc]}</span></div>` +
@@ -615,10 +631,10 @@ const Panels = {
           const total = Math.max(1, x.endsAt - x.startedAt), left = Math.max(0, x.endsAt - Date.now());
           const skipAM = Math.max(1, Math.ceil(left / 60000 / 8));
           if (x.status === 'ready') {
-            h += `<div class="exp-card ready" data-exp="${esc(x.id)}"><i class="spine"></i>${planetSvg(def.id, 52, def)}<div class="exp-main"><span class="exp-name">${esc(def.name)}</span><span class="exp-sub c-good">${GLYPH.up} Returned ${MID} loot sealed</span></div>` +
+            h += `<div class="exp-card ready" data-exp="${esc(x.id)}"><i class="spine"></i>${sectorArt(def.id, def, 52)}<div class="exp-main"><span class="exp-name">${esc(def.name)}</span><span class="exp-sub c-good">${GLYPH.up} Returned ${MID} loot sealed</span></div>` +
               `<button type="button" class="btn big primary" data-act="debrief" data-exp="${esc(x.id)}">${icon('chart', 16)}<span>Debrief</span></button></div>`;
           } else {
-            h += `<div class="exp-card" data-exp="${esc(x.id)}"><i class="spine"></i>${ring(0, 52, 'var(--ice)', planetSvg(def.id, 34, def), { until: x.endsAt, total })}<div class="exp-main"><span class="exp-name">${esc(def.name)}</span><span class="exp-sub">Back in ${countdown(x.endsAt, 'c-ice')}</span></div>` +
+            h += `<div class="exp-card" data-exp="${esc(x.id)}"><i class="spine"></i>${ring(0, 52, 'var(--ice)', sectorArt(def.id, def, 34), { until: x.endsAt, total })}<div class="exp-main"><span class="exp-name">${esc(def.name)}</span><span class="exp-sub">Back in ${countdown(x.endsAt, 'c-ice')}</span></div>` +
               `<button type="button" class="btn am" data-act="instant" data-exp="${esc(x.id)}" title="Bring the crew home now">${icon('skip', 14)}<span>Return ${MID} ${skipAM} AM</span></button></div>`;
           }
         }
@@ -634,7 +650,7 @@ const Panels = {
         const charts = ctx.meta.charts(def.id), running = list.some(x => x.sector === def.id);
         const can = hasDock && free && s.credits >= cost && !running;
         const why = !hasDock ? 'Needs a Docking Bay' : running ? 'Crew already out there' : !free ? 'No free slot' : s.credits < cost ? `Need ${Fmt.n(cost - s.credits)} more` : '';
-        h += `<div class="dest${running ? ' running' : ''}" style="--hue:${(SECTOR_LOOK[def.id] || SECTOR_LOOK.home).rim}">${planetSvg(def.id, 56, def)}<div class="dest-main"><span class="dest-name">${esc(def.name)}</span>` +
+        h += `<div class="dest${running ? ' running' : ''}" style="--hue:${(SECTOR_LOOK[def.id] || SECTOR_LOOK.home).rim}">${Art.img('sectors', def.id, 192, { alt: def.name, cls: 'dest-art', w: 192, h: 120, fallback: planetSvg(def.id, 56, def) })}<div class="dest-main"><span class="dest-name">${esc(def.name)}</span>` +
           `<span class="dest-meta">${icon('clock', 12)}${Fmt.dur(minutes * 60000)}<span class="sep">${MID}</span>${icon('credits', 12)}${Fmt.n(cost)}</span>` +
           `<span class="charts" title="Charts ${charts} / 3">${[0, 1, 2].map(k => `<i class="${k < charts ? 'on' : ''}"></i>`).join('')}<span class="charts-lbl">${charts}/3 charted</span></span></div>` +
           `<button type="button" class="btn${can ? ' primary' : ''}" data-act="launch" data-sector="${esc(def.id)}"${can ? '' : ` disabled title="${esc(why)}"`}>${icon('expeditions', 14)}<span>${running ? 'Out' : 'Launch'}</span></button></div>`;
@@ -677,9 +693,11 @@ const Panels = {
       rows.forEach((r, i) => {
         const [nx, ny] = NODE[i] || [.5, .5], x = nx * W, y = ny * H, look = SECTOR_LOOK[r.def.id] || SECTOR_LOOK.home;
         const cls = ['node', r.status, picked === r.def.id ? 'picked' : ''].filter(Boolean).join(' ');
-        const R = r.status === 'active' ? 10 : r.status === 'locked' ? 6.5 : 8;
+        // A6.3: sector thumbnails (sectors/256) clipped to the node circles; the painted disc stays under them as the fallback
+        const R = r.status === 'active' ? 16 : r.status === 'locked' ? 10 : 13, imgUrl = Art.url('sectors', r.def.id, R * 2);
         svg += `<g class="${cls}" data-sector="${esc(r.def.id)}" tabindex="0" role="button" aria-label="${esc(r.def.name)} ${esc(r.status)}" style="--hue:${look.rim}">` +
-          `<circle class="halo" cx="${x}" cy="${y}" r="22"/><circle class="glow" cx="${x}" cy="${y}" r="${R + 6}"/><circle class="disc" cx="${x}" cy="${y}" r="${R}" fill="${r.status === 'locked' ? 'var(--surface-3)' : look.base}"/>` +
+          `<circle class="halo" cx="${x}" cy="${y}" r="26"/><circle class="glow" cx="${x}" cy="${y}" r="${R + 6}"/><circle class="disc" cx="${x}" cy="${y}" r="${R}" fill="${r.status === 'locked' ? 'var(--surface-3)' : look.base}"/>` +
+          (imgUrl ? `<clipPath id="gm-${esc(r.def.id)}"><circle cx="${x}" cy="${y}" r="${R - 1}"/></clipPath><image class="node-img" href="${imgUrl}" x="${x - R}" y="${y - R}" width="${R * 2}" height="${R * 2}" clip-path="url(#gm-${esc(r.def.id)})" preserveAspectRatio="xMidYMid slice"/>` : '') +
           (r.status === 'locked' ? `<path class="lock" d="M${x - 3} ${y - .5}h6v4h-6Z M${x - 2} ${y - .5}v-1.5a2 2 0 0 1 4 0v1.5" />` : '') +
           `<text class="node-lbl" x="${x}" y="${y + (ny > .5 ? R + 16 : -(R + 8))}" text-anchor="middle">${esc(r.def.name.toUpperCase())}</text></g>`;
       });
@@ -687,8 +705,12 @@ const Panels = {
       const r = rows.find(x => x.def.id === picked) || active;
       const def = r.def, look = SECTOR_LOOK[def.id] || SECTOR_LOOK.home, sum = r.summary || {};
       const status = { active: ['Active sector', 'good', 'up'], owned: ['Owned', 'ice', 'sq'], unlockable: ['Ready to unlock', 'amber', 'sq'], locked: ['Locked', 'ink', 'sq'] }[r.status] || ['', 'ink', 'sq'];
-      let card = `<div class="sector-card" data-status="${esc(r.status)}" style="--hue:${look.rim}"><i class="spine"></i><div class="sector-head">${planetSvg(def.id, 72, def)}<div class="sector-title"><span class="sector-name">${esc(def.name)}</span>` +
-        `<span class="chip ${status[1]}" data-shape="${status[2]}">${status[0]}</span><span class="sector-grid micro">${esc(def.grid ? (Array.isArray(def.grid) ? def.grid.join('x') : `${def.grid.cols || def.grid.w || 15}x${def.grid.rows || def.grid.h || 9}`) : '15x9')} plot ${MID} ${esc(def.planet || def.world || (look.kind === 'belt' ? 'asteroid belt' : look.kind === 'nebula' ? 'violet nebula' : 'world'))}</span></div></div>`;
+      const gridTxt = `${esc(def.grid ? (Array.isArray(def.grid) ? def.grid.join('x') : `${def.grid.cols || def.grid.w || 15}x${def.grid.rows || def.grid.h || 9}`) : '15x9')} plot ${MID} ${esc(def.planet || def.world || (look.kind === 'belt' ? 'asteroid belt' : look.kind === 'nebula' ? 'violet nebula' : 'world'))}`;
+      // A6.3: sectors/512 as a 16:10 hero with the name and the status chip over it; the planet head is the fallback
+      const heroArt = Art.img('sectors', def.id, 392, { alt: def.name, w: 392, h: 245, eager: true });
+      let card = `<div class="sector-card" data-status="${esc(r.status)}" style="--hue:${look.rim}"><i class="spine"></i>` + (heroArt
+        ? `<div class="sector-hero">${heroArt}<div class="sector-hero-cap"><span class="sector-name">${esc(def.name)}</span><span class="chip ${status[1]}" data-shape="${status[2]}">${status[0]}</span></div></div><div class="sector-grid micro">${gridTxt}</div>`
+        : `<div class="sector-head">${planetSvg(def.id, 72, def)}<div class="sector-title"><span class="sector-name">${esc(def.name)}</span><span class="chip ${status[1]}" data-shape="${status[2]}">${status[0]}</span><span class="sector-grid micro">${gridTxt}</span></div></div>`);
       if (def.flavour || def.flavor || def.desc) card += `<p class="body sector-flavour">${esc(def.flavour || def.flavor || def.desc)}</p>`;
       const bias = biasText(def);
       if (bias) card += `<div class="sector-bias">${icon('trend-up', 12)}<span>${esc(bias)}</span></div>`;
@@ -769,7 +791,10 @@ const Panels = {
       const tier = Math.max(0, Math.min(3, a.tier || 0)), goal = Math.max(1, a.goal || 1), p = a.done ? 1 : Math.min(1, (a.progress || 0) / goal);
       const segs = TIER_WORDS.map((w, i) => `<i class="${i < tier ? 'on ' + w : i === tier && !a.done ? 'cur ' + w : ''}"${i === tier && !a.done ? ` style="--p:${(p * 100).toFixed(1)}%"` : ''}></i>`).join('');
       const ic = (typeof Icons !== 'undefined' && Icons && typeof Icons.has === 'function' && a.icon && Icons.has(a.icon)) ? a.icon : 'award';
-      return `<div class="ach${a.claimable ? ' claimable' : a.done ? ' done' : ''}" data-ach="${esc(a.id)}"><i class="spine"></i><span class="ach-ic">${icon(ic, 20)}</span>` +
+      // A6.3: the badge of the highest tier earned (bronze, dimmed, before the first); the glyph is the fallback
+      const earned = a.done ? 'gold' : tier ? TIER_WORDS[tier - 1] : null;
+      const badge = Art.img('badges', Art.achId(earned || 'bronze'), 44, { alt: earned ? `${Fmt.cap(earned)} badge` : 'No badge yet' });
+      return `<div class="ach${a.claimable ? ' claimable' : a.done ? ' done' : ''}" data-ach="${esc(a.id)}"><i class="spine"></i><span class="ach-ic${badge ? (earned ? ' ' + earned : ' none') : ''}">${badge || icon(ic, 20)}</span>` +
         `<div class="ach-main"><div class="ach-title">${esc(a.title)}${a.done ? ` <span class="tier-chip gold">Gold</span>` : tier ? ` <span class="tier-chip ${TIER_WORDS[tier - 1]}">${Fmt.cap(TIER_WORDS[tier - 1])}</span>` : ''}</div>` +
         `<div class="ach-desc">${esc(a.desc || '')}</div>` +
         `<div class="ach-prog"><span class="tiers" title="Bronze, silver, gold">${segs}</span><span class="num">${a.done ? 'Complete' : `${Fmt.n(Math.min(a.progress || 0, goal))} / ${Fmt.n(goal)}`}</span>${!a.done && a.nextAM ? `<span class="rchip am sm">${icon('am', 12)}<span>${Fmt.n(a.nextAM)} AM</span></span>` : ''}</div></div>` +
@@ -844,7 +869,9 @@ const Panels = {
         h += `<div class="sil-grid">`;
         set.items.forEach((it, i) => {
           const hue = hueOf(it);
-          h += `<div class="sil-card${it.found ? ' found' : ''}" style="--hue:${hue}" title="${esc(it.found ? (it.lore || it.name) : 'Not yet found')}" tabindex="0">${silhouette(tab, it, si * 7 + i, it.found, hue)}` +
+          // A6.3: the 256 render (found in colour, unfound as a dark cut-out with the lock); the silhouette is the fallback
+          const art = Art.img(tab, it.id, 76, { alt: it.found ? it.name : 'Unknown', cls: it.found ? '' : 'unfound' });
+          h += `<div class="sil-card${it.found ? ' found' : ''}" style="--hue:${hue}" title="${esc(it.found ? (it.lore || it.name) : 'Not yet found')}" tabindex="0" role="button" data-item="${esc(it.id)}">${art ? `<span class="sil-art">${art}${it.found ? '' : `<span class="sil-lock">${icon('lock', 14)}</span>`}</span>` : silhouette(tab, it, si * 7 + i, it.found, hue)}` +
             `<span class="sil-name">${it.found ? esc(it.name) : 'Unknown'}</span>${it.rarity ? `<span class="sil-rarity micro">${esc(it.rarity)}</span>` : ''}${it.found && it.count > 1 ? `<span class="sil-count tag">${GLYPH.times}${it.count}</span>` : ''}` +
             (it.found && it.lore ? `<p class="sil-lore">${esc(it.lore)}</p>` : '') + `</div>`;
         });
@@ -852,9 +879,32 @@ const Panels = {
       });
       paint(F.body, h, sig, 'r:' + tab);
     };
-    if (F.tabs) F.tabs.addEventListener('click', e => { const b = e.target.closest('.ptab'); if (!b) return; tab = b.dataset.tab; F.setTab(tab); ctx.sound.click(); render(); });
+    // A6.3 detail sheet: the 512 render, the lore, and how it was (or can be) found
+    const openDetail = (kind, it) => {
+      if (!it) return;
+      const hue = kind === 'ships' ? coHue(it.fam || it.company) : (SECTOR_LOOK[it.fam] || {}).rim || RARITY_HUE[it.rarity] || 'var(--ivory)', src = it.source || {};
+      const img = Art.img(kind, it.id, 200, { alt: it.found ? it.name : 'Unknown', cls: it.found ? '' : 'unfound', eager: true });
+      let how = '';
+      if (src.serve) { const co = coDef(src.serve.company), n = src.serve.count || 1, cl = src.serve.cls && SHIP_CLASSES[src.serve.cls] ? ` ${SHIP_CLASSES[src.serve.cls].name.toLowerCase()}` : ''; how = `Serve ${n} ${co ? co.name : src.serve.company}${cl} ship${n === 1 ? '' : 's'}`; }
+      else if (Array.isArray(src.expedition) && src.expedition.length) how = `Expeditions to ${src.expedition.map(id => (sectorList().find(d => d.id === id) || { name: id }).name).join(', ')}`;
+      const kindWord = kind === 'ships' ? 'Ship' : kind === 'species' ? 'Species' : 'Artifact', kv = [];
+      if (it.found && it.count) kv.push(`<span>Logged</span><span class="num">${GLYPH.times}${Fmt.n(it.count)}</span>`);
+      if (kind === 'ships' && it.cls) kv.push(`<span>Class</span><span class="ink">${esc(SHIP_CLASSES[it.cls] ? SHIP_CLASSES[it.cls].name : it.cls)}</span>`);
+      if (kind === 'ships' && it.fam && coDef(it.fam)) kv.push(`<span>Operator</span><span class="ink">${esc(coDef(it.fam).name)}</span>`);
+      if (kind !== 'ships' && it.fam) kv.push(`<span>Sector</span><span class="ink">${esc((sectorList().find(d => d.id === it.fam) || { name: it.fam }).name)}</span>`);
+      if (how) kv.push(`<span>${it.found ? 'Found by' : 'How to find'}</span><span class="ink">${esc(how)}</span>`);
+      Overlays.sheet({ id: 'registry', hue: 'rose', html: `<div class="reg-detail" style="--hue:${hue}"><div class="reg-art">${img || silhouette(kind, it, 0, it.found, hue)}</div><div class="reg-main">` +
+        `<div class="sheet-kicker">${kindWord}${it.rarity ? ` ${MID} ${esc(it.rarity)}` : ''}</div><h2 class="sheet-title">${it.found ? esc(it.name) : 'Unknown'}</h2>` +
+        (it.found && it.lore ? `<p class="sheet-lead reg-lore">${esc(it.lore).replace(/\n/g, '<br>')}</p>` : `<p class="sheet-lead">Not yet catalogued.${how ? '' : ' Keep serving ships and launching expeditions.'}</p>`) +
+        (kv.length ? `<div class="kv tight">${kv.join('')}</div>` : '') + `</div></div>`, actions: [{ id: 'ok', label: 'Close', ghost: true }] });
+    };
+    const detail = (kind, id) => { const col = ctx.meta.collection(); openDetail(kind, (col[kind] || []).find(i => i.id === id)); };
+    const setTab = id => { tab = ['ships', 'species', 'artifacts'].includes(id) ? id : 'ships'; F.setTab(tab); render(); };
+    if (F.tabs) F.tabs.addEventListener('click', e => { const b = e.target.closest('.ptab'); if (!b) return; setTab(b.dataset.tab); ctx.sound.click(); });
+    F.body.addEventListener('click', e => { const c = e.target.closest('.sil-card[data-item]'); if (c) { ctx.sound.click(); detail(tab, c.dataset.item); } });
+    F.body.addEventListener('keydown', e => { const c = e.target.closest && e.target.closest('.sil-card[data-item]'); if (c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); detail(tab, c.dataset.item); } });
     render();
-    return { update: render, destroy() { } };
+    return { update: render, destroy() { }, setTab, detail };
   },
 
   // ---------------------------------------------------------- Store (7.3)
@@ -862,13 +912,13 @@ const Panels = {
     const F = frame(host, { id: 'store', title: 'Store', sub: '' }, ctx), sig = {};
     const render = () => {
       const cat = ctx.store.catalog(), mode = ctx.store.mode();
-      F.setSub(`${Fmt.n(ctx.meta.am())} AM in the vault ${MID} ${mode === 'stripe' ? 'secure checkout' : 'sandbox'}`);
+      F.setSub(`${Art.img('icons', 'antimatter', 14, { alt: '' })}${Fmt.n(ctx.meta.am())} AM in the vault ${MID} ${mode === 'stripe' ? 'secure checkout' : 'sandbox'}`);
       const am = cat.filter(i => i.kind === 'am'), boosts = cat.filter(i => i.kind === 'credits' || i.kind === 'boost'), passes = cat.filter(i => i.kind === 'pass'), cosm = cat.filter(i => i.kind === 'cosmetic');
       let h = mode !== 'stripe' ? `<div class="ribbon"><i class="sq"></i>Test mode. Purchases are free and local until Stripe is connected.</div>` : '';
-      h += `<div class="store-hero"><i class="spine"></i><div class="store-hero-head"><span class="store-hero-ic">${icon('am', 28)}</span><div><div class="store-hero-title">Antimatter</div><p class="body">Skip waits, bring crews home early and open sectors on your own schedule. Earned by play, or bought here.</p></div></div>` +
+      h += `<div class="store-hero"><i class="spine"></i><div class="store-hero-head"><span class="store-hero-ic">${Art.img('icons', 'antimatter', 48, { alt: 'Antimatter', fallback: icon('am', 28) })}</span><div><div class="store-hero-title">Antimatter</div><p class="body">Skip waits, bring crews home early and open sectors on your own schedule. Earned by play, or bought here.</p></div></div>` +
         `<div class="am-tiles">${am.map(i => tile(i)).join('')}</div></div>`;
       const relief = (typeof TIMERS !== 'undefined' && TIMERS.RELIEF_CONVOY) || { am: 10, minutes: 30 };
-      const reliefRow = `<div class="sku" style="--hue:var(--am)"><i class="spine"></i><span class="sku-ic">${icon('credits', 20)}</span><div class="sku-main"><span class="sku-name">Relief convoy</span><span class="sku-desc">${relief.minutes} minutes of your whole station's rate, delivered now, paid with Antimatter you already hold.</span></div><button type="button" class="btn am" data-act="relief">${icon('am', 14)}<span>${relief.am} AM</span></button></div>`;
+      const reliefRow = `<div class="sku" style="--hue:var(--am)"><i class="spine"></i><span class="sku-ic">${Art.img('icons', 'credits', 36, { alt: '', fallback: icon('credits', 20) })}</span><div class="sku-main"><span class="sku-name">Relief convoy</span><span class="sku-desc">${relief.minutes} minutes of your whole station's rate, delivered now, paid with Antimatter you already hold.</span></div><button type="button" class="btn am" data-act="relief">${icon('am', 14)}<span>${relief.am} AM</span></button></div>`;
       h += shelf('Boosts', 'credits now', { hue: 'var(--amber)' }); h += `<div class="sku-list">${boosts.map(i => row(i, 'amber')).join('')}${reliefRow}</div>`;
       if (passes.length || cosm.length) { h += shelf('Passes and cosmetics', 'liveries show on your station', { hue: 'var(--rose)' }); h += `<div class="sku-list">${[...passes, ...cosm].map(i => row(i, i.kind === 'pass' ? 'am' : 'rose')).join('')}</div>`; }
       h += shelf('Restore purchases', null, { hue: 'var(--ice)' });
@@ -882,10 +932,10 @@ const Panels = {
     const tile = i => {
       const raw = rawOf(i.sku), bonus = raw.bonusPct || 0;
       return `<button type="button" class="am-tile${i.badge ? ' lifted' : ''}${i.owned ? ' owned' : ''}" data-sku="${esc(i.sku)}"${i.owned ? ' disabled' : ''} aria-label="${esc(i.title)} for ${esc(i.priceLabel)}"><i class="spine"></i>${i.badge ? `<span class="am-badge">${esc(i.badge)}</span>` : ''}` +
-        `<span class="am-ic">${icon('am', 22)}</span><span class="am-amount num">${Fmt.n(amOf(i))}</span><span class="am-lbl">AM${bonus ? ` <span class="c-good">+${bonus}%</span>` : ''}</span><span class="am-price num">${esc(i.priceLabel || '')}</span></button>`;
+        `<span class="am-ic">${Art.img('icons', 'antimatter', 36, { alt: '', fallback: icon('am', 22) })}</span><span class="am-amount num">${Fmt.n(amOf(i))}</span><span class="am-lbl">AM${bonus ? ` <span class="c-good">+${bonus}%</span>` : ''}</span><span class="am-price num">${esc(i.priceLabel || '')}</span></button>`;
     };
     // A5: cosmetics are live (the engine renders liveries); an owned cosmetic row links to the Livery shelf in Settings
-    const row = (i, hue) => `<div class="sku${i.owned ? ' owned' : ''}" style="--hue:var(--${hue})"><i class="spine"></i><span class="sku-ic">${icon(i.kind === 'pass' ? 'map' : i.kind === 'cosmetic' ? 'ship' : 'credits', 20)}</span>` +
+    const row = (i, hue) => `<div class="sku${i.owned ? ' owned' : ''}" style="--hue:var(--${hue})"><i class="spine"></i><span class="sku-ic">${i.kind === 'pass' || i.kind === 'cosmetic' ? icon(i.kind === 'pass' ? 'map' : 'ship', 20) : Art.img('icons', 'credits', 36, { alt: '', fallback: icon('credits', 20) })}</span>` +
       `<div class="sku-main"><span class="sku-name">${esc(i.title || i.sku)}</span><span class="sku-desc">${esc(i.desc || '')}</span></div>` +
       (i.owned ? `<span class="chip good" data-shape="up">Owned</span>${i.kind === 'cosmetic' ? `<button type="button" class="btn ghost" data-act="liveries" title="Choose a livery in Settings">${icon('settings', 14)}<span>Choose</span></button>` : ''}` : `<button type="button" class="btn${hue === 'am' ? ' am' : ' primary'}" data-sku="${esc(i.sku)}">${esc(i.priceLabel || 'Buy')}</button>`) + `</div>`;
     F.body.addEventListener('click', e => {

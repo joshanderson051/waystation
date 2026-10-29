@@ -60,6 +60,7 @@
   <div class="title-band glass"><i class="sweep"></i>
     <h1 class="wordmark hero">Waystation</h1>
     <div class="title-sub">Station commissioning</div>
+    <div class="title-loading" id="title-loading" hidden><i class="pulse-dot"></i><span id="title-loading-text">Lighting the station</span></div>
     <div class="title-account" id="title-account"></div>
   </div>
   <div class="commission glass cut" data-hue="amber"><i class="spine"></i>
@@ -67,7 +68,7 @@
       <button type="button" id="btn-resume" class="resume-card">
         <canvas id="title-thumb" width="200" height="120" aria-hidden="true"></canvas>
         <span class="resume-main">
-          <span id="resume-rank" class="resume-rank">Commander</span>
+          <span class="resume-rank-row"><img id="resume-badge" class="resume-badge" hidden width="44" height="44" alt="" decoding="async"><span id="resume-rank" class="resume-rank">Commander</span></span>
           <span id="resume-name" class="resume-name">&mdash;</span>
           <span id="resume-meta" class="resume-meta"></span>
           <span class="resume-cta">Resume <span class="ic-slot" data-icon="chevron-right"></span></span>
@@ -115,6 +116,8 @@
   <div class="row"><button data-h="acct:portal-login">portal sign in</button><button data-h="acct:portal-signup">create account</button><button data-h="acct:portal-recover">recover</button><button data-h="acct:portal-error">inline error</button><button data-h="acct:portal-busy">spinner</button><button data-h="acct:recovery">recovery sheet</button><button data-h="acct:chooser">chooser</button><button data-h="acct:signed-in">signed in</button><button data-h="acct:syncing">syncing</button><button data-h="acct:offline">offline</button><button data-h="acct:error">error</button><button data-h="acct:signed-out">signed out</button><button data-h="acct:unavailable">toggle unavailable</button></div>
   <h4>Livery</h4>
   <div class="row"><button data-h="livery:own">own them all</button><button data-h="livery:token">+1 token</button><button data-h="livery:sable">apply sable</button><button data-h="livery:founder">apply founder</button><button data-h="livery:default">apply default</button></div>
+  <h4>Art (A6)</h4>
+  <div class="row"><button data-h="art:registry-ships">registry ships</button><button data-h="art:registry-species">species</button><button data-h="art:registry-artifacts">artifacts</button><button data-h="art:detail-ship">detail ship</button><button data-h="art:detail-species">detail species</button><button data-h="art:detail-unfound">detail unfound</button><button data-h="art:map-sable">map sable</button><button data-h="art:map-aurelia">map aurelia</button><button data-h="art:toast-trade">trade toast</button></div>
   <h4>Tour</h4>
   <div class="row" id="h-tour"><button data-h="tour:start">start</button><button data-h="tour:next">next</button><button data-h="tour:skip">skip</button></div>
   <h4>State</h4>
@@ -139,6 +142,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const fmt = n => Math.round(n).toLocaleString('en-US');
 </script>
 <script src="../js/data2.js"></script>
+<script src="../js/artpack.js"></script>
 <script src="../js/art.js"></script>
 
 <!-- ================================================================
@@ -146,6 +150,7 @@ const fmt = n => Math.round(n).toLocaleString('en-US');
      ================================================================ -->
 <script>
 'use strict';
+ARTPACK.base = '../assets/art/';   // A6: the harness lives in play/dev/, the pack in play/assets/art/
 const HLOG = [];
 function hlog(...a) { const s = a.map(x => typeof x === 'object' ? JSON.stringify(x) : String(x)).join(' '); HLOG.unshift(s); if (HLOG.length > 60) HLOG.length = 60; const el = document.getElementById('h-log'); if (el) el.textContent = HLOG.join('\n'); }
 const NOW0 = Date.now();
@@ -373,6 +378,9 @@ const Meta = {
 const Engine = {
   host: null, canvas: null, ctx: null, listeners: {}, placing: null, selected: null, hover: null,
   perf: { fps: 60, tier: 2 }, _avoid: null, _focus: null, _stars: [],
+  // A6.2 texture preload as the real engine exposes it: 24 module textures over 1.2 s (?loading=hold parks it at 62%, ?loading=off skips it)
+  _loadT0: performance.now(),
+  get loading() { const q = new URLSearchParams(location.search).get('loading'); const pct = q === 'hold' ? 62 : q === 'off' ? 100 : Math.min(100, (performance.now() - this._loadT0) / 12); return { done: Math.round(pct / 100 * 24), total: 24, pct }; },
   camera: {
     zoom: 1, x: 0, y: 0, min: .55, max: 2.6,
     focusCell(r, c, o) { hlog('camera.focusCell', r, c, o); Engine._focus = { r, c, t: performance.now() }; },
@@ -529,6 +537,7 @@ const Account = {
   S.grid[2][5] = { id: 'shipyard', built: 41 }; S.cells['2,5'] = { lvl: 1, bank: 0, readyAt: now + 65 * 60000, builtAt: now - 25 * 60000, totalMs: 90 * 60000, at: now };
   Sim.spawnShip('kestrel', 'courier', 'docked', 4, 3); Sim.spawnShip('halvorsen', 'hauler', 'docked', 4, 11); Sim.spawnShip('meridian', 'freighter', 'approach', 1, 7); Sim.spawnShip('tidewater', 'hauler', 'queue', 8, 12);
   S.ships[0].trades = ['D041 sold 30 alloy for 1,240', 'D041 bought 12 grain for 310'];
+  S.ships[2].named = 'green_serpent';   // A6.2: the approaching Meridian freighter rolled a named render
   S.residents = 18;
 
   // ?fresh=1: a just-commissioned station (hub only, no ships served, tour never run), so UI.start launches the tour by itself
@@ -618,6 +627,15 @@ const Account = {
     'livery:founder': () => { Meta._liveryOwned.add('founder'); Meta.setLivery('founder'); UI.refresh(); },
     'livery:default': () => { Meta.setLivery('default'); UI.refresh(); },
     'phone:more': () => UI.openMore(), 'phone:menu': () => UI.openMenu(), 'phone:peek': () => UI.setPeek(true), 'phone:lift': () => UI.setPeek(false),
+    'art:registry-ships': () => { UI.openPanel('registry'); UI._inst.setTab('ships'); },
+    'art:registry-species': () => { UI.openPanel('registry'); UI._inst.setTab('species'); },
+    'art:registry-artifacts': () => { UI.openPanel('registry'); UI._inst.setTab('artifacts'); },
+    'art:detail-ship': () => { UI.openPanel('registry'); UI._inst.detail('ships', 'kestrel_swift'); },
+    'art:detail-species': () => { UI.openPanel('registry'); UI._inst.setTab('species'); UI._inst.detail('species', 'lantern_moth'); },
+    'art:detail-unfound': () => { UI.openPanel('registry'); UI._inst.setTab('artifacts'); UI._inst.detail('artifacts', 'gate_resonator'); },
+    'art:map-sable': () => { UI.openPanel('map'); UI._inst.pick('sable'); },
+    'art:map-aurelia': () => { UI.openPanel('map'); UI._inst.pick('aurelia'); },
+    'art:toast-trade': () => UI.toast('Halvorsen hauler sold 30 Raw Ore for 1,240', 'good'),
   };
   bar.addEventListener('click', e => {
     const b = e.target.closest('button[data-h]'); if (!b) return;
@@ -633,9 +651,10 @@ const Account = {
   function over(fg, a, bg) { return fg.map((v, i) => Math.round(v * a + bg[i] * (1 - a))); }
   function ratio(a, b) { const l1 = lum(a), l2 = lum(b); return (Math.max(l1, l2) + .05) / (Math.min(l1, l2) + .05); }
   const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-  const glass = over([10, 15, 30], .72, hex('#0B1226')), glass2 = over([16, 23, 44], .78, glass), glassDark = over([10, 15, 30], .72, hex('#03040A'));
-  const rows = [['body --ink-2 on glass', ratio(hex('#A3A7B0'), glass), 7], ['body --ink-2 on card', ratio(hex('#A3A7B0'), glass2), 7], ['--ink on glass', ratio(hex('#E6E8EC'), glass), 7],
-    ['label --ink-3 on glass', ratio(hex('#6B707C'), glass), 4.5], ['--amber-hi on glass', ratio(hex('#FFC46A'), glass), 7], ['--ice on glass', ratio(hex('#8FD3E8'), glass), 7], ['--am-hi on glass', ratio(hex('#DDB8FF'), glass), 7], ['--ink-2 on glass/space-0', ratio(hex('#A3A7B0'), glassDark), 7]];
+  // A6.3 glass tokens: --glass rgba(14,17,22,.76), --glass-2 rgba(20,24,31,.8), --glass-3 rgba(28,33,42,.86)
+  const glass = over([14, 17, 22], .76, hex('#0B1226')), glass2 = over([20, 24, 31], .8, glass), glass3 = over([28, 33, 42], .86, glass), glassDark = over([14, 17, 22], .76, hex('#03040A'));
+  const rows = [['body --ink-2 on glass', ratio(hex('#A3A7B0'), glass), 7], ['body --ink-2 on card', ratio(hex('#A3A7B0'), glass2), 7], ['body --ink-2 on glass-3 (scoped #A8ACB5)', ratio(hex('#A8ACB5'), glass3), 7], ['--ink on glass', ratio(hex('#E6E8EC'), glass), 7],
+    ['label --ink-3 on glass', ratio(hex('#6B707C'), glass), 4.5], ['--amber-hi on glass', ratio(hex('#FFC46A'), glass), 7], ['--ice on glass', ratio(hex('#8FD3E8'), glass), 7], ['--cyan on glass', ratio(hex('#5EC4FF'), glass), 7], ['--am-hi on glass', ratio(hex('#DDB8FF'), glass), 7], ['--ink-2 on glass/space-0', ratio(hex('#A3A7B0'), glassDark), 7]];
   document.getElementById('h-contrast').innerHTML = rows.map(([n, r, min]) => `${n}: <b class="${r >= min ? '' : 'bad'}">${r.toFixed(1)}:1</b>`).join('<br>');
   window.HARNESS = { contrast: rows.map(([n, r]) => ({ n, r: +r.toFixed(2) })), fire: k => (H[k] || (() => {}))(), showTitle };
 })();

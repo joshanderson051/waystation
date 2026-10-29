@@ -88,7 +88,19 @@
     if (Engine.camera) call(Engine.camera, 'drift', false);
   }
 
+  // A6: the world's textures preload at Engine.init; commissioning waits for them (the HUD disables the button meanwhile)
+  function artReady() { const L = Engine && Engine.loading; return !L || L.pct == null || L.pct >= 100; }
+  let commissionPending = false;
   function commission() {
+    if (!artReady()) {
+      if (!commissionPending) {
+        commissionPending = true;
+        call(UI, 'toast', 'Lighting the station…', 'info');
+        const once = () => { if (artReady()) { call(Engine, 'off', 'loading', once); commissionPending = false; commission(); } };
+        if (has(Engine, 'on')) Engine.on('loading', once); else setTimeout(() => { commissionPending = false; commission(); }, 800);
+      }
+      return;
+    }
     const name = ((T.name && T.name.value.trim()) || randomName()).slice(0, 28);
     if (T.mode === 'new') {
       // NEW PROFILE: Meta rebuilds a fresh profile and home station and emits sector 'switched',
