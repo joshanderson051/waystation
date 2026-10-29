@@ -24,6 +24,7 @@
 const STRIPE_API = 'https://api.stripe.com';
 const SIGNATURE_TOLERANCE_S = 5 * 60;                     // 7.4: 5-minute tolerance on webhook timestamps
 const RESTORE_PAGE = 100;                                 // Stripe list limit (max 100); older sessions are not scanned
+const STATEMENT_SUFFIX = 'PORTSOLACE';                    // card statements read "PRIME SIGN* PORTSOLACE" (22 chars max with the prefix)
 
 const PLAYER_RE  = /^[A-Za-z0-9_-]{8,64}$/;               // uuid or similar
 const SESSION_RE = /^cs_(test|live)_[A-Za-z0-9]{8,}$/;
@@ -241,6 +242,7 @@ async function checkout(request, url, env) {
   form.set('metadata[playerId]', playerId);
   form.set('success_url', `${returnUrl}?purchase=success&session_id={CHECKOUT_SESSION_ID}`);
   form.set('cancel_url', `${returnUrl}?purchase=cancel`);
+  form.set('payment_intent_data[statement_descriptor_suffix]', STATEMENT_SUFFIX);   // the merchant is a marketing LLC: name the game
 
   const session = await stripe(env, 'POST', '/v1/checkout/sessions', form);
   if (!session.url) throw new HttpError(502, 'stripe', 'Stripe created a session without a checkout URL.');

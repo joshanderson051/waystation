@@ -313,6 +313,11 @@ tax code to a digital-goods or video-game code your accountant agrees with.
 - **Refunds**: refund in the Stripe dashboard. The game does **not** remove Antimatter or passes automatically
   after a refund; this is deliberate (the player may have spent it). Delete the KV key `grant:<session id>`
   in the Cloudflare dashboard if you want "Restore purchases" to stop re-applying that item.
+- **Card statements**: every Checkout Session sends `payment_intent_data[statement_descriptor_suffix]` =
+  `PORTSOLACE` (`STATEMENT_SUFFIX` in `src/index.js`), so buyers' statements read `PRIME SIGN* PORTSOLACE`
+  rather than only the LLC's name, which heads off "I don't recognise this charge" disputes. `PRIME SIGN` is the
+  account's shortened descriptor (Stripe dashboard → Settings → Business → Public details). Prefix, `* ` and
+  suffix together may not exceed 22 characters, so the suffix stays at 10 or fewer while the prefix is 10.
 - **Prices**: change the amount in Stripe (this creates a new Price ID), update `PRICES`, deploy. Also ask
   the game's maintainer to update the catalog text (`STORE_CATALOG` in `waystation/play/js/data2.js`).
 - **Costs**: Cloudflare's free plan allows 100,000 requests per day; a purchase uses two or three. Stripe

@@ -169,6 +169,21 @@ describe('worker: POST /checkout', () => {
     assert.equal(call.body.get('cancel_url'), `${RETURN_URL}?purchase=cancel`);
   });
 
+  test('every session names the game on the card statement', async () => {
+    const env = makeEnv();
+    const stripe = stripeMock(); globalThis.fetch = stripe;
+    for (const sku of ['am_50', 'am_140']) {
+      await handle(req('/checkout', { method: 'POST', body: { sku, playerId: PLAYER, returnUrl: RETURN_URL } }), env);
+    }
+    assert.equal(stripe.calls.length, 2);
+    for (const call of stripe.calls) {
+      const suffix = call.body.get('payment_intent_data[statement_descriptor_suffix]');
+      assert.equal(suffix, 'PORTSOLACE');
+      assert.ok('PRIME SIGN'.length + 2 + suffix.length <= 22, 'prefix + "* " + suffix fits the 22-character limit');
+      assert.doesNotMatch(suffix, /[<>\\'"*]/, 'no characters Stripe rejects in a descriptor');
+    }
+  });
+
   test('strips any query from returnUrl and rejects foreign origins', async () => {
     const env = makeEnv();
     const stripe = stripeMock(); globalThis.fetch = stripe;
