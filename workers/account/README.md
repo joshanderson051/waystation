@@ -248,8 +248,8 @@ rank}, profile}`; `rl:{bucket}:{ip}` and `rl:forgotEmail:{email}` → `{count, r
 
 ### Security notes
 
-- Passwords and recovery phrases are hashed with PBKDF2-SHA256 (210,000 iterations, a random 16-byte salt
-  per secret, plus the server-side pepper). Nothing reversible is stored.
+- Passwords and recovery phrases are hashed with PBKDF2-SHA256 (100,000 iterations, the most the Workers
+  runtime allows, a random 16-byte salt per secret, plus the server-side pepper). Nothing reversible is stored.
 - Sign-in tokens are 32 random bytes; KV holds only their SHA-256. A recovery or a reset bumps the account's
   token generation, which invalidates every token issued before it.
 - Reset links are 32 random bytes too; KV holds only their SHA-256, for 30 minutes, and deletes the record

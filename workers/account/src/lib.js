@@ -4,7 +4,10 @@
 // (workerd rejects exported constants at start-up). Everything here is side-effect free and unit-tested.
 // ============================================================
 
-export const PBKDF2_ITER = 210000;
+// The Workers runtime refuses PBKDF2 above 100,000 iterations ("iteration counts above 100000 are not supported"),
+// although Node accepts more; 100,000 is therefore the ceiling here, and the PEPPER secret carries the rest.
+export const PBKDF2_ITER = 100000;
+export const WORKERS_PBKDF2_MAX = 100000;
 export const SALT_BYTES = 16;
 export const TOKEN_BYTES = 32;
 export const TOKEN_TTL_S = 30 * 24 * 3600;             // A2.1: sliding 30 days

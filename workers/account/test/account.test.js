@@ -1,7 +1,7 @@
 // ============================================================
 // WAYSTATION — account worker tests (DESIGN2.md A2.1)
 // Run with `npm test` in workers/account (node --test test/). Exercises handle(request, env, {now}) with an
-// in-memory KV stub. Real PBKDF2 at 210,000 iterations (about 25 ms per derivation in Node).
+// in-memory KV stub. Real PBKDF2 at 100,000 iterations (about 12 ms per derivation in Node).
 // ============================================================
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import worker, { handle } from '../src/index.js';
 import {
   derive, hashSecret, verifySecret, makePhrase, normalisePhrase, summarise, timingSafeEqual, readBodyBytes,
-  WORDS, PBKDF2_ITER, TOKEN_TTL_S, TOKEN_REFRESH_MS, SAVE_MAX_BYTES, LIMITS, PHRASE_WORDS,
+  WORDS, PBKDF2_ITER, WORKERS_PBKDF2_MAX, TOKEN_TTL_S, TOKEN_REFRESH_MS, SAVE_MAX_BYTES, LIMITS, PHRASE_WORDS,
 } from '../src/lib.js';
 
 const ORIGIN = 'https://joshanderson051.github.io';
@@ -66,7 +66,7 @@ describe('configuration and CORS', () => {
     assert.equal(status, 200);
     assert.equal(data.ok, true); assert.equal(data.kv, true); assert.equal(data.pepper, true);
     assert.deepEqual(data.allowedOrigins, [ORIGIN.toLowerCase(), 'http://localhost:8794']);
-    assert.equal(data.pbkdf2Iterations, 210000); assert.equal(data.tokenTtlDays, 30); assert.equal(data.words, 512);
+    assert.equal(data.pbkdf2Iterations, 100000); assert.equal(data.tokenTtlDays, 30); assert.equal(data.words, 512);
     assert.equal(JSON.stringify(data).includes(PEPPER), false);
     const bare = await read(await handle(req('/health'), makeEnv({ PEPPER: '' })));
     assert.equal(bare.data.pepper, false);
@@ -102,19 +102,24 @@ describe('configuration and CORS', () => {
 
 // ============================================================ hashing primitives
 describe('PBKDF2, phrases and summaries', () => {
-  test('PBKDF2-SHA256 vector is stable across runs (secret + pepper, 210k iterations)', async () => {
+  test('PBKDF2-SHA256 vector is stable across runs (secret + pepper, 100k iterations, within the Workers cap)', async () => {
     const salt = Uint8Array.from({ length: 16 }, (_, i) => i);
     const hex = Array.from(await derive('correct horse battery', 'pepper', salt, PBKDF2_ITER), b => b.toString(16).padStart(2, '0')).join('');
-    assert.equal(hex, '2a67e22ae70f772830d45db55870228d444b6b989dffb07c7048147a1d73cd8d');
+    assert.equal(hex, 'aff02e515d3e189a294d71648cd822d2729dddd975dd19071b04c613fb39468c');
     const again = Array.from(await derive('correct horse battery', 'pepper', salt, PBKDF2_ITER), b => b.toString(16).padStart(2, '0')).join('');
     assert.equal(again, hex);
     const otherPepper = Array.from(await derive('correct horse battery', 'pepper2', salt, PBKDF2_ITER), b => b.toString(16).padStart(2, '0')).join('');
     assert.notEqual(otherPepper, hex);
   });
 
+  test('the iteration count stays within what the Workers runtime accepts (Node would allow more)', () => {
+    assert.equal(WORKERS_PBKDF2_MAX, 100000);
+    assert.ok(PBKDF2_ITER <= WORKERS_PBKDF2_MAX, `PBKDF2_ITER ${PBKDF2_ITER} > ${WORKERS_PBKDF2_MAX}: every sign-up would fail with a 500 on Cloudflare`);
+  });
+
   test('hashSecret / verifySecret round trip with a random salt', async () => {
     const rec = await hashSecret('hunter2-but-longer', PEPPER);
-    assert.equal(rec.iter, 210000);
+    assert.equal(rec.iter, 100000);
     assert.match(rec.salt, /^[A-Za-z0-9_-]{22}$/); assert.match(rec.hash, /^[A-Za-z0-9_-]{43}$/);
     assert.equal(await verifySecret('hunter2-but-longer', PEPPER, rec), true);
     assert.equal(await verifySecret('hunter2-but-longer', 'other-pepper-value', rec), false);
@@ -157,7 +162,7 @@ describe('POST /signup and POST /login', () => {
     assert.equal(words.length, 10); assert.ok(words.every(w => WORDS.includes(w)));
     const stored = JSON.parse(env.ACCOUNTS.map.get('user:commander@example.com'));
     assert.equal(stored.id, data.user.id); assert.equal(stored.tokenGen, 1);
-    assert.equal(stored.pw.iter, 210000); assert.ok(stored.pw.salt && stored.pw.hash); assert.ok(stored.rec.salt && stored.rec.hash);
+    assert.equal(stored.pw.iter, 100000); assert.ok(stored.pw.salt && stored.pw.hash); assert.ok(stored.rec.salt && stored.rec.hash);
     const raw = env.ACCOUNTS.map.get('user:commander@example.com');
     assert.equal(raw.includes(PASSWORD), false); assert.equal(raw.includes(data.recovery), false); assert.equal(raw.includes(words[0]), false);
     const tokKeys = [...env.ACCOUNTS.map.keys()].filter(k => k.startsWith('tok:'));

@@ -18,7 +18,7 @@
 //   DELETE /account   (Bearer) {password}                 -> {ok}
 //   GET    /health                                        -> configuration summary (no secrets)
 //
-// Passwords and recovery phrases: PBKDF2-SHA256, 210,000 iterations, 16-byte salt, PEPPER appended to the
+// Passwords and recovery phrases: PBKDF2-SHA256, 100,000 iterations (the Workers maximum), 16-byte salt, PEPPER appended to the
 // secret. Tokens: 32 random bytes base64url, stored by their SHA-256 with a sliding 30-day TTL and the
 // user's tokenGen (bumped by /recover and /reset to revoke every older token).
 //
