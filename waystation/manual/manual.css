@@ -181,7 +181,7 @@ table.data:not(.roster-t) .mod.tight { grid-template-columns: 28px auto; }
   .manual .wrap { grid-template-columns: 1fr; gap: 0; }
   .toc { position: static; max-height: none; overflow: visible; padding: 0 0 8px; margin-bottom: 24px; }
   .toc ol { border-left: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-  .toc a { display: inline-flex; gap: 6px; align-items: baseline; padding: 0 10px; min-height: 30px; margin: 0; border: 1px solid var(--edge); border-left-width: 1px; background: var(--glass-2); border-radius: 3px; font-size: 13px; }
+  .toc a { display: inline-flex; gap: 6px; align-items: baseline; padding: 0 10px; min-height: 32px; margin: 0; border: 1px solid var(--edge); border-left-width: 1px; background: var(--glass-2); border-radius: 3px; font-size: 13px; }
   .toc a.active { border-color: var(--amber-dim); box-shadow: none; background: var(--amber-ghost); }
   .toc-foot { display: none; }
 }

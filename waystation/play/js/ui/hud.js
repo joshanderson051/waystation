@@ -643,7 +643,7 @@ const UI = {
     if (pl && MODULES[pl]) {
       const hv = EngineAdapter.hover();
       if (hv && has(Sim, 'canPlace')) { const chk = Sim.canPlace(pl, hv.r, hv.c); if (!chk.ok) return this.reasonSentence(chk.why, pl); }
-      return this.phone ? `Placing ${MODULES[pl].name}: tap a bracketed cell beside the station.` : `Placing ${MODULES[pl].name}: click a bracketed cell. Right-click or Esc to stop.`;
+      return this.phone ? `Placing ${MODULES[pl].name}: tap a bracketed cell.` : `Placing ${MODULES[pl].name}: click a bracketed cell. Right-click or Esc to stop.`;
     }
     const hov = EngineAdapter.hover();
     if (hov && !MetaAdapter.inPlot(hov.r, hov.c)) return 'Unclaimed space: click it to clear the next ring.';
@@ -756,6 +756,33 @@ const UI = {
     this._peek = on;
     const host = $('#panel-host'); if (host) host.toggleAttribute('data-peek', on);
     document.body.toggleAttribute('data-peek', on);
+    if (on) requestAnimationFrame(() => this.frameWorldBand());
+  },
+  // A4: with the sheet peeking (placing), glide the camera so the station sits in the free band of world between the
+  // status bar (and condition strip) and the placing strip / peek; in landscape that band is only ~180 px tall
+  frameWorldBand() {
+    const cam = EngineAdapter.camera(), s = S();
+    if (!this.phone || !this._peek || !cam || !s || !has(Sim, 'cells')) return;
+    const sb = $('#statusbar'), cond = $('#condition'), strip = $('#contextbar'), host = $('#world');
+    const hr = host ? host.getBoundingClientRect() : { left: 0, top: 0 };
+    let top = sb ? sb.getBoundingClientRect().bottom : 0;
+    if (cond && document.body.hasAttribute('data-condition')) top = Math.max(top, cond.getBoundingClientRect().bottom);
+    let bottom = innerHeight - (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dock-h')) || 58) - (parseFloat(getComputedStyle($('#panel-host') || document.body).getPropertyValue('--peek-h')) || 74);
+    if (strip && getComputedStyle(strip).display !== 'none') bottom = Math.min(bottom, strip.getBoundingClientRect().top);
+    if (bottom - top < 60) return;
+    let y0 = Infinity, y1 = -Infinity;
+    for (const { r, c } of Sim.cells()) { const p = EngineAdapter.cellToScreen(r, c); if (p) { y0 = Math.min(y0, hr.top + p.y); y1 = Math.max(y1, hr.top + p.y); } }
+    if (!Number.isFinite(y0)) return;
+    const dy = (y0 + y1) / 2 - (top + bottom) / 2;          // screen px the station centre sits below the band's centre
+    if (Math.abs(dy) < 12) return;
+    const z = cam.zoom || 1, from = cam.y, to = from + dy / z, ms = Motion.reduced() ? 0 : 320, t0 = performance.now();
+    cancelAnimationFrame(this._bandRaf);
+    const step = now => {
+      const k = ms ? Math.min(1, (now - t0) / ms) : 1, e = 1 - Math.pow(1 - k, 3);
+      cam.y = from + (to - from) * e;
+      if (k < 1 && this._peek) this._bandRaf = requestAnimationFrame(step);
+    };
+    this._bandRaf = requestAnimationFrame(step);
   },
   syncDock() {
     const more = $('.rail-btn[data-more]'); if (!more) return;

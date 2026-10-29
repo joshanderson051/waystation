@@ -261,4 +261,17 @@ img { max-width: 100%; }
 .teaser .tdesc { font: 400 13px/1.45 var(--font-body); color: var(--ink-2); }
 @media (max-width: 1000px) { .sectors { grid-template-columns: repeat(2, minmax(0, 1fr)); } .teaser { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .teaser { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 400px) { .sectors, .teaser { grid-template-columns: 1fr; } }
+/* phones (A4): two columns for the sector and registry strips (one column ran ~3,500 px at 390 wide), shelf tags wrap
+   under their label instead of cutting off, footer links and the brand are 32 px tap targets */
+@media (max-width: 640px) {
+  .shelf { flex-wrap: wrap; height: auto; min-height: 30px; padding: 8px 0 0; row-gap: 4px; white-space: normal; }
+  .shelf-tag { margin-left: 0; flex: 1 1 100%; white-space: normal; overflow: visible; text-overflow: clip; line-height: 15px; }
+  .sectors, .teaser { gap: 8px; }
+  .sectors li { padding: 8px 8px 12px; gap: 4px; }
+  .sectors .sname { font-size: 15px; line-height: 18px; }
+  .sectors .sdesc, .teaser .tdesc { font-size: 13px; line-height: 1.4; }
+  .teaser li { padding: 12px 8px 14px; }
+  .teaser img { width: 96px; height: 96px; }
+  .brand { min-height: 32px; justify-content: center; }
+  .foot a { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; min-width: 32px; }
+}

@@ -92,6 +92,7 @@ const SHOTS = [
   // A4 phone layout: 390x844 (iPhone 14 class) in full, 430x932 (Pro Max class) as a spot check
   ...phoneShots('phone', [390, 844]),
   ...phoneShots('phone430', [430, 932], true),
+  ...phoneShots('phone360', [360, 780], true),
 ];
 function phoneShots(tag, vp, brief) {
   const all = [
@@ -224,20 +225,23 @@ function artShots() {
     const sb = document.getElementById('statusbar'); if (sb && sb.scrollWidth > sb.clientWidth + 1) out.push(`statusbar scrollWidth ${sb.scrollWidth} > ${sb.clientWidth}`);
     return out;
   });
-  // A4 phone gates at 390x844: nothing wider than the viewport (page, bridge, each panel, the sheets, the title, the tour),
-  // no horizontal scroll inside a panel body, and every visible control at least 32px tall (the list is informational)
+  // A4 phone gates at 360x780, 390x844 and 430x932: nothing wider than the viewport (page, bridge, each panel, the sheets,
+  // the title, the tour), no horizontal scroll inside a panel body, every visible control at least 32px tall, and (informational)
+  // text cut off with an ellipsis
   const phoneGate = {};
   const PHONE_STATES = [['bridge', ''], ...PANELS.map(id => [`panel-${id}`, `panel:${id}`]), ['achievements', 'panel:achievements'], ['station-selected', 'select:bank'], ['placing', 'place:dock'], ['more', 'phone:more'], ['menu', 'phone:menu'],
     ['daily', 'sheet:daily'], ['away', 'sheet:away'], ['modal-event', 'modal:event'], ['plot-confirm', 'plot:confirm'], ['portal', 'acct:portal-signup'], ['chooser', 'acct:chooser'], ['title', 'title'], ['tour-1', 'tour:1'], ['tour-4', 'tour:4'], ['tour-13', 'tour:13']];
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
-  for (const [name, h] of PHONE_STATES) {
+  for (const [gw, gh] of [[360, 780], [390, 844], [430, 932]]) {
+  await page.setViewport({ width: gw, height: gh, deviceScaleFactor: 1 });
+  for (const [name0, h] of PHONE_STATES) {
+    const name = `${gw}:${name0}`;
     await page.goto(PAGE, { waitUntil: 'networkidle0' });
     await sleep(500);
     // the chooser's handler returns a promise that settles on a pick: fire without returning it
     if (h) { try { if (/^tour:\d+$/.test(h) || h.startsWith('panel:')) await page.$eval(`[data-h="${h}"]`, el => el.click()); else await page.evaluate(k => { window.HARNESS.fire(k); }, h); } catch (e) { errs.push(`PHONEGATE ${name}: ${e.message}`); } }
     await frames(page, 700);
     phoneGate[name] = await page.evaluate(() => {
-      const out = { wide: [], hscroll: [], short: [] }, W = innerWidth;
+      const out = { wide: [], hscroll: [], short: [], cut: [] }, W = innerWidth;
       if (document.documentElement.scrollWidth > W + 1) out.wide.push(`document scrollWidth ${document.documentElement.scrollWidth}`);
       const vis = el => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
       for (const el of document.querySelectorAll('#statusbar, #statusbar *, #rail, .rail-btn, #panel, #panel *, #contextbar, #notices, .toast, #sheet .sheet-box, #sheet .sheet-box *, #modal .box, #modal .box *, #title, #title *, .tour-callout, .tour-callout *, .cele-band, .cele-inner *')) {
@@ -250,16 +254,25 @@ function artShots() {
         if (!vis(el)) continue; const r = el.getBoundingClientRect();
         if (r.height < 31.5) out.short.push(`${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}.${(el.className || '').toString().trim().split(/\s+/).slice(0, 2).join('.')} h=${Math.round(r.height)}`);
       }
-      out.wide = [...new Set(out.wide)].slice(0, 12); out.short = [...new Set(out.short)].slice(0, 12);
+      for (const el of document.querySelectorAll('#statusbar *, .rail-btn *, #panel *, #sheet .sheet-box *, #modal .box *, #title *, .tour-callout *, .toast *, #contextbar *')) {
+        if (!vis(el) || !el.childNodes.length || ![...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) continue;
+        const cs = getComputedStyle(el);
+        if (cs.textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth + 1) out.cut.push(`${el.className || el.tagName}: "${el.textContent.trim().slice(0, 40)}"`);
+        else if (cs.webkitLineClamp && cs.webkitLineClamp !== 'none' && el.scrollHeight > el.clientHeight + 1) out.cut.push(`${el.className || el.tagName} (clamped): "${el.textContent.trim().slice(0, 40)}"`);
+      }
+      out.wide = [...new Set(out.wide)].slice(0, 12); out.short = [...new Set(out.short)].slice(0, 12); out.cut = [...new Set(out.cut)].slice(0, 16);
       return out;
     });
+  }
   }
   await browser.close();
   console.log('contrast', JSON.stringify(contrast));
   console.log('overflow@1180', JSON.stringify(overflow));
   const bad = Object.entries(phoneGate).filter(([, g]) => g.wide.length || g.hscroll.length);
-  console.log('phone@390 overflow', bad.length ? JSON.stringify(Object.fromEntries(bad), null, 1) : 'none');
+  console.log('phone overflow', bad.length ? JSON.stringify(Object.fromEntries(bad.map(([k, g]) => [k, { wide: g.wide, hscroll: g.hscroll }])), null, 1) : 'none');
   const short = Object.entries(phoneGate).filter(([, g]) => g.short.length);
-  console.log('phone@390 controls under 32px', short.length ? JSON.stringify(Object.fromEntries(short), null, 1) : 'none');
+  console.log('phone controls under 32px', short.length ? JSON.stringify(Object.fromEntries(short.map(([k, g]) => [k, g.short])), null, 1) : 'none');
+  const cut = Object.entries(phoneGate).filter(([, g]) => g.cut.length);
+  console.log('phone text cut off', cut.length ? JSON.stringify(Object.fromEntries(cut.map(([k, g]) => [k, g.cut])), null, 1) : 'none');
   console.log('errs', JSON.stringify([...new Set(errs)], null, 1));
 })().catch(e => { console.error(e); process.exit(1); });

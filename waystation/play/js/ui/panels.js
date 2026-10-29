@@ -373,7 +373,7 @@ const Panels = {
         for (const id of ids) {
           const d = MODULES[id], poor = s.credits < d.cost, sel = placing === id, count = T.counts[id] || 0;
           const cls = ['card', 'bcard', sel ? 'selected' : '', !unlocked ? 'locked' : poor ? 'poor' : ''].filter(Boolean).join(' ');
-          const desc = sel ? 'Click a bracketed cell. Right-click or Esc to stop.' : d.desc;
+          const desc = sel ? (ctx.ui.phone ? 'Tap a bracketed cell beside the station.' : 'Click a bracketed cell. Right-click or Esc to stop.') : d.desc;
           const r = modRate(id);
           const meta = unlocked
             ? `<span class="m" title="Credits banked per real minute">${icon('credits', 12)}+${r}/min</span><span class="m" title="Build time">${icon('clock', 12)}${Fmt.dur(modBuildMs(id, sIdx))}</span>` +
@@ -445,7 +445,7 @@ const Panels = {
         `<span>Power</span><span class="num">${T.used} / ${T.produced}${T.flare ? ' <span class="chip warn" data-shape="sq">Flare</span>' : ''}</span>` +
         `<span>Ships served</span><span class="num">${Fmt.n(s.stats.shipsServed)}</span><span>Cargo traded</span><span class="num">${Fmt.n(s.stats.cargoTraded)} units</span>` +
         `<span>Lifetime earnings</span><span class="num amber">${Fmt.n(s.stats.earned)}</span></div>`;
-      h += `<p class="idle">Click a module on the station to inspect, collect, upgrade or scrap it.</p>`;
+      h += `<p class="idle">${ctx.ui.phone ? 'Tap' : 'Click'} a module on the station to inspect, collect, upgrade or scrap it.</p>`;
       paint(F.body, h, sig, 'ov', ctx.meta);
     };
     const renderSelected = (s, sel, m) => {
@@ -521,12 +521,13 @@ const Panels = {
   // ---------------------------------------------------------- Market (6.4 → 14px rows)
   market(host, ctx) {
     const F = frame(host, { id: 'market', title: 'Market', sub: '' }, ctx), sig = {};
+    let openRow = null;   // A4: the good whose From / Wanted by line is open (tap or click a row)
     const render = () => {
       const s = ctx.state(); if (!s) return;
       const T = Sim.totals();
       const buyPct = Math.round((0.65 - T.margin) * 100), sellPct = Math.round((1.05 + T.margin) * 100);
       F.setSub(`Trade exchange ${MID} Storage ${Fmt.n(T.stockTotal)} / ${Fmt.n(T.storage)}`);
-      let h = `<p class="lead">Ships sell cargo into your warehouses at <span class="num">${buyPct}%</span> of market price and buy what their home world needs at <span class="num">${sellPct}%</span>. Hover a row for the worlds that want it.</p>`;
+      let h = `<p class="lead">Ships sell cargo into your warehouses at <span class="num">${buyPct}%</span> of market price and buy what their home world needs at <span class="num">${sellPct}%</span>. ${ctx.ui.phone ? 'Tap a row to see which worlds sell it and which want it.' : 'Hover or click a row for the worlds that want it.'}</p>`;
       const boom = s.fx.boom && s.day < s.fx.boom.until ? s.fx.boom : null, glut = s.fx.glut && s.day < s.fx.glut.until ? s.fx.glut : null;
       if (boom || glut) {
         h += `<div class="chips">`;
@@ -544,10 +545,11 @@ const Panels = {
         const from = Object.values(PLANETS).filter(pl => pl.exports.includes(g)).map(pl => pl.name).join(', ');
         const to = Object.values(PLANETS).filter(pl => pl.imports.includes(g)).map(pl => pl.name).join(', ');
         const dis = T.hasMarket ? '' : ' disabled';
-        h += `<tr${rowCls} title="From: ${esc(from)}&#10;Wanted by: ${esc(to || 'nobody nearby')}" style="--hue:${kindHue(G.kind)}"><td class="kind"><i></i></td><td class="icon">${Art.img('goods', g, 28, { alt: G.name, fallback: icon(g, 16) })}</td><td class="gname">${esc(G.name)}</td>` +
+        h += `<tr${rowCls} data-row="${g}" aria-expanded="${openRow === g}" title="From: ${esc(from)}&#10;Wanted by: ${esc(to || 'nobody nearby')}" style="--hue:${kindHue(G.kind)}"><td class="kind"><i></i></td><td class="icon">${Art.img('goods', g, 28, { alt: G.name, fallback: icon(g, 16) })}</td><td class="gname">${esc(G.name)}</td>` +
           `<td class="stock num">${stock}</td><td class="price num"><i class="tri ${tr}"></i><span class="prc">${p.toFixed(1)}</span>${mult}</td>` +
           `<td class="pol"><div class="seg small"><button type="button" data-g="${g}" data-k="buy" class="${pol.buy ? 'on' : ''}"${dis} title="Buy ${esc(G.name)} from ships">Buy</button><button type="button" data-g="${g}" data-k="sell" class="${pol.sell ? 'on' : ''}"${dis} title="Sell ${esc(G.name)} to ships">Sell</button></div></td>` +
-          `<td class="act"><button type="button" class="btn icon small danger dump" data-dump="${g}" title="Sell all to a passing broker at half price"${stock ? '' : ' disabled'}>${icon('dump', 14)}</button></td></tr>`;
+          `<td class="act"><button type="button" class="btn icon small danger dump" data-dump="${g}" title="Sell all to a passing broker at half price" aria-label="Sell all ${esc(G.name)} to a broker"${stock ? '' : ' disabled'}>${icon('dump', 14)}</button></td></tr>`;
+        if (openRow === g) h += `<tr class="mdetail" style="--hue:${kindHue(G.kind)}"><td class="kind"><i></i></td><td colspan="6"><span class="mdl">From</span> ${esc(from || 'nowhere nearby')}<br><span class="mdl">Wanted by</span> ${esc(to || 'nobody nearby')}</td></tr>`;
       }
       h += `</tbody></table>`;
       paint(F.body, h, sig, 'm');
@@ -556,6 +558,7 @@ const Panels = {
       const pol = e.target.closest('button[data-g][data-k]');
       if (pol) { if (pol.disabled) return; Sim.setPolicy(pol.dataset.g, pol.dataset.k, !ctx.state().policy[pol.dataset.g][pol.dataset.k]); ctx.sound.click(); return; }
       const dump = e.target.closest('button[data-dump]');
+      if (!dump) { const row = e.target.closest('tr[data-row]'); if (row) { openRow = openRow === row.dataset.row ? null : row.dataset.row; render(); return; } }
       if (dump && !dump.disabled) ctx.ui.confirm('Sell to a broker?', `Everything in stock of <b>${esc(GOODS[dump.dataset.dump].name)}</b> goes to a passing broker at half price.`, () => Sim.dumpStock(dump.dataset.dump), { yes: 'Sell all', danger: true });
     });
     render();

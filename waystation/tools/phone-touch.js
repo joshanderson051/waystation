@@ -134,7 +134,8 @@ const frames = (page, ms) => page.evaluate(ms => new Promise(res => { const t0 =
   const hubPt = await page.evaluate(() => { const { r, c } = Sim.state.hub; const p = Engine.cellToScreen(r, c); const hr = document.getElementById('world').getBoundingClientRect(); return { x: hr.left + p.x, y: hr.top + p.y }; });
   await page.touchscreen.tap(hubPt.x, hubPt.y);
   await frames(page, 500);
-  ok('tapping the hub opens the Station sheet on its card', await page.evaluate(() => UI.panel === 'station' && !!document.querySelector('#panel .card[data-mod="hub"]')), JSON.stringify(hubPt));
+  // A6: the selected module shows as a picture header (.mod-hero) rather than a card
+  ok('tapping the hub opens the Station sheet on its card', await page.evaluate(() => { const s = Engine.selected, h = Sim.state.hub; return UI.panel === 'station' && !!s && s.r === h.r && s.c === h.c && !!document.querySelector('#panel .mod-hero[data-fam="hub"], #panel .card[data-mod="hub"]'); }), JSON.stringify(hubPt));
   await shot('station-selected');
   if (await page.$('#panel .panel-close')) { await tap('#panel .panel-close'); await frames(page, 300); }
   ok('the close control shuts the sheet by tap', await page.evaluate(() => UI.panel === null));
@@ -150,14 +151,29 @@ const frames = (page, ms) => page.evaluate(ms => new Promise(res => { const t0 =
   });
   await frames(page, 700);
   if (bankReady && bankReady.ready) {
-    // the chip floats 18 world units above the plate's top edge; its own hit disc is 16 world units (16*zoom px).
-    // A tap 10 px beyond that disc misses with a mouse and lands with a finger (input.js probes a 16 px ring).
-    const chip = await page.evaluate(() => { const { r, c } = Sim.state.hub; const z = Engine.camera.zoom; const p = Engine.cellToScreen(r, c); const hr = document.getElementById('world').getBoundingClientRect(); return { x: hr.left + p.x, y: hr.top + p.y - (28 + 18) * z, z, off: Math.round(16 * z + 10) }; });
-    const credits0 = await page.evaluate(() => Sim.state.credits);
-    await page.touchscreen.tap(chip.x + chip.off, chip.y);
-    await frames(page, 600);
-    const credits1 = await page.evaluate(() => Sim.state.credits);
-    ok(`bank chip collected by a touch ${chip.off}px off its centre`, credits1 > credits0, `credits ${credits0} -> ${credits1} at zoom ${chip.z.toFixed(2)}`);
+    // find the chip through the engine's own hit test (projection-independent): scan screen pixels around the hub for
+    // EngineWorld.bankAt hits, take the hit disc's centre and its radius on screen, then tap 10 px beyond that disc:
+    // a mouse click there misses, a touch lands (input.js probes a 16 px ring)
+    const chip = await page.evaluate(() => {
+      const { r, c } = Sim.state.hub, z = Engine.camera.zoom, hr = document.getElementById('world').getBoundingClientRect();
+      const p = Engine.cellToScreen(r, c), hits = [];
+      for (let dy = -160; dy <= 60; dy += 2) for (let dx = -110; dx <= 110; dx += 2) {
+        const w = EngineCamera.screenToWorld(p.x + dx, p.y + dy), b = EngineWorld.bankAt(w.x, w.y);
+        if (b && b.r === r && b.c === c) hits.push([p.x + dx, p.y + dy]);
+      }
+      if (!hits.length) return null;
+      const cx = hits.reduce((a, h) => a + h[0], 0) / hits.length, cy = hits.reduce((a, h) => a + h[1], 0) / hits.length;
+      const rad = Math.max(...hits.map(h => Math.hypot(h[0] - cx, h[1] - cy)));
+      return { x: hr.left + cx, y: hr.top + cy, z, rad: Math.round(rad), off: Math.round(rad + 10) };
+    });
+    if (!chip) ok('bank chip found on screen', false, 'no bankAt hit around the hub');
+    else {
+      const credits0 = await page.evaluate(() => Sim.state.credits);
+      await page.touchscreen.tap(chip.x + chip.off, chip.y);
+      await frames(page, 600);
+      const credits1 = await page.evaluate(() => Sim.state.credits);
+      ok(`bank chip collected by a touch ${chip.off}px off its centre (disc ${chip.rad}px)`, credits1 > credits0, `credits ${credits0} -> ${credits1} at zoom ${chip.z.toFixed(2)}`);
+    }
   } else ok('bank chip test staged', false, 'could not stage a ready bank: ' + JSON.stringify(bankReady));
 
   // ---- the status-bar menu and the daily sheet by tap

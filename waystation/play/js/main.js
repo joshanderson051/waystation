@@ -77,7 +77,8 @@
       const b = $('#btn-resume'); if (b) b.focus();
     } else {
       setTitleName(mode === 'new' ? randomName() : (Sim.state ? Sim.state.name : randomName()));
-      if (T.name) { T.name.focus(); T.name.select(); }
+      // A4: a phone gets no focus on load (no blue selection, no keyboard popping up); tapping the field selects it
+      if (T.name && !(typeof UI !== 'undefined' && UI.phone)) { T.name.focus(); T.name.select(); }
     }
   }
   function hideTitle() {

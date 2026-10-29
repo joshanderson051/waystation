@@ -766,6 +766,10 @@ table.market { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .market th.pol, .market td.pol { width: 96px; padding: 0 3px; }
 .market td.pol .seg button { min-width: 40px; padding: 0 5px; }
 .market th.act, .market td.act { width: 30px; padding: 0 2px; text-align: right; }
+.market tbody tr[data-row] { cursor: pointer; }
+.market tr[aria-expanded="true"] td { background: rgba(24,33,60,.8); }
+.market tr.mdetail td { height: auto; padding: 6px 4px 10px; white-space: normal; font: 400 13px/1.5 var(--font-body); color: var(--ink-2); background: rgba(24,33,60,.8); }
+.market tr.mdetail .mdl { display: inline-block; min-width: 72px; font: 500 var(--fs-label)/16px var(--font-cond); letter-spacing: .10em; text-transform: uppercase; color: var(--ink-3); }
 .market .dump { opacity: 0; transition: opacity var(--dur-micro) var(--ease-out); vertical-align: middle; }
 .market tr:hover .dump, .market tr:focus-within .dump, .market .dump:focus-visible { opacity: 1; }
 .market .dump:disabled { opacity: 0; }
@@ -963,7 +967,7 @@ table.market { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .am-tile.lifted .spine { display: block; top: 0; left: 0; right: 0; bottom: auto; width: auto; height: 2px; }
 .am-tile.lifted:hover:not(:disabled) { transform: translateY(-5px); }
 .am-tile:disabled { opacity: .5; cursor: not-allowed; }
-.am-badge { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); padding: 2px 7px; border-radius: 3px; background: var(--am); color: #FFFFFF; font: 600 10px/1.2 var(--font-cond); letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; box-shadow: var(--glow-am); }
+.am-badge { position: absolute; z-index: 3; top: -9px; left: 50%; transform: translateX(-50%); padding: 2px 7px; border-radius: 3px; background: var(--am); color: #FFFFFF; font: 600 10px/1.2 var(--font-cond); letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; box-shadow: var(--glow-am); }
 .am-ic { color: var(--am); display: inline-flex; }
 .am-ic .ic { width: 22px; height: 22px; vertical-align: 0; }
 .am-amount { font: 600 20px/1.1 var(--font-mono); color: var(--am-hi); font-variant-numeric: tabular-nums; }
@@ -1467,7 +1471,9 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
    Desktop above 1024 is untouched: every rule here sits inside the query.
    -------------------------------------------------------------------------- */
 @media (max-width: 760px), ((pointer: coarse) and (max-width: 1023px)) {
-  :root { --sb-h: 52px; --cb-h: 0px; --inset: 10px; --dock-h: calc(58px + env(safe-area-inset-bottom, 0px)); --peek-h: 74px; }
+  /* viewport-fit=cover: a home-screen launch (manifest "standalone") or a landscape notch hands the page its insets */
+  :root { --sat: env(safe-area-inset-top, 0px); --sar: env(safe-area-inset-right, 0px); --sab: env(safe-area-inset-bottom, 0px); --sal: env(safe-area-inset-left, 0px);
+          --sb-h: calc(52px + var(--sat)); --cb-h: 0px; --inset: 10px; --dock-h: calc(58px + var(--sab)); --peek-h: 74px; }
   html, body { overscroll-behavior: none; }
   body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   #world, #world canvas { touch-action: none; }
@@ -1476,7 +1482,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   .input, input[type="text"], input[type="number"], input[type="email"], input[type="password"], textarea.input { font-size: 16px; }
 
   /* status bar: credits, Antimatter and the rank ring stay; the rest moves into the menu (UI.openMenu) */
-  #statusbar { gap: 6px; padding: 0 8px 0 8px; }
+  #statusbar { gap: 6px; padding: var(--sat) calc(8px + var(--sar)) 0 calc(8px + var(--sal)); }
   .sb-left, .ro.power, .ro.people, .ro.rep, .ro-top, .rank-main, #btn-daily, #btn-cloud, #speed, #btn-notices { display: none; }
   .sb-center { flex: 1 1 auto; margin: 0; justify-content: flex-start; min-width: 0; }
   .ro { height: 40px; padding: 0 6px; gap: 6px; border-left: 0; min-width: 0; }
@@ -1491,7 +1497,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   #condition { font-size: 11px; letter-spacing: .08em; padding: 0 10px; overflow: hidden; text-overflow: ellipsis; }
 
   /* the command rail becomes the dock: five buttons, the other panels under More */
-  #rail { position: fixed; left: 0; right: 0; top: auto; bottom: 0; width: auto; height: var(--dock-h); flex-direction: row; align-items: stretch; gap: 0; padding: 3px 4px calc(2px + env(safe-area-inset-bottom, 0px)); border: 0; border-top: 1px solid var(--edge); z-index: 6; }
+  #rail { position: fixed; left: 0; right: 0; top: auto; bottom: 0; width: auto; height: var(--dock-h); flex-direction: row; align-items: stretch; gap: 0; padding: 3px calc(4px + var(--sar)) calc(2px + var(--sab)) calc(4px + var(--sal)); border: 0; border-top: 1px solid var(--edge); z-index: 6; }
   .rail-btn { flex: 1 1 0; min-width: 0; height: auto; margin: 0 2px; gap: 3px; }
   .rail-btn[data-panel="market"], .rail-btn[data-panel="fleet"], .rail-btn[data-panel="expeditions"], .rail-btn[data-panel="registry"], .rail-btn[data-panel="store"], .rail-btn[data-panel="settings"] { display: none; }
   .rail-btn.phone-only { display: flex; }
@@ -1504,7 +1510,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   .rail-btn.pulse::after { inset: 1px; }
 
   /* panels open as bottom sheets: full height under the status bar, a handle, a peek state while placing */
-  #panel-host { position: fixed; left: 0; right: 0; top: calc(var(--sb-h) + 10px); bottom: var(--dock-h); width: auto; min-width: 0; z-index: 5; transition: transform 300ms var(--ease-out); }
+  #panel-host { position: fixed; left: var(--sal); right: var(--sar); top: calc(var(--sb-h) + 10px); bottom: var(--dock-h); width: auto; min-width: 0; z-index: 5; transition: transform 300ms var(--ease-out); }
   #panel-host[data-peek] { transform: translateY(calc(100% - var(--peek-h))); }
   #panel-host.dragging { transition: none; }
   #panel { transform: none; border-bottom: 0; }
@@ -1519,7 +1525,24 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   .panel-body { padding: 4px 12px 16px 18px; touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   .panel-foot { padding: 10px 12px 12px 18px; }
   .panel-foot .btn { flex: 1 1 auto; }
-  /* panel content at 320..400px of width; every control reaches 32px (8) */
+  /* panel content at 320..400px of width: text wraps instead of cutting off (labels, subtitles, descriptions, names) */
+  .panel-sub { white-space: normal; overflow: visible; text-overflow: clip; line-height: 15px; }
+  .shelf { flex-wrap: wrap; height: auto; min-height: 30px; padding: 7px 0 3px; row-gap: 2px; white-space: normal; }
+  .shelf-label { flex: 0 1 auto; white-space: normal; overflow: visible; text-overflow: clip; line-height: 16px; }
+  .shelf-tag { margin-left: auto; }
+  .card .desc { white-space: normal; overflow: visible; text-overflow: clip; }
+  .card-meta { flex-wrap: wrap; row-gap: 2px; white-space: normal; }
+  .market td.gname { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.15; }
+  .market .dump, .market .dump:disabled { opacity: 1; }
+  .market .dump:disabled { opacity: .3; }
+  .ship-name { flex-wrap: wrap; white-space: normal; column-gap: 6px; }
+  .ship-sub { white-space: normal; overflow: visible; text-overflow: clip; }
+  .sil-name { white-space: normal; overflow: visible; text-overflow: clip; line-height: 15px; }
+  .livery-preview-lbl { white-space: normal; overflow: visible; text-overflow: clip; }
+  .hero-row .tiles.col { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .hero-row .tile-val { white-space: normal; font-size: 17px; }
+  .hero-row .tile-val small { display: block; margin-top: 2px; }
+  /* every control reaches 32px (8) */
   .seg > button, .seg.small > button { height: 32px; }
   .btn.icon.small { width: 32px; height: 32px; min-height: 32px; }
   .shelf.chapter { height: 36px; }
@@ -1534,7 +1557,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   .psubmit { align-self: stretch; }
 
   /* context bar: a placing strip above the dock; the selected module's actions live in the Station sheet */
-  #contextbar { position: fixed; left: 10px; right: 10px; top: auto; bottom: calc(var(--dock-h) + 8px); height: auto; min-height: 44px; display: none; gap: 8px; padding: 6px 6px 6px 14px; border: 1px solid var(--edge); z-index: 7; --c: var(--cut-sm); clip-path: polygon(var(--c) 0, 100% 0, 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, 0 100%, 0 var(--c)); }
+  #contextbar { position: fixed; left: calc(10px + var(--sal)); right: calc(10px + var(--sar)); top: auto; bottom: calc(var(--dock-h) + 8px); height: auto; min-height: 44px; display: none; gap: 8px; padding: 6px 6px 6px 14px; border: 1px solid var(--edge); z-index: 7; --c: var(--cut-sm); clip-path: polygon(var(--c) 0, 100% 0, 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, 0 100%, 0 var(--c)); }
   #contextbar > .spine { left: 0; right: auto; top: var(--c); bottom: 0; width: 2px; height: auto; opacity: .9; box-shadow: var(--spine-glow); }
   body[data-placing] #contextbar { display: flex; }
   body[data-peek] #contextbar { bottom: calc(var(--dock-h) + var(--peek-h) + 8px); }
@@ -1545,7 +1568,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   .ctx-actions .btn::before { display: block; }
 
   /* notices: toasts stack under the status bar; Next up lives in the menu */
-  #notices { display: flex !important; position: fixed; left: 10px; right: 10px; top: calc(var(--sb-h) + 8px); width: auto; z-index: 7; }
+  #notices { display: flex !important; position: fixed; left: calc(10px + var(--sal)); right: calc(10px + var(--sar)); top: calc(var(--sb-h) + 8px); width: auto; z-index: 7; }
   body[data-condition] #notices { top: calc(var(--sb-h) + 36px); }
   #nextup { display: none !important; }
   #toasts, .toast { pointer-events: none; }   /* a toast over the sheet's head must not catch the drag; its buttons stay live */
@@ -1555,7 +1578,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   .toast-act { min-height: 32px; }
 
   /* modals and sheets scroll inside themselves; sheets rise from the bottom */
-  #modal { padding: 12px; }
+  #modal { padding: calc(12px + var(--sat)) calc(12px + var(--sar)) calc(12px + var(--sab)) calc(12px + var(--sal)); }
   #modal .box { width: 100%; max-width: 100%; max-height: calc(100dvh - 24px); }
   .modal-body { padding: 14px 16px 4px 18px; }
   #modal-title { font-size: 21px; }
@@ -1563,7 +1586,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   #modal-actions .btn { flex: 1 1 auto; }
   #sheet { place-items: end stretch; }
   #sheet.open .sheet-box { animation: sheet-in var(--dur-state) var(--ease-out) backwards; }
-  .sheet-box, .sheet-box.wide { width: auto; max-width: none; max-height: calc(100dvh - var(--sb-h) - 10px); padding: 26px 14px calc(18px + env(safe-area-inset-bottom, 0px)) 18px; --c: var(--cut); clip-path: polygon(var(--c) 0, 100% 0, 100% 100%, 0 100%, 0 var(--c)); background-size: var(--c) var(--c), 0 0; overscroll-behavior: contain; }
+  .sheet-box, .sheet-box.wide { width: auto; max-width: none; max-height: calc(100dvh - var(--sb-h) - 10px); padding: 26px calc(14px + var(--sar)) calc(18px + var(--sab)) calc(18px + var(--sal)); --c: var(--cut); clip-path: polygon(var(--c) 0, 100% 0, 100% 100%, 0 100%, 0 var(--c)); background-size: var(--c) var(--c), 0 0; overscroll-behavior: contain; }
   .sheet-box::before { content: ''; position: absolute; left: 50%; top: 8px; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: rgba(243,233,214,.35); }
   .sheet-close { top: 10px; right: 8px; }
   .sheet-title { font-size: 24px; }
@@ -1590,7 +1613,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   #tooltip { display: none; }
 
   /* title screen */
-  #title { justify-content: flex-start; gap: 14px; padding: max(20px, 6vh) 12px 20px; overflow-y: auto; }
+  #title { justify-content: flex-start; gap: 14px; padding: calc(max(20px, 6vh) + var(--sat)) calc(12px + var(--sar)) calc(20px + var(--sab)) calc(12px + var(--sal)); overflow-y: auto; }
   .title-band { padding: 22px 14px 18px; gap: 8px; }
   .wordmark.hero { font-size: clamp(30px, 9.4vw, 44px); }
   .title-sub { font-size: 12px; }
@@ -1600,8 +1623,25 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   .resume-card { grid-template-columns: 1fr; gap: 12px; padding: 12px; }
   #title-thumb { width: 100%; height: auto; aspect-ratio: 5 / 3; }
   .resume-name { font-size: 22px; white-space: normal; }
+  #title-registry { white-space: normal; overflow: visible; text-overflow: clip; }
   .title-actions { flex-wrap: wrap; }
   .title-actions .btn.big { flex: 1 1 auto; }
+}
+/* landscape phones (coarse pointer, short screen): the dock drops its labels, the peek shows the handle and title only,
+   the sheet head and the status bar tighten, so a placing player keeps ~180 px of world between the bars */
+@media ((pointer: coarse) and (max-width: 1023px) and (max-height: 500px) and (orientation: landscape)), ((max-width: 760px) and (max-height: 500px) and (orientation: landscape)) {
+  :root { --sb-h: calc(46px + var(--sat)); --dock-h: calc(46px + var(--sab)); --peek-h: 54px; }
+  .rail-lbl { display: none; }
+  .rail-btn { gap: 0; }
+  .rail-badge { top: 0; }
+  #panel-host { top: calc(var(--sb-h) + 6px); }
+  .panel-head { padding: 14px 10px 6px 18px; }
+  .panel-title { font-size: 20px; }
+  #panel-host[data-peek] .panel-sub { display: none; }
+  .ro { height: 36px; }
+  .cele-wrap { top: 18%; height: 64%; }
+  .tour-callout { max-width: 520px; }
+  .sheet-box, .sheet-box.wide { max-width: 640px; margin: 0 auto; }
 }
 /* the menu and More sheets (phone only; hud.js builds the rows) */
 .menu-ro { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }
