@@ -1,4 +1,4 @@
-# WAYSTATION — Visual Design Specification (canonical)
+# PORT SOLACE — Visual Design Specification (canonical)
 
 **Direction:** Bridge Console: Keel & Shelf (winner), revised per the three judgements.
 **Status:** FINAL. This file is the single source of truth for the visual overhaul. Where code, comments or earlier drafts disagree with this file, this file wins.
@@ -224,7 +224,7 @@ Fallback stacks: `'Barlow Condensed','Bahnschrift Condensed','Arial Narrow',sans
 
 | Role | Face / weight | Size | Tracking | Case | Used for |
 |---|---|---|---|---|---|
-| Wordmark | Barlow Condensed 600 | 18px (title screen 56px) | .30em | upper | "WAYSTATION" |
+| Wordmark | Barlow Condensed 600 | 18px (title screen 56px) | .30em | upper | "PORT SOLACE" |
 | Section header | Barlow Condensed 600 | 12px | .12em | upper | tier heads, panel section headers, modal title tag, condition banner, level banner (24px) |
 | Tab label | Barlow Condensed 600 | 12px | .10em | upper | the five sidebar tabs |
 | Label | Barlow Condensed 500 | **11px** (floor) | .10em | upper | stat labels, table headers, chips, QoL labels |
@@ -257,8 +257,8 @@ The cell formula keeps the current `(GRID_COLS+4, GRID_ROWS+4)` margin so the qu
 
 ```
 +------------------------------------------------------------------------------------------------------+ 0
-| WAYSTATION  Lantern Reach    | CREDITS  | INCOME   | POWER         | VISITORS | RESIDENTS | REPUTATION | L2 TRADING HUB |  ■ 1x 2x 4x  | SAVE  NEW |
-| WS-1910 · DAY 041            |  12,450  | ▲ +380   | 14 / 20 ▮▮▮▮▯▯|  22 / 26 |   0 / 0   | ▮▮▮▮▯     |                |              |           |
+| PORT SOLACE Lantern Reach    | CREDITS  | INCOME   | POWER         | VISITORS | RESIDENTS | REPUTATION | L2 TRADING HUB |  ■ 1x 2x 4x  | SAVE  NEW |
+| PS-1910 · DAY 041            |  12,450  | ▲ +380   | 14 / 20 ▮▮▮▮▯▯|  22 / 26 |   0 / 0   | ▮▮▮▮▯     |                |              |           |
 +------------------------------------------------------------------------------+-------------------------+ 60
 | [CONDITION · SOLAR FLARE · SOLAR ARRAYS DARK 2 DAYS]  (24px overlay, only when set)  | 01 BUILD 02 STATION 03 MARKET 04 COMPANIES 05 LOG |
 | [◇ BUILD A DOCKING BAY  ◆ BUILD A SOLAR ARRAY  ◇ SERVE 3 SHIPS] (24px overlay, 1st 5 min) | ────────────────────▔▔▔▔▔▔ (sliding underline)   |
@@ -271,7 +271,7 @@ The cell formula keeps the current `(GRID_COLS+4, GRID_ROWS+4)` margin so the qu
 |    .   .   .   .   .   .   .   .   .   .   .   .   .   .   .                 | ▌ TIER 2 · TRADING HUB   LOCKED · 6 MOD · 1.0 REP |
 |    .   .   .   .   .   .   .   .   .   .   .   .   .   .   .                 | ┃ (locked cards at 40%)                     |
 |  ▌TRADE  Kestrel courier paid 280          (toasts, bottom-left, max 4)      |                                             |
-|  PLOT 15x9 · CELL 4:7                                                        | WS-1910 · DAY 041 · 55PX            (footer)|
+|  PLOT 15x9 · CELL 4:7                                                        | PS-1910 · DAY 041 · 55PX            (footer)|
 +------------------------------------------------------------------------------+---------------------------+ 872
 | Pick a module in 01 BUILD, then click a bracketed cell.                     SHIPS 3 DOCKED · 1 HOLD · BERTHS 4 |
 +------------------------------------------------------------------------------------------------------+ 900
@@ -283,7 +283,7 @@ What moved: the tab strip becomes a numbered horizontal row with a single slidin
 
 ### 4.3 Top rail composition (left to right, flex, 14px gaps, 14px side padding)
 
-1. Wordmark block (min 170px): "WAYSTATION" 18px ivory .30em; under it 10px mono `--ink-3`: `WS-{registry} · DAY {day}`; station name 11px label `--ink-2` right of the wordmark.
+1. Wordmark block (min 170px): "PORT SOLACE" 18px ivory .30em; under it 10px mono `--ink-3`: `PS-{registry} · DAY {day}`; station name 11px label `--ink-2` right of the wordmark.
 2. Stat blocks separated by 1px `--hairline` 28px tall dividers: CREDITS, INCOME, POWER, VISITORS, RESIDENTS, REPUTATION, LEVEL chip (section 6.2).
 3. `margin-left:auto` then the speed segmented control (4 segments x 36px) and SAVE / NEW lozenges.
 
@@ -308,7 +308,7 @@ What moved: the tab strip becomes a numbered horizontal row with a single slidin
 
 ### 5.2 Sidebar
 
-`#sidebar` is `display:flex; flex-direction:column; position:relative; min-height:0; background:var(--surface-1)`. Its keel is amber, on its left edge, inset 8px top and bottom (`::before` on `#sidebar`, so it never scrolls with the panel). Children: `#tabs` (36px), `.panel` (flex:1, `overflow-y:auto`, padding 14px 14px 14px 18px; 12px at ≤360px), `#sidebar-foot` (22px, mono micro-tag `--ink-3`: `WS-1910 · DAY 041 · {name}`).
+`#sidebar` is `display:flex; flex-direction:column; position:relative; min-height:0; background:var(--surface-1)`. Its keel is amber, on its left edge, inset 8px top and bottom (`::before` on `#sidebar`, so it never scrolls with the panel). Children: `#tabs` (36px), `.panel` (flex:1, `overflow-y:auto`, padding 14px 14px 14px 18px; 12px at ≤360px), `#sidebar-foot` (22px, mono micro-tag `--ink-3`: `PS-1910 · DAY 041 · {name}`).
 
 ### 5.3 Tabs
 
@@ -389,7 +389,7 @@ Each stat is a block: label 11px Barlow Condensed 500 .10em `--ink-2` over a Jet
 - **RESIDENTS**: `15 / 30` in `--sage` (residents / homes).
 - **REPUTATION**: five 8x14px radius-2 pips, 3px gaps; filled `--amber` for whole stars; the fractional pip is filled from the bottom by `frac*100%` via an inner `<i>` with height; empty pips `--surface-3` with 1px `--hairline`. `title="Reputation 2.35 / 5"`. No star glyphs.
 - **LEVEL**: chip `L2 · TRADING HUB`, `--amber-ghost` fill, `--amber` text, 11px Barlow Condensed 600.
-- **Registry**: `WS-{1000 + hash(name) % 9000}` where `hash` is a 32-bit FNV-1a of the station name; same function in `art.js` (`registryOf(name)`) so title screen, top rail and canvas agree.
+- **Registry**: `PS-{1000 + hash(name) % 9000}` where `hash` is a 32-bit FNV-1a of the station name; same function in `art.js` (`registryOf(name)`) so title screen, top rail and canvas agree.
 
 Number tickers: every mono value animates from old to new over `--dur-number` (400ms) with easeOutCubic in one shared rAF loop (`Ticker.set(el, value, fmtFn)`), formatting with `fmt()` each frame; `tabular-nums` keeps widths stable. Values that change by less than 1 snap. Under reduced motion, values snap.
 
@@ -645,10 +645,10 @@ Once per session, 600ms total: the sidebar keel scales from `scaleY(0)` (origin 
 
 ### 12.1 Title screen (`#title`, full-screen over the live `#bg` canvas)
 
-`main.js` no longer runs `Sim.load() || Sim.newGame()` silently. On load: R bakes the background for the current name (or a random `STATION_NAMES` pick), then H shows `#title`: backdrop `--void` at 0 (the baked nebula and planet show through), a centred column: wordmark `WAYSTATION` 56px Barlow Condensed 600 `--ivory` .30em; under it `STATION COMMISSIONING` 12px Barlow Condensed 600 `--amber` .12em; a 420px `--surface-1` card with an amber keel (inset 8px), padding 20px 24px 20px 28px.
+`main.js` no longer runs `Sim.load() || Sim.newGame()` silently. On load: R bakes the background for the current name (or a random `STATION_NAMES` pick), then H shows `#title`: backdrop `--void` at 0 (the baked nebula and planet show through), a centred column: wordmark `PORT SOLACE` 56px Barlow Condensed 600 `--ivory` .30em; under it `STATION COMMISSIONING` 12px Barlow Condensed 600 `--amber` .12em; a 420px `--surface-1` card with an amber keel (inset 8px), padding 20px 24px 20px 28px.
 
 - **With a save**: a RESUME card first: `Icons.svg('ship')`, `RESUME` label, then `Lantern Reach · DAY 41 · L2 TRADING HUB · 12,480 CR` in 13px mono, and `#title-thumb`, a 120x72 canvas from `Render.thumbnail(savedState, 120, 72)` (plates as 6px rounded rects in family colors at 80%, hub ivory, on `--void`; trusses 2px). The whole card is the `#btn-resume` button (`.primary` styling on hover). Below it, a quiet `.danger` lozenge `NEW STATION` (`#btn-newstation`) that reveals the commissioning form with a confirm step ("Your current station will be scrapped.").
-- **Without a save** (or after NEW STATION): label `STATION NAME`; `#title-name` input (mono 16px) prefilled with a random `STATION_NAMES` pick; a `.ghost` icon lozenge `Icons.svg('reroll')` that picks another name and re-bakes the background (debounced 120ms); a mono line `REGISTRY WS-{registryOf(name)} WILL BE ASSIGNED ON COMMISSION` updating live; primary `COMMISSION STATION` (`#btn-commission`). Enter commits.
+- **Without a save** (or after NEW STATION): label `STATION NAME`; `#title-name` input (mono 16px) prefilled with a random `STATION_NAMES` pick; a `.ghost` icon lozenge `Icons.svg('reroll')` that picks another name and re-bakes the background (debounced 120ms); a mono line `REGISTRY PS-{registryOf(name)} WILL BE ASSIGNED ON COMMISSION` updating live; primary `COMMISSION STATION` (`#btn-commission`). Enter commits.
 - Commission: `Sim.newGame()` then `Sim.state.name = name` (newGame picks a random name; H overwrites it before the first `change` and calls `Sim.save()`), `#title` fades out over `--dur-state`, boot plays (11.1), the hub's first spars weld in. The Resume path restores `Sim.load()` and plays boot without the welds.
 
 The first `Render.thumbnail` and the title backdrop require `#bg`; the title never shows a blank black screen for more than one frame.

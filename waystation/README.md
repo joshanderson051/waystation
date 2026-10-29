@@ -1,9 +1,13 @@
-# Waystation
+# Port Solace
 
 A browser space-station builder. You command a way station on the edge of interstellar space:
 dock freighters, trade their cargo, keep the power on, tap your modules' banks, send expeditions
 to chart new sectors, and grow one docking collar into a galactic gate. Then do it again in the
-next star system.
+next star system. Live at <https://portsolace.com/>.
+
+The game was first released as Waystation. The folder, the GitHub repository and the Cloudflare Worker
+names (`waystation-account`, `waystation-push`, `waystation-store`, their `*.workers.dev` URLs) keep the old name on
+purpose: renaming them would break live payments, password resets and push subscriptions.
 
 ## Layout
 
@@ -75,8 +79,11 @@ GPU-rendered space scene, original in geometry, palette and type.
 
 ## Saves, economy, tuning
 
-The profile lives in `localStorage['waystation.profile.v2']` (export and import from Settings). A v1 save is
-migrated into the home sector on first load. Timers are wall-clock. The shipped pacing curve is the `patient`
+The profile lives in `localStorage['portsolace.profile.v2']` (export and import from Settings). A v1 save is
+migrated into the home sector on first load. Keys from before the rebrand (`waystation…`) are copied once to their
+`portsolace…` names by `play/js/migrate.js`, the first script on the game page; old keys are never deleted. Saves left on
+the old address (`joshanderson051.github.io/waystation/`) come over through the "Bring your station from the old address"
+action, a bridge page at `joshanderson051.github.io/move/` and `play/import.html` (DESIGN2.md Addendum A8). Timers are wall-clock. The shipped pacing curve is the `patient`
 preset in `data2.js` (sable on day 2 or 3, thessaly around day 9, aurelia after a month at three 15-minute
 sessions a day; see DESIGN2.md Addendum A1); `node play/dev/sim-test.js` prints the economy and pacing tables and runs 246 checks.
 
@@ -84,7 +91,7 @@ sessions a day; see DESIGN2.md Addendum A1); `node play/dev/sim-test.js` prints 
 
 Sandbox is the default: purchases are free, local and clearly labelled. To sell for real, deploy the
 Cloudflare Worker in `workers/store` with your Stripe keys (its README walks through test mode and live mode),
-then set `<meta name="waystation-store" content='{"mode":"stripe","apiBase":"https://…workers.dev"}'>` in
+then set `<meta name="portsolace-store" content='{"mode":"stripe","apiBase":"https://store.portsolace.com"}'>` in
 `play/index.html`.
 
 ## The art pack
@@ -101,9 +108,9 @@ only way code refers to a picture. Rebuild the pack when a master changes; never
 - **Tutorial**: a 13-step coach-mark tour (`play/js/ui/tutorial.js`) runs on a profile's first commission and replays from Settings.
 - **Accounts and cloud saves**: `play/js/account.js` talks to `workers/account` (email and password, recovery phrase, one cloud save per
   account, newest-wins sync with a chooser). Until that Worker is deployed and its URL is set in
-  `<meta name="waystation-account">`, the game says cloud saves are not connected and saves locally.
+  `<meta name="portsolace-account">`, the game says cloud saves are not connected and saves locally.
 - **Admin console** (`play/js/ui/admin.js`): Settings > Admin or Ctrl+Shift+A, gated by a passphrase whose SHA-256 sits in
-  `<meta name="waystation-admin">` in `play/index.html` (the passphrase itself is not in the repository). It grants Antimatter and
+  `<meta name="portsolace-admin">` in `play/index.html` (the passphrase itself is not in the repository). It grants Antimatter and
   credits (tagged `admin` in the profile history), finishes timers, fills banks, unlocks sectors and forces the store mode. To change
   the passphrase: `node -e "console.log(require('crypto').createHash('sha256').update('new passphrase').digest('hex'))"` and paste the
   hex into the tag. In a client-side game this is a convenience gate, not a security boundary.
@@ -114,17 +121,20 @@ Settings > Notifications > **Notify me when something finishes** sends a browser
 expedition or plot clearing finishes while the tab is closed (optionally a daily-reward reminder at 9 in the morning).
 It is opt-in per browser and needs the small Cloudflare Worker in `workers/push` (its README walks through the setup:
 `npm run keys`, `wrangler login`, a KV namespace, one secret, deploy). Until its address is set in
-`<meta name="waystation-push" content='{"apiBase":"https://…workers.dev"}'>` in `play/index.html`, the switch reads
+`<meta name="portsolace-push" content='{"apiBase":"https://push.portsolace.com"}'>` in `play/index.html`, the switch reads
 "Not connected" and the game never asks for notification permission. `play/js/notify.js` keeps the backend's copy of the
 pending timers current; `play/sw.js` shows the notification and focuses or opens `/play/` on click.
 
 ## Hosting and caching
 
-Everything is static. GitHub Pages (current): `.github/workflows/pages.yml` runs `scripts/dist.sh` and
-publishes `dist/` (this folder minus the docs, the local server, `tools/` and `play/dev/`) on every push to
-`main`; GitHub sends a fixed ten-minute cache. Cloudflare Pages / Netlify: build command `bash scripts/dist.sh`,
-output `dist`; they read `_headers`. Absolute URLs appear only in the `canonical`, `og:url`, `og:image` and
-`twitter:image` tags of `index.html` and `play/index.html`.
+Everything is static. GitHub Pages (current), on the custom domain `portsolace.com`: `.github/workflows/pages.yml`
+runs `scripts/dist.sh` and publishes `dist/` (this folder minus the docs, the local server, `tools/` and `play/dev/`) on
+every push to `main`; GitHub sends a fixed ten-minute cache. The domain is set in the repository's Settings > Pages (an
+Actions deploy ignores a CNAME file), and GitHub redirects the old `joshanderson051.github.io/waystation/` address to it.
+Cloudflare Pages / Netlify: build command `bash scripts/dist.sh`, output `dist`; they read `_headers`. Absolute URLs
+(`https://portsolace.com/…`) appear only in the `canonical`, `og:url`, `og:image` and `twitter:image` tags of
+`index.html`, `manual/index.html` and `play/index.html`, plus the API bases in `play/index.html`'s meta tags.
+The site works at a domain root and under a project-site prefix alike (all links are relative; `404.html` finds its root).
 
 ## Files
 

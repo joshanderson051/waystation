@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — ui/panels.js
+// PORT SOLACE v2 — ui/panels.js
 // Engineer H. Source of truth: DESIGN2.md 5.2 (panels), 7.3 (store panel),
 // 4.5–4.10 (the data each panel shows); DESIGN.md 6.1–6.6 (v1 content
 // grammar: build cards, QoL, market table, company cards) carried over.
@@ -1010,6 +1010,9 @@ const Panels = {
         h += `<div class="acct signed"><div class="acct-main"><span class="setting-lbl">${icon('user', 14)} ${esc(ast.user ? ast.user.email : '')}</span><span class="setting-sub">${esc(line)} ${MID} last synced ${esc(when)}</span></div></div>` +
           `<div class="actions"><button type="button" class="btn" data-act="sync">${icon('reroll', 14)}<span>Sync now</span></button><button type="button" class="btn ghost" data-act="signout">${icon('cloud', 14)}<span>Sign out</span></button><button type="button" class="btn ghost danger" data-act="delete-account">${icon('scrap', 14)}<span>Delete account</span></button></div>`;
       }
+      // M3: players from the old address (before portsolace.com) bring their station over; only where the game now lives
+      if (ctx.ui.canMoveStation && ctx.ui.canMoveStation()) h += '<div class="actions"><button type="button" class="btn ghost" data-act="move-station">' + icon('import', 14) + '<span>Bring your station from the old address</span></button></div>' +
+        '<p class="fine">Played before the move to portsolace.com? A station saved in this browser at the old address (joshanderson051.github.io/waystation) comes over in one step.</p>';
       // A5 livery shelf: the preview strip, swatch cards (click applies, spends a token, or points at the Store) and the token hint
       h += shelf('Livery', esc(ctx.meta.livery().name), { hue: 'var(--rose)', attrs: ' id="livery-shelf"' });
       h += liveryRows();
@@ -1035,7 +1038,7 @@ const Panels = {
       }
       h += shelf('About', null, { hue: 'var(--ink-3)' });
       h += `<div class="actions"><button type="button" class="btn" data-act="replay-tour">${icon('play', 14)}<span>Replay the tour</span></button><a class="btn" href="../manual/" target="_blank" rel="noopener">${icon('registry', 14)}<span>Open the manual</span></a></div>`;
-      h += `<p class="fine">Waystation v2 ${MID} a browser space-station builder. Hand-written HTML, CSS and JavaScript with PixiJS for the world. Procedural audio, no trackers, saves on your device. ${MID} Licence: all original work; PixiJS under MIT.</p>`;
+      h += `<p class="fine">Port Solace v2 ${MID} a browser space-station builder. Hand-written HTML, CSS and JavaScript with PixiJS for the world. Procedural audio, no trackers, saves on your device. ${MID} Licence: all original work; PixiJS under MIT.</p>`;
       paint(F.body, h, sig, 'st');
     };
     host.addEventListener('click', e => {
@@ -1058,13 +1061,14 @@ const Panels = {
       const b = e.target.closest('button[data-act]'); if (!b) return;
       const io = host.querySelector('#save-io'), act = b.dataset.act;
       if (act === 'export') { const txt = ctx.meta.exportSave(); if (io) { io.value = txt || ''; io.focus(); io.select(); } ctx.ui.toast(txt ? 'Profile exported. Copy the text to keep it safe.' : 'Nothing to export yet', txt ? 'good' : 'warn'); }
-      else if (act === 'import') { const txt = io ? io.value.trim() : ''; if (!txt) { ctx.ui.toast('Paste a profile first', 'warn'); return; } ctx.ui.confirm('Import this profile?', 'The current profile in this browser will be replaced.', () => { const ok = ctx.meta.importSave(txt); ctx.ui.toast(ok ? 'Profile imported' : 'That does not look like a Waystation profile', ok ? 'good' : 'bad'); if (ok) ctx.ui.refresh(); }, { yes: 'Import', danger: true }); }
+      else if (act === 'import') { const txt = io ? io.value.trim() : ''; if (!txt) { ctx.ui.toast('Paste a profile first', 'warn'); return; } ctx.ui.confirm('Import this profile?', 'The current profile in this browser will be replaced.', () => { const ok = ctx.meta.importSave(txt); ctx.ui.toast(ok ? 'Profile imported' : 'That does not look like a Port Solace profile', ok ? 'good' : 'bad'); if (ok) ctx.ui.refresh(); }, { yes: 'Import', danger: true }); }
       else if (act === 'restore') ctx.ui.openPanel('store');
       else if (act === 'notify-test') { const N = notifyApi(); if (N) N.test().then(ok => ctx.ui.toast(ok ? 'A test notification is on its way. It can take up to a minute.' : 'The test could not be sent. Check the notification service.', ok ? 'good' : 'warn')); }
       else if (act === 'scrap-station') ctx.ui.scrapStation();
       else if (act === 'reset-profile') ctx.ui.resetProfile();
       else if (act === 'admin') { if (typeof Admin !== 'undefined') Admin.open(); }
       else if (act === 'signin') ctx.ui.openPortal('login');
+      else if (act === 'move-station') ctx.ui.moveStation();
       else if (act === 'sync') ctx.ui.accountSync(b);
       else if (act === 'signout') ctx.ui.accountSignOut();
       else if (act === 'delete-account') ctx.ui.accountDelete();

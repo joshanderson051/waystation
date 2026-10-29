@@ -1,4 +1,4 @@
-# Waystation account backend
+# Port Solace account backend
 
 This folder is the small server behind **Sign in** in the game: email and password accounts, and one
 **cloud save** per account so a player can continue on another computer. It runs as a **Cloudflare
@@ -9,6 +9,16 @@ needs no email setup.
 
 You do not need to be a developer to set it up. Budget about 20 minutes. Until this backend exists the
 game says "Cloud saves are not connected yet" and keeps saving in the player's browser as before.
+
+**The live setup.** The game is at <https://portsolace.com/play/> and this worker answers at
+<https://account.portsolace.com> (a Cloudflare custom domain, the `routes` line in `wrangler.toml`). Its
+`*.workers.dev` address keeps working too and is what the first-time steps below use. Reset emails go out
+from `noreply@portsolace.com`, with Resend's test sender as an automatic fallback until the domain is
+verified (step 2b).
+
+The old internal names (the Worker script `waystation-account`, the `service` that `/health` reports, the
+`workers.dev` address and the repository folders) stay on purpose: renaming them would create a new Worker
+and break live sign-ins.
 
 ---
 
@@ -38,8 +48,9 @@ How it works once connected:
 ## 0. Before you start
 
 - **Node.js 20 or newer** (<https://nodejs.org>, the LTS download). Check with `node --version`.
-- A **Cloudflare account** (free): <https://dash.cloudflare.com/sign-up>. No domain needed; the worker
-  gets a free `*.workers.dev` address.
+- A **Cloudflare account** (free): <https://dash.cloudflare.com/sign-up>. The worker gets a free
+  `*.workers.dev` address; for the live address `account.portsolace.com` the `portsolace.com` zone must be
+  on the same Cloudflare account (it is: the domain was bought through Cloudflare Registrar).
 
 Open a terminal in this folder (`workers/account`) and install the one developer tool:
 
@@ -62,8 +73,10 @@ npx wrangler kv namespace create ACCOUNTS
 The second command prints a block with an `id = "…"` line. Open `wrangler.toml` and paste that id in
 place of `REPLACE_WITH_KV_NAMESPACE_ID`.
 
-`ALLOWED_ORIGIN` in the same file already contains the GitHub Pages site. If the game is served from
-another domain, put that there instead (several origins separated by commas, no trailing slash).
+`ALLOWED_ORIGIN` in the same file already contains the live site (`https://portsolace.com` and
+`https://www.portsolace.com`) and the old GitHub Pages origin (`https://joshanderson051.github.io`), kept
+while players move over. If the game is served from another domain, add it (several origins separated by
+commas, no trailing slash).
 
 ---
 
@@ -99,7 +112,7 @@ tier. Two are supported; the difference is which sender address you can use:
 | Reaches | test sender: **only the address that owns the Resend account**; verified domain: anyone | anyone |
 | Where | <https://resend.com> → API Keys, Domains | <https://app.brevo.com> → Senders, then SMTP & API → API keys |
 
-Resend is the cleaner choice when you own a domain (Cloudflare Registrar sells one for about $10 a year);
+Resend is the cleaner choice when you own a domain, and the live setup uses it with `portsolace.com`;
 Brevo reaches players without one. Either way:
 
 1. Create the provider account in your browser, signed up with the address you want to test with, and
@@ -112,12 +125,26 @@ Brevo reaches players without one. Either way:
 
    Paste the key when asked (nothing is shown while you paste; press Enter).
 3. In `wrangler.toml` set `EMAIL_PROVIDER` (`"resend"` or `"brevo"`) and `EMAIL_FROM` (the sender address
-   the provider has approved: Resend's `onboarding@resend.dev`, an address on your verified domain, or your
-   verified Brevo sender). `PLAY_URL` is the game's play address; the reset link is `PLAY_URL?reset=…`.
-   Then `npm run deploy`.
-4. Open `/health`: `"email"` shows `"configured": true`. In the game, Sign in → **Forgot your password?**
-   with your own address: the email arrives within seconds, from "Waystation", subject "Reset your
-   Waystation password".
+   the provider has approved: an address on your verified domain, Resend's `onboarding@resend.dev`, or your
+   verified Brevo sender). The live file has `EMAIL_FROM = "noreply@portsolace.com"` and
+   `EMAIL_FROM_FALLBACK = "onboarding@resend.dev"`. `PLAY_URL` is the game's play address
+   (`https://portsolace.com/play/`); the reset link is `PLAY_URL?reset=…`. Then `npm run deploy`.
+4. Open `/health`: `"email"` shows `"configured": true`, and `"emailFrom"` / `"emailFromFallback"` show the
+   two senders. In the game, Sign in → **Forgot your password?** with your own address: the email arrives
+   within seconds, from "Port Solace", subject "Reset your Port Solace password".
+
+**Verifying portsolace.com in Resend.** Resend sends from `noreply@portsolace.com` only once the domain is
+verified: Resend → Domains → **Add domain** → `portsolace.com`, then add the DNS records it lists (an MX
+and TXT record on a `send` subdomain and a DKIM TXT record) in Cloudflare → `portsolace.com` → DNS, as
+"DNS only" (grey cloud); Resend may offer to add them through Cloudflare for you. Click
+**Verify**; it usually turns green within minutes.
+
+**The sender fallback.** Until then Resend refuses `noreply@portsolace.com` with HTTP 403 or 422 and a
+message saying the domain is not verified. The worker then retries the same email once from
+`EMAIL_FROM_FALLBACK` (`onboarding@resend.dev`) and logs a warning naming both senders, so reset emails to
+the address that owns the Resend account keep working. Other errors are never retried, and the fallback
+applies to Resend only. Once the domain is verified the fallback is simply never used; to switch it off,
+remove `EMAIL_FROM_FALLBACK` from `wrangler.toml` and deploy.
 
 Rotating the key: create a new one at the provider, run `npx wrangler secret put EMAIL_API_KEY` again,
 then delete the old key at the provider. Changing the sender or the provider: edit `wrangler.toml`,
@@ -136,16 +163,23 @@ The last lines show the worker's address, something like
 `https://waystation-account.<your-subdomain>.workers.dev/health` in a browser: you should see
 `"ok": true`, `"kv": true` and `"pepper": true` (and, after step 2b, `"email": {"configured": true, …}`).
 
+The same deploy attaches the custom domain from the `routes` line in `wrangler.toml`: Cloudflare creates
+the DNS record and the certificate for `account.portsolace.com` (the first time can take a few minutes).
+Check it the same way at <https://account.portsolace.com/health>. If the deploy says the zone was not
+found, `portsolace.com` is not on the Cloudflare account you are logged in to (`npx wrangler whoami`).
+
 ---
 
 ## 4. Point the game at it
 
-In `waystation/play/index.html`, in the `<head>` next to the `waystation-store` line, add (or edit) this
+In `waystation/play/index.html`, in the `<head>` next to the `portsolace-store` line, add (or edit) this
 line with your worker address, keeping the single quotes outside and the double quotes inside:
 
 ```html
-<meta name="waystation-account" content='{"apiBase":"https://waystation-account.<your-subdomain>.workers.dev"}'>
+<meta name="portsolace-account" content='{"apiBase":"https://account.portsolace.com"}'>
 ```
+
+(The `*.workers.dev` address works there too, for example before the custom domain is attached.)
 
 Commit and push to `main`; GitHub Pages redeploys within a minute or two. The title screen now shows
 **Sign in**, and Settings gets an **Account** shelf.
@@ -153,12 +187,12 @@ Commit and push to `main`; GitHub Pages redeploys within a minute or two. The ti
 To test before changing the live site, open the game, press F12 → Console and paste (with your address):
 
 ```js
-localStorage.setItem('waystation.account.config', JSON.stringify({ apiBase: 'https://waystation-account.<your-subdomain>.workers.dev' }));
+localStorage.setItem('portsolace.account.config', JSON.stringify({ apiBase: 'https://waystation-account.<your-subdomain>.workers.dev' }));
 location.reload();
 ```
 
 That override affects only your browser. Remove it with
-`localStorage.removeItem('waystation.account.config'); location.reload();`.
+`localStorage.removeItem('portsolace.account.config'); location.reload();`.
 
 ---
 
@@ -209,7 +243,7 @@ the game from the repository root with `node waystation/serve.js --port 8794 --b
 Bash prefix it with `MSYS_NO_PATHCONV=1`), and set the override in the game's console:
 
 ```js
-localStorage.setItem('waystation.account.config', JSON.stringify({ apiBase: 'http://127.0.0.1:8790' }));
+localStorage.setItem('portsolace.account.config', JSON.stringify({ apiBase: 'http://127.0.0.1:8790' }));
 ```
 
 Ports: the game's server defaults to 8787 (Wrangler's default too), the store worker uses 8788, push 8789,
@@ -266,11 +300,12 @@ rank}, profile}`; `rl:{bucket}:{ip}` and `rl:forgotEmail:{email}` → `{count, r
 
 | Symptom | Cause and fix |
 |---|---|
-| Title screen shows no Sign in button | The `<meta name="waystation-account">` tag is missing or its JSON is invalid; the game then treats cloud saves as not connected. |
+| Title screen shows no Sign in button | The `<meta name="portsolace-account">` tag is missing or its JSON is invalid; the game then treats cloud saves as not connected. |
 | Console shows a CORS error | The game's origin is not in `ALLOWED_ORIGIN`. Add it (no trailing slash), deploy. |
 | `/health` says `"pepper": false` | Run `npx wrangler secret put PEPPER` again, then `npm run deploy`. |
 | Sign-up answers 500 `config` | Same as above, or the KV id in `wrangler.toml` is still the placeholder. |
 | Players report "signed out" unexpectedly | Tokens expire 30 days after their last use, and a recovery or a password reset signs out every other device by design. |
 | Forgot your password? says "not set up on this build yet" | `EMAIL_API_KEY` is not set, or `EMAIL_FROM` / `PLAY_URL` is empty: `/health` lists what is `missing` under `email`. |
 | The reset email never arrives | Run `npm run tail` and ask for a link: a "reset email not sent" line quotes the provider's answer. Resend's test sender delivers only to the address that owns the Resend account (verify a domain for players); the limit is 3 emails per hour per address; check the spam folder. |
+| Logs say "noreply@portsolace.com is not verified … went out from onboarding@resend.dev" | `portsolace.com` is not (yet) verified in Resend, so the worker used `EMAIL_FROM_FALLBACK`; only the Resend account owner receives those. Verify the domain (step 2b). |
 | Saves stop uploading late in the day | The free plan's 1,000 KV writes per day are used up (the dashboard shows it). Upgrade to Workers Paid. |

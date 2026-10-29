@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — game data: modules, goods, planets, companies
+// PORT SOLACE — game data: modules, goods, planets, companies
 // ============================================================
 'use strict';
 

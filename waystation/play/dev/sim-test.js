@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 // ============================================================
-// WAYSTATION v2 — simulation and meta-game harness (DESIGN2.md 4.13)
+// PORT SOLACE v2 — simulation and meta-game harness (DESIGN2.md 4.13)
 //   node play/dev/sim-test.js            run every check, print the economy and pacing tables, exit 0 on success
 //   node play/dev/sim-test.js --quick    skip the 25-day pacing bot
 //   node play/dev/sim-test.js --days 10  pacing bot horizon (default 40); --no-compare prints only the shipped-preset table
-//   node play/dev/sim-test.js --tuning '{"rateDivisor":120,"sectorCosts":{"aurelia":2000000}}'   pacing bot under a WAYSTATION_TUNING override
+//   node play/dev/sim-test.js --tuning '{"rateDivisor":120,"sectorCosts":{"aurelia":2000000}}'   pacing bot under a PORTSOLACE_TUNING override
 // Loads data.js, data2.js, sim.js, meta.js inside a vm context with a localStorage shim and a
 // controllable clock (Date.now is replaced; Math.random can be seeded), then walks the journey:
 // new profile -> tutorial builds instant -> timers -> offline accrual at +3 h -> expedition round trip ->
 // mission completion and claim -> sector unlock and switch -> migration from a v1 save -> export/import,
 // plus hopper caps, skip costs, upgrades, loot odds, daily streak, ranks, store grants and every v1 Sim method.
-// The numeric sections run under WAYSTATION_TUNING = { preset: 'spec' } (the DESIGN2 formulas, asserted with their
+// The numeric sections run under PORTSOLACE_TUNING = { preset: 'spec' } (the DESIGN2 formulas, asserted with their
 // own numbers); one section asserts that the file default is the shipped 'slow' preset; the pacing bots run under
 // the file default and, for comparison, under 'spec'.
 // ============================================================
@@ -53,7 +53,7 @@ function makeWorld(opts = {}) {
   const storage = opts.storage || makeStorage();
   const clock = opts.clock || { now: opts.start || START };
   const tuning = opts.tuning === FILE_DEFAULT ? undefined : (opts.tuning || SPEC);
-  const ctx = vm.createContext({ console, localStorage: storage, WAYSTATION_TUNING: tuning });
+  const ctx = vm.createContext({ console, localStorage: storage, PORTSOLACE_TUNING: tuning });
   vm.runInContext('Date', ctx).now = () => clock.now;
   if (opts.seed != null) vm.runInContext('Math', ctx).random = mulberry32(opts.seed);
   for (const { f, code } of SOURCES) vm.runInContext(code, ctx, { filename: f });
@@ -489,7 +489,7 @@ function testMigration() {
   const place = (id, r, c) => { v1.grid[r][c] = { id, built: 3 }; };
   place('dock', 4, 8); place('warehouse', 4, 6); place('solar', 3, 7); place('fuel', 5, 7); place('quarters', 4, 9); place('cantina', 4, 5);
   v1.credits = 4321; v1.day = 41; v1.level = 2; v1.rep = 1.4; v1.stats.shipsServed = 12; v1.name = 'Old Faithful';
-  storage.setItem('waystation-save-v1', JSON.stringify(v1));
+  storage.setItem('portsolace-save-v1', JSON.stringify(v1));
   const W = makeWorld({ storage, seed: 15 });
   const r = W.Meta.init();
   const M = W.Meta, S = W.Sim;
@@ -498,8 +498,8 @@ function testMigration() {
   check('credits became the wallet', M.profile.credits === 4321 && S.state.credits === 4321);
   check('rank xp = served x 5', M.profile.rank.xp === 60);
   check('every occupied cell has meta', W.Sim.cellsOf(S.state).every(({ r, c }) => { const m = S.cellMeta(r, c); return m && m.lvl === 1 && m.bank === 0 && m.readyAt === null; }));
-  check('v1 key renamed to .bak', storage.getItem('waystation-save-v1') === null && !!storage.getItem('waystation-save-v1.bak'));
-  check('v2 profile written', !!storage.getItem('waystation.profile.v2'));
+  check('v1 key renamed to .bak', storage.getItem('portsolace-save-v1') === null && !!storage.getItem('portsolace-save-v1.bak'));
+  check('v2 profile written', !!storage.getItem('portsolace.profile.v2'));
   check('no instant builds for a migrated station', (() => { const d = W.placeNear('dock'); return d && M.build(d.r, d.c).building; })());
   check('tutorial missions complete from the existing station', M.missions().find(m => m.id === 'c_dock').claimable);
   // a second load does not migrate again
@@ -763,12 +763,12 @@ function testAchievements() {
   check('residents peak tracked by tick', (() => { S.state.residents = 25; M.tick(W.clock.now + 1); return M.profile.stats.residentsPeak === 25 && M.lifetimeStats().residentsPeak === 25; })());
   check('Aurelian liners counted on dock', (() => { S.state.companies.aurelian.served = 1; M._onDock({ company: 'aurelian', cls: 'liner' }); return M.profile.stats.aurelianServed === 1; })());
   // migration defaults: an older profile without the new fields
-  M.save(); const raw = JSON.parse(W.storage.getItem('waystation.profile.v2')); delete raw.stats.residentsPeak; delete raw.stats.aurelianServed; delete raw.stats.plotRings;
+  M.save(); const raw = JSON.parse(W.storage.getItem('portsolace.profile.v2')); delete raw.stats.residentsPeak; delete raw.stats.aurelianServed; delete raw.stats.plotRings;
   const noAch = JSON.parse(JSON.stringify(raw)); delete noAch.achievements;
-  W.storage.setItem('waystation.profile.v2', JSON.stringify(raw));
+  W.storage.setItem('portsolace.profile.v2', JSON.stringify(raw));
   const W2 = makeWorld({ storage: W.storage, clock: W.clock, seed: 29 }); W2.Meta.init();
   check('older profiles get the new stats with defaults; claims survive save/load', W2.Meta.profile.stats.residentsPeak === 0 && W2.Meta.profile.stats.plotRings === 0 && W2.Meta.profile.achievements.claimed.harbourmaster === 3 && W2.Meta.achievements().length === 24);
-  W.storage.setItem('waystation.profile.v2', JSON.stringify(noAch));
+  W.storage.setItem('portsolace.profile.v2', JSON.stringify(noAch));
   const W3 = makeWorld({ storage: W.storage, clock: W.clock, seed: 30 }); W3.Meta.init();
   check('a profile without the achievements block gets it and re-derives reached tiers from its stats', !!W3.Meta.profile.achievements && W3.Meta.achievements().find(a => a.id === 'harbourmaster').reached === 3 && W3.Meta.achievementBadge() >= 1);
 }
@@ -823,7 +823,7 @@ function pacingBot(days, tuning, label) {
       const M = W.Meta, S = W.Sim;
       let banked = 0, liveBefore;
       S.on('collect', d => { banked += d.amount; });
-      const creditsBefore = storage.getItem('waystation.profile.v2') ? JSON.parse(storage.getItem('waystation.profile.v2')).credits : 6000;
+      const creditsBefore = storage.getItem('portsolace.profile.v2') ? JSON.parse(storage.getItem('portsolace.profile.v2')).credits : 6000;
       const r = M.init();
       const off = M.offlineSummary;
       if (off) income.catchup += off.credits;
@@ -877,7 +877,7 @@ function pacingBot(days, tuning, label) {
       M.save();
     }
     if (day <= 3 || day % 5 === 0 || day === days) {
-      const p = JSON.parse(storage.getItem('waystation.profile.v2'));
+      const p = JSON.parse(storage.getItem('portsolace.profile.v2'));
       const home = p.sectors.home;
       console.log(`  day ${String(day).padStart(2)}: wallet ${Math.round(p.credits).toLocaleString('en-US').padStart(9)}  AM ${String(p.am).padStart(4)}  home L${home.level} rep ${home.rep.toFixed(1)} modules ${home.grid.flat().filter(Boolean).length - 1}  rank ${p.rank.level}  unlocked ${p.unlocked.join(',')}  charts ${JSON.stringify(p.expeditions.charts)}`);
     }
@@ -921,7 +921,7 @@ function testLiveries() {
   check('history records the token grant', M.profile.entitlements.history.some(h => h.sku === 'livery_token' && h.livery === 'keth'));
   check('redeem refused for an owned livery', !M.redeemLiveryToken('keth').ok);
   const set = M.setLivery('keth');
-  check('setLivery(keth): ok, changed, saved, livery event {id, was}', set.ok && set.changed && M.profile.settings.livery === 'keth' && M.livery().id === 'keth' && W.count('livery') === 1 && W.last('livery').id === 'keth' && W.last('livery').was === 'default' && JSON.parse(W.storage.getItem('waystation.profile.v2')).settings.livery === 'keth', set);
+  check('setLivery(keth): ok, changed, saved, livery event {id, was}', set.ok && set.changed && M.profile.settings.livery === 'keth' && M.livery().id === 'keth' && W.count('livery') === 1 && W.last('livery').id === 'keth' && W.last('livery').was === 'default' && JSON.parse(W.storage.getItem('portsolace.profile.v2')).settings.livery === 'keth', set);
   check('setting the same livery again is ok but unchanged', M.setLivery('keth').ok && !M.setLivery('keth').changed);
   check('the other sector liveries stay locked (source sector)', !M.ownsLivery('sable') && M.liveries().find(l => l.id === 'sable').source === 'sector');
   M.grantSku('liveries', { grantId: 'cs_liv_1' });
@@ -944,12 +944,156 @@ function testLiveries() {
   check('every v1 Sim method still runs after the livery section', typeof S.totals === 'function' && !!S.totals());
 }
 
+// ------------------------------------------------------------ js/migrate.js: legacy 'waystation*' keys copied to 'portsolace*'
+// A storage shim whose items are also own enumerable properties, like the real localStorage, so the script may
+// enumerate with key(i)/length or with Object.keys(localStorage).
+function makeEnumerableStorage(init) {
+  const m = new Map();
+  const s = Object.create({
+    getItem(k) { return m.has(k) ? m.get(k) : null; },
+    setItem(k, v) { m.set(k, String(v)); Object.defineProperty(s, k, { value: String(v), enumerable: true, configurable: true, writable: true }); },
+    removeItem(k) { m.delete(k); delete s[k]; },
+    key(i) { return [...m.keys()][i] ?? null; },
+    get length() { return m.size; },
+  });
+  Object.defineProperty(s, '_map', { value: m, enumerable: false });
+  for (const [k, v] of Object.entries(init || {})) s.setItem(k, v);
+  return s;
+}
+function runMigrate(code, storage) {
+  const ctx = vm.createContext({ console, localStorage: storage });
+  ctx.window = ctx;
+  vm.runInContext(code, ctx, { filename: 'migrate.js' });
+  return ctx;
+}
+function testMigrateScript() {
+  sec('migrate.js: legacy key copy (M1)');
+  const file = path.join(ROOT, 'migrate.js');
+  if (!fs.existsSync(file)) { console.log('  skip js/migrate.js not present'); return; }
+  const code = fs.readFileSync(file, 'utf8');
+  const legacy = { 'waystation.profile.v2': '{"name":"Old Faithful"}', 'waystation-save-v1.bak': '{"v":1}', 'waystation.store.grants': '[1]', 'waystation.playerId': 'p_123',
+    'waystation.account': '{"t":1}', 'waystation.push': 'on', 'waystation.admin': 'x', 'other.key': 'keep' };
+  const st = makeEnumerableStorage(Object.assign({}, legacy, { 'portsolace.push': 'off' }));
+  let threw = null;
+  try { var ctx = runMigrate(code, st); } catch (e) { threw = e; }
+  check('runs without throwing', !threw, threw && String(threw));
+  if (threw) return;
+  const mapped = k => 'portsolace' + k.slice(10);
+  check('every legacy key is copied to its portsolace name', Object.keys(legacy).filter(k => k.startsWith('waystation') && k !== 'waystation.push').every(k => st.getItem(mapped(k)) === legacy[k]));
+  check('an existing portsolace key is not overwritten', st.getItem('portsolace.push') === 'off');
+  check('legacy keys are never deleted', Object.keys(legacy).every(k => st.getItem(k) === legacy[k]));
+  check('unrelated keys are untouched and not copied', st.getItem('other.key') === 'keep' && [...st._map.keys()].filter(k => k.startsWith('other')).length === 1);
+  const at = st.getItem('portsolace.migrated.v1');
+  check('portsolace.migrated.v1 is an ISO time', !!at && !Number.isNaN(Date.parse(at)) && new Date(at).toISOString() === at, at);
+  const api = ctx.PortSolaceMigrate;
+  check('window.PortSolaceMigrate.mapKey maps the prefix', !!api && typeof api.mapKey === 'function' && api.mapKey('waystation.profile.v2') === 'portsolace.profile.v2' && api.mapKey('waystation-save-v1') === 'portsolace-save-v1' && api.mapKey('waystation.store.x') === 'portsolace.store.x');
+  // a second load: the marker is written once, and a value changed since under the new name is kept
+  st.setItem('portsolace.migrated.v1', '2026-01-01T00:00:00.000Z');
+  st.setItem('portsolace.profile.v2', '{"name":"New Home"}');
+  runMigrate(code, st);
+  check('second run keeps the first migration time', st.getItem('portsolace.migrated.v1') === '2026-01-01T00:00:00.000Z');
+  check('second run does not clobber newer portsolace data', st.getItem('portsolace.profile.v2') === '{"name":"New Home"}');
+  // storage that throws (blocked site data) must never break boot
+  const bad = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); }, removeItem() {}, key() { throw new Error('blocked'); }, get length() { throw new Error('blocked'); } };
+  let threw2 = null;
+  try { runMigrate(code, bad); } catch (e) { threw2 = e; }
+  check('throwing storage does not throw out of the script', !threw2, threw2 && String(threw2));
+  let threw3 = null;
+  try { const c = vm.createContext({ console }); c.window = c; vm.runInContext(code, c, { filename: 'migrate.js' }); } catch (e) { threw3 = e; }
+  check('missing localStorage does not throw out of the script', !threw3, threw3 && String(threw3));
+}
+
+// ------------------------------------------------------------ play/import.html: the receiver (M5) under a stub DOM
+// Runs migrate.js and the page's inline script in one vm context with stub elements, location and history, so the
+// hand-off can be driven like a player would: open the link, read the page, click.
+function runImportPage(hash, storage) {
+  const page = fs.readFileSync(path.join(ROOT, '..', 'import.html'), 'utf8');
+  const inline = /<script>\s*([\s\S]*?)<\/script>/.exec(page)[1];
+  const els = {};
+  const elem = id => els[id] || (els[id] = { id, textContent: '', hidden: true, className: '', value: '', files: null, _on: {},
+    addEventListener(t, f) { this._on[t] = f; }, focus() {}, click() { if (this._on.click) this._on.click(); } });
+  const replaced = [];
+  const location = { hash, pathname: '/play/import.html', search: '', hostname: 'portsolace.com', href: 'https://portsolace.com/play/import.html' + hash,
+    replace(u) { replaced.push(u); }, assign() {}, reload() {} };
+  const history = { state: null, replaceState() { location.hash = ''; } };
+  const ctx = vm.createContext({ console, localStorage: storage, document: { getElementById: elem }, location, history,
+    atob, TextDecoder, TextEncoder, Blob, URL, DecompressionStream: globalThis.DecompressionStream, addEventListener() {} });
+  ctx.window = ctx;
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'migrate.js'), 'utf8'), ctx, { filename: 'migrate.js' });
+  vm.runInContext(inline, ctx, { filename: 'import.html' });
+  return { el: elem, replaced };
+}
+const settle = () => new Promise(r => setTimeout(r, 60));
+async function testImportPage() {
+  sec('play/import.html: receiver (M5)');
+  if (!fs.existsSync(path.join(ROOT, '..', 'import.html'))) { console.log('  skip play/import.html not present'); return; }
+  const b64url = s => Buffer.from(s, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const j = keys => '#ps-import=j.' + b64url(JSON.stringify({ v: 1, from: 'https://joshanderson051.github.io', at: 1, keys }));
+  const prof = name => JSON.stringify({ activeSector: 'home', sectors: { home: { name } } });
+  const EVIL = { 'waystation.account.config': '{"apiBase":"https://evil.example"}', 'waystation.store': '{"mode":"stripe","apiBase":"https://evil.example"}',
+    'waystation.push': '{"apiBase":"https://evil.example"}', 'waystation.migrated.v1': '2020-01-01T00:00:00.000Z' };
+  const OVERRIDES = ['portsolace.account.config', 'portsolace.store', 'portsolace.push'];
+
+  // 1. a crafted link that carries only the config overrides writes nothing and does not open the game
+  let st = makeEnumerableStorage();
+  let p = runImportPage(j(EVIL), st); await settle();
+  check('config-only payload: no override key is written', OVERRIDES.every(k => st.getItem(k) === null), [...st._map.keys()]);
+  check('config-only payload: the game is not opened', p.replaced.length === 0, p.replaced);
+  check('config-only payload: reads as nothing to move', p.el('msg').textContent === 'No station was found at the old address in this browser.', p.el('msg').textContent);
+
+  // 2. a real station plus overrides, empty browser: nothing is written before the click, then only MOVE_KEYS
+  st = makeEnumerableStorage();
+  p = runImportPage(j(Object.assign({ 'waystation.profile.v2': prof('<b>Old Faithful</b>'), 'waystation.playerId': 'p_1', 'waystation.account': '{"token":"B"}' }, EVIL)), st); await settle();
+  check('station payload: nothing written before a click', st.getItem('portsolace.profile.v2') === null && p.replaced.length === 0);
+  check('station payload: asks with Bring it over / Cancel and shows the incoming name as text', !p.el('btn-bring').hidden && !p.el('btn-cancel').hidden && p.el('name-old').textContent === '<b>Old Faithful</b>');
+  p.el('btn-bring').click();
+  check('Bring it over writes the station, player id and session', st.getItem('portsolace.profile.v2') === prof('<b>Old Faithful</b>') && st.getItem('portsolace.playerId') === 'p_1' && st.getItem('portsolace.account') === '{"token":"B"}');
+  check('Bring it over never writes an override key', OVERRIDES.every(k => st.getItem(k) === null));
+  check('Bring it over opens the game with ?moved=1', p.replaced[0] === './?moved=1', p.replaced);
+
+  // 3. Cancel writes nothing
+  st = makeEnumerableStorage();
+  p = runImportPage(j({ 'waystation.profile.v2': prof('Old') }), st); await settle();
+  p.el('btn-cancel').click();
+  check('Cancel writes nothing and stays put', st.getItem('portsolace.profile.v2') === null && p.replaced.length === 0);
+
+  // 4. a sign-in already here is kept unless the player chose Replace
+  st = makeEnumerableStorage({ 'portsolace.account': '{"token":"A"}', 'portsolace.migrated.v1': 'x' });
+  p = runImportPage(j({ 'waystation.profile.v2': prof('Old'), 'waystation.account': '{"token":"B"}' }), st); await settle();
+  p.el('btn-bring').click();
+  check('Bring it over keeps a different sign-in already here', st.getItem('portsolace.account') === '{"token":"A"}' && st.getItem('portsolace.profile.v2') === prof('Old'));
+
+  // 5. a different station here: both names, Keep this one changes nothing, Replace takes everything
+  const here = { 'portsolace.profile.v2': prof('Here'), 'portsolace.account': '{"token":"A"}', 'portsolace.migrated.v1': 'x' };
+  const incoming = j({ 'waystation.profile.v2': prof('Old'), 'waystation.account': '{"token":"B"}' });
+  st = makeEnumerableStorage(here);
+  p = runImportPage(incoming, st); await settle();
+  check('conflict shows both station names', p.el('name-here').textContent === 'Here' && p.el('name-old').textContent === 'Old' && !p.el('btn-replace').hidden && !p.el('btn-keep').hidden);
+  p.el('btn-keep').click();
+  check('Keep this one changes nothing', st.getItem('portsolace.profile.v2') === prof('Here') && st.getItem('portsolace.account') === '{"token":"A"}' && p.replaced.length === 0);
+  st = makeEnumerableStorage(here);
+  p = runImportPage(incoming, st); await settle();
+  p.el('btn-replace').click();
+  check('Replace writes the incoming station and session', st.getItem('portsolace.profile.v2') === prof('Old') && st.getItem('portsolace.account') === '{"token":"B"}' && p.replaced[0] === './?moved=1');
+
+  // 6. the gzip form and the rejects
+  if (typeof globalThis.CompressionStream === 'function') {
+    const gz = require('zlib').gzipSync(Buffer.from(JSON.stringify({ v: 1, keys: { 'waystation.profile.v2': prof('Zipped') } }), 'utf8'));
+    st = makeEnumerableStorage();
+    p = runImportPage('#ps-import=g.' + gz.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''), st); await settle();
+    check('g. payload decodes and asks', p.el('name-old').textContent === 'Zipped' && !p.el('btn-bring').hidden);
+  }
+  st = makeEnumerableStorage();
+  p = runImportPage(j({ 'waystation.profile.v2': prof('Old'), 'other.key': 'x' }), st); await settle();
+  check('a key outside waystation… rejects the whole payload', p.el('head').textContent === 'The station could not be moved' && st._map.size === 1);
+}
+
 // ============================================================ run
-(function main() {
-  console.log(`Waystation v2 sim-test  (${FILES.join(', ')})`);
-  const tests = [testNewProfileAndTutorial, testHoppers, testOffline, testExpeditions, testMissions, testDaily, testRanks, testSectors, testExportImportAndReset, testMigration, testV1Sim, testStore, testConvoyAndMisc, testShippedPreset, testPlots, testAchievements, testLiveries];
+(async function main() {
+  console.log(`Port Solace v2 sim-test  (${FILES.join(', ')})`);
+  const tests = [testNewProfileAndTutorial, testHoppers, testOffline, testExpeditions, testMissions, testDaily, testRanks, testSectors, testExportImportAndReset, testMigration, testV1Sim, testStore, testConvoyAndMisc, testShippedPreset, testPlots, testAchievements, testLiveries, testMigrateScript, testImportPage];
   for (const t of tests) {
-    try { t(); } catch (e) { results.fail++; results.failures.push(`${t.name}: threw ${e && e.stack}`); console.log(`  THREW ${e && e.stack}`); }
+    try { await t(); } catch (e) { results.fail++; results.failures.push(`${t.name}: threw ${e && e.stack}`); console.log(`  THREW ${e && e.stack}`); }
   }
   economyTable();
   if (!QUICK) {

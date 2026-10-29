@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — Meta: profile, wallet and Antimatter, hoppers (banks),
+// PORT SOLACE v2 — Meta: profile, wallet and Antimatter, hoppers (banks),
 // build timers and skips, upgrades, sectors, expeditions, missions, daily
 // streak, commander rank, collection, convoy window, store grants.
 // Engineer S. Source of truth: DESIGN2.md 0.5, 0.6, 4.x, 6, 7.1.
@@ -7,7 +7,7 @@
 // ============================================================
 'use strict';
 
-const PROFILE_KEY = 'waystation.profile.v2';
+const PROFILE_KEY = 'portsolace.profile.v2';   // was waystation.profile.v2: js/migrate.js copies the old key on first load
 const DAY_MS = 86400e3;
 
 const cellKey = (r, c) => `${r},${c}`;
@@ -149,7 +149,7 @@ const Meta = {
   import(json) {
     let p = null;
     try { p = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return { ok: false, why: 'Not valid JSON' }; }
-    if (!this._validProfile(p)) return { ok: false, why: 'Not a Waystation v2 profile' };
+    if (!this._validProfile(p)) return { ok: false, why: 'Not a Port Solace v2 profile' };
     const now = this.now();
     this.profile = p; this._fixup(p, now); this._acc = this._freshAcc(now); this._offline = null;
     this._bindActive();

@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — Account: email + password sign-in and cloud saves (DESIGN2.md Addendum A2.1)
+// PORT SOLACE — Account: email + password sign-in and cloud saves (DESIGN2.md Addendum A2.1)
 // Classic script; exposes the `Account` global. Loads after hud.js, before admin.js and main.js.
 //
 // One cloud save per account (the whole Meta.profile). Newest wins; when both sides moved since the
@@ -19,8 +19,8 @@
 const Account = (() => {
   const NOT_CONNECTED = 'Cloud saves are not connected yet';
   const KEYS = {
-    session: 'waystation.account',          // {token, email}
-    config: 'waystation.account.config',    // optional JSON override of the <meta> config (local testing)
+    session: 'portsolace.account',          // {token, email}
+    config: 'portsolace.account.config',    // optional JSON override of the <meta> config (local testing)
   };
   const DEFAULTS = {
     apiBase: '',
@@ -131,7 +131,7 @@ const Account = (() => {
   // ---------------------------------------------------------- configuration
   function readTagConfig() {
     if (!hasDoc() || typeof document.querySelector !== 'function') return {};
-    const tag = document.querySelector('meta[name="waystation-account"]');
+    const tag = document.querySelector('meta[name="portsolace-account"]');
     const content = tag && (typeof tag.getAttribute === 'function' ? tag.getAttribute('content') : tag.content);
     if (!content) return {};
     try { const v = JSON.parse(content); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; }

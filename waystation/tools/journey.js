@@ -6,7 +6,7 @@
 //   start the server:  MSYS_NO_PATHCONV=1 node waystation/serve.js --port 8792 --base waystation
 //   run:               node tools/journey.js [baseUrl] [outDir]
 //     baseUrl default http://localhost:8792/waystation/     outDir default play/dev/shots (journey-*.png)
-// The store is forced into sandbox mode through localStorage['waystation.store'] (store.js honours it), so nothing reaches Stripe.
+// The store is forced into sandbox mode through localStorage['portsolace.store'] (store.js honours it), so nothing reaches Stripe.
 const puppeteer = require('puppeteer-core');
 const fs = require('fs'), path = require('path');
 const [, , BASE = 'http://localhost:8792/waystation/', OUT = path.join(__dirname, '..', 'play', 'dev', 'shots')] = process.argv;
@@ -38,7 +38,7 @@ function step(name, ok, detail) { steps.push({ name, ok: !!ok, detail }); consol
 
   // 1. a fresh profile, sandbox store
   // the first load of this tab wipes the profile before any script runs (boot would save a fresh one otherwise); the reload in step 8 keeps it
-  await page.evaluateOnNewDocument(() => { if (!sessionStorage.getItem('journey')) { localStorage.clear(); localStorage.setItem('waystation.store', JSON.stringify({ mode: 'sandbox' })); sessionStorage.setItem('journey', '1'); } });
+  await page.evaluateOnNewDocument(() => { if (!sessionStorage.getItem('journey')) { localStorage.clear(); localStorage.setItem('portsolace.store', JSON.stringify({ mode: 'sandbox' })); sessionStorage.setItem('journey', '1'); } });
   await page.goto(PAGE, { waitUntil: 'networkidle0' });
   await page.waitForFunction(() => document.body.getAttribute('data-screen') === 'title' && typeof Engine !== 'undefined' && Engine.ready, { timeout: 30000 });
   await ev(() => document.fonts.ready);
@@ -126,7 +126,7 @@ function step(name, ok, detail) { steps.push({ name, ok: !!ok, detail }); consol
   const shelf1 = await ev(() => ({ panel: UI.panel, owned: document.querySelectorAll('.livery-card.owned').length, sable: Meta.liveries().find(l => l.id === 'sable').source }));
   step('Choose opens Settings on the Livery shelf with all 8 owned', shelf1.panel === 'settings' && shelf1.owned === 8 && shelf1.sable === 'store', shelf1);
   await page.$eval('.livery-card[data-livery="founder"]', b => b.click()); await settle(600);
-  const fd = await ev(() => ({ engine: Engine.livery.id, active: (document.querySelector('.livery-card.active') || {}).dataset?.livery, tag: (document.querySelector('#livery-shelf .shelf-tag') || {}).textContent, saved: JSON.parse(localStorage.getItem('waystation.profile.v2')).settings.livery }));
+  const fd = await ev(() => ({ engine: Engine.livery.id, active: (document.querySelector('.livery-card.active') || {}).dataset?.livery, tag: (document.querySelector('#livery-shelf .shelf-tag') || {}).textContent, saved: JSON.parse(localStorage.getItem('portsolace.profile.v2')).settings.livery }));
   step("Founder's Ivory applied: engine, card, shelf tag and the saved profile agree", fd.engine === 'founder' && fd.active === 'founder' && fd.tag === "Founder's Ivory" && fd.saved === 'founder', fd);
   await shot('livery-settings-founder');
   await ev(() => UI.openPanel('station')); await settle(500);

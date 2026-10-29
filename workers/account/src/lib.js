@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — account backend: constants and pure helpers (DESIGN2.md Addendum A2.1)
+// PORT SOLACE — account backend: constants and pure helpers (DESIGN2.md Addendum A2.1)
 // Kept apart from index.js because a module Worker's main file may only export handlers and functions
 // (workerd rejects exported constants at start-up). Everything here is side-effect free and unit-tested.
 // ============================================================

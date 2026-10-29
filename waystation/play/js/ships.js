@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — Ships: hull sprites, engine bloom, nav lights, shadow,
+// PORT SOLACE — Ships: hull sprites, engine bloom, nav lights, shadow,
 // HOLD plate and hover ring (DESIGN.md section 9, "Ships API" in 0.1)
 // ============================================================
 // Hulls are drawn in a 64x64 design space with the nose at +x and baked to

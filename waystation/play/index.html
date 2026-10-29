@@ -3,35 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Waystation</title>
-<meta name="description" content="Waystation: run a way station on the edge of interstellar space. Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate. Plays in the browser, saves on your device.">
+<title>Port Solace</title>
+<meta name="description" content="Port Solace: run a way station on the edge of interstellar space. Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate. Plays in the browser, saves on your device.">
 <meta name="theme-color" content="#04050A">
 <meta name="color-scheme" content="dark">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="icon" href="../assets/icon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
 <link rel="manifest" href="../site.webmanifest">
-<link rel="canonical" href="https://joshanderson051.github.io/waystation/play/">
+<link rel="canonical" href="https://portsolace.com/play/">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Waystation">
-<meta property="og:title" content="Waystation">
+<meta property="og:site_name" content="Port Solace">
+<meta property="og:title" content="Port Solace">
 <meta property="og:description" content="A space station builder for the browser. Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate.">
-<meta property="og:url" content="https://joshanderson051.github.io/waystation/play/">
-<meta property="og:image" content="https://joshanderson051.github.io/waystation/assets/og.jpg">
+<meta property="og:url" content="https://portsolace.com/play/">
+<meta property="og:image" content="https://portsolace.com/assets/og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Waystation key art: a vast lit space station with radial docking arms above an amber world">
+<meta property="og:image:alt" content="Port Solace key art: a vast lit space station with radial docking arms above an amber world">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Waystation">
+<meta name="twitter:title" content="Port Solace">
 <meta name="twitter:description" content="A space station builder for the browser. Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate.">
-<meta name="twitter:image" content="https://joshanderson051.github.io/waystation/assets/og.jpg">
-<!-- 7.2 store configuration: Stripe Checkout through the store worker (workers/store/README.md) -->
-<meta name="waystation-store" content='{"mode":"stripe","apiBase":"https://waystation-store.waystation-store-worker.workers.dev"}'>
+<meta name="twitter:image" content="https://portsolace.com/assets/og.jpg">
+<!-- 7.2 store configuration: Stripe Checkout through the store worker (workers/store/README.md). The three workers keep their
+     internal script names (waystation-store, -push, -account) and *.workers.dev addresses; these are their custom domains. -->
+<meta name="portsolace-store" content='{"mode":"stripe","apiBase":"https://store.portsolace.com"}'>
 <!-- A3 push notifications: put the push worker's address in apiBase (workers/push/README.md); empty = switch shows "Not connected" -->
-<meta name="waystation-push" content='{"apiBase":"https://waystation-push.waystation-store-worker.workers.dev"}'>
+<meta name="portsolace-push" content='{"apiBase":"https://push.portsolace.com"}'>
 <!-- A2.1 cloud saves: the account worker URL goes in apiBase; empty keeps cloud saves off -->
-<meta name="waystation-account" content='{"apiBase":"https://waystation-account.waystation-store-worker.workers.dev"}'>
-<meta name="waystation-admin" content="sha256:d9b5f58f0b38198293971865a14074f59eba3e82595becbe86ae51f1d9f1f65e">
+<meta name="portsolace-account" content='{"apiBase":"https://account.portsolace.com"}'>
+<meta name="portsolace-admin" content="sha256:d9b5f58f0b38198293971865a14074f59eba3e82595becbe86ae51f1d9f1f65e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -75,7 +76,7 @@
 <!-- 5.4 title screen v2 (main.js wires the buttons; ids are the v1 contract plus resume-rank / resume-name) -->
 <div id="title">
   <div class="title-band glass"><i class="sweep"></i>
-    <h1 class="wordmark hero">Waystation</h1>
+    <h1 class="wordmark hero">Port Solace</h1>
     <div class="title-sub">Station commissioning</div>
     <div class="title-loading" id="title-loading" hidden><i class="pulse-dot"></i><span id="title-loading-text">Lighting the station</span></div>
     <div class="title-account" id="title-account"></div>
@@ -99,19 +100,22 @@
         <input id="title-name" type="text" class="input" maxlength="28" autocomplete="off" spellcheck="false" aria-describedby="title-registry">
         <button type="button" id="btn-reroll" class="btn icon ghost" title="Another name" aria-label="Another name"><span class="ic-slot" data-icon="reroll"></span></button>
       </div>
-      <div id="title-registry" class="micro">Registry WS-0000 will be assigned on commission</div>
+      <div id="title-registry" class="micro">Registry PS-0000 will be assigned on commission</div>
       <div id="title-confirm" class="title-confirm" hidden>
         <p class="confirm-text">Your current profile will be replaced. Every sector, rank and reward goes with it.</p>
         <div class="title-actions"><button type="button" id="btn-title-back" class="btn ghost">Back</button></div>
       </div>
       <div class="title-actions"><button type="button" id="btn-commission" class="btn big primary">Commission station</button></div>
     </div>
+    <!-- M3: a player from the old address brings their station over (hud.js shows it on portsolace.com and local hosts only) -->
+    <div id="title-move" class="title-actions" hidden><button type="button" class="linkish" data-account="move">Bring your station from the old address</button></div>
   </div>
 </div>
 
 <!-- 2.4 / A4: phones get the same bridge folded (style.css 30b, hud.js PHONE_MQ), not a message -->
 
-<!-- 0.1 load order -->
+<!-- 0.1 load order (migrate.js first: it copies the old waystation… storage keys to portsolace… before anything reads them) -->
+<script src="js/migrate.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.6.6/pixi.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pixi-filters@6.1.5/dist/pixi-filters.min.js"></script>
 <script src="js/data.js"></script>

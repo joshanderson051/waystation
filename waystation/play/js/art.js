@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — art.js (Engineer A1)
+// PORT SOLACE — art.js (Engineer A1)
 // Shared visual foundation for the canvas renderer and the DOM HUD:
 //   PAL            resolved color tokens (section 2) + PAL.load()/PAL.family()
 //   FAMILY, FAMILY_COLOR, KIND_COLOR, COMPANY_COLOR
@@ -259,7 +259,7 @@ function fnv1a32(str) {
   return h >>> 0;
 }
 function registryNumber(name) { return 1000 + (fnv1a32(name) % 9000); }
-function registryOf(name) { return 'WS-' + registryNumber(name); }
+function registryOf(name) { return 'PS-' + registryNumber(name); }
 
 // ------------------------------------------------------------
 // 5. Icon library (section 6.0). 24x24 viewBox, 1.5-unit strokes, round

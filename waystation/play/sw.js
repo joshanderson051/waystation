@@ -1,23 +1,29 @@
 // ============================================================
-// WAYSTATION — service worker for push notifications (DESIGN2.md Addendum A3)
+// PORT SOLACE — service worker for push notifications (DESIGN2.md Addendum A3)
 // Registered by js/notify.js only after the player turns notifications on in Settings; never on a
 // plain page load. It has one job: show the notification the push worker (workers/push) sends and
 // bring the bridge back when it is clicked. No fetch handler, no caching: the site stays plain static.
 // ============================================================
 'use strict';
 
-const CONFIG_CACHE = 'waystation-push-config';
-const CONFIG_URL = '/__waystation-push-config';
-const DEFAULT_TITLE = 'Waystation';
+const CONFIG_CACHE = 'portsolace-push-config';
+const CONFIG_URL = '/__portsolace-push-config';
+const DEFAULT_TITLE = 'Port Solace';
+const LEGACY_CACHE = 'waystation-push-config';     // the config cache's name before the Port Solace rename
 
 self.addEventListener('install', () => { self.skipWaiting(); });
-self.addEventListener('activate', e => { e.waitUntil(self.clients.claim()); });
+self.addEventListener('activate', e => {
+  e.waitUntil((async () => {
+    try { if (await caches.has(LEGACY_CACHE)) await caches.delete(LEGACY_CACHE); } catch (err) { /* nothing to clean up */ }
+    await self.clients.claim();
+  })());
+});
 
 // The page tells us where the backend is (and who the player is) so a subscription the push service
 // renews behind our back (pushsubscriptionchange) can register itself again. An empty message clears it.
 self.addEventListener('message', e => {
   const d = e.data;
-  if (!d || d.type !== 'waystation-push-config') return;
+  if (!d || d.type !== 'portsolace-push-config') return;
   e.waitUntil(saveConfig(d.apiBase ? { apiBase: d.apiBase, playerId: d.playerId, publicKey: d.publicKey || '' } : null));
 });
 
@@ -30,7 +36,7 @@ self.addEventListener('push', e => {
   const options = {
     body: String(data.body || '').slice(0, 200),
     icon,
-    tag: String(data.tag || 'waystation').slice(0, 32),      // a newer notice replaces the previous one
+    tag: String(data.tag || 'portsolace').slice(0, 32),      // a newer notice replaces the previous one
     renotify: true,
     timestamp: Number(data.at) || Date.now(),
     data: { url: self.registration.scope, kinds: Array.isArray(data.kinds) ? data.kinds.slice(0, 8) : [] },

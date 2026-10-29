@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — engine/index.js (Engineer E)
+// PORT SOLACE v2 — engine/index.js (Engineer E)
 // The Engine facade (DESIGN2.md 0.3): init, setSector, setPaused, resize,
 // placing / selected / hover, camera, cellAt / cellToScreen, events,
 // fx, thumbnail, perf. Wires the engine modules into one frame loop and

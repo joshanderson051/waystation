@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — Web Push primitives for the push worker
+// PORT SOLACE — Web Push primitives for the push worker
 // RFC 8291 (message encryption, aes128gcm per RFC 8188) and RFC 8292 (VAPID), written against WebCrypto
 // only, so the same file runs inside a Cloudflare Worker and under Node 20+ (the tests). No dependencies.
 //

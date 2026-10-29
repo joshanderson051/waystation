@@ -1,5 +1,5 @@
 /* ==========================================================================
-   WAYSTATION — manual.css   (the game manual; loads after ../site.css)
+   PORT SOLACE — manual.css   (the game manual; loads after ../site.css)
    Article layout on the landing page's grammar: a sticky contents rail on the left at desktop widths,
    a 72ch prose column, numbered shelf headings, glass figure frames, keyboard chips, data tables.
    Tokens, type roles, .glass, .shelf, .chip, .btn and the top rail all come from site.css.

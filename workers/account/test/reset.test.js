@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — password reset by email: the email module and the /forgot and /reset routes (A2.1)
+// PORT SOLACE — password reset by email: the email module and the /forgot and /reset routes (A2.1)
 // Run with `npm test` in workers/account. The provider is a mocked fetch handed in through handle()'s opts;
 // no network. Real PBKDF2, same in-memory KV stub as account.test.js.
 // ============================================================
@@ -10,8 +10,8 @@ import worker, { handle } from '../src/index.js';
 import { LIMITS, RESET_TOKEN_TTL_S, WORDS, sha256Hex } from '../src/lib.js';
 import { emailConfig, resetEmail, resetLink, sendEmail, PROVIDERS, SENDER_NAME, RESET_MINUTES } from '../src/email.js';
 
-const ORIGIN = 'https://joshanderson051.github.io';
-const PLAY = 'https://joshanderson051.github.io/waystation/play/';
+const ORIGIN = 'https://portsolace.com';
+const PLAY = 'https://portsolace.com/play/';
 const PEPPER = 'unit-test-pepper-that-is-long-enough';
 const EMAIL = 'Commander@Example.com';
 const PASSWORD = 'orbital-mechanics-42';
@@ -31,7 +31,7 @@ function kvStub() {
 }
 const makeEnv = (over = {}) => ({
   ACCOUNTS: kvStub(), ALLOWED_ORIGIN: ORIGIN, PEPPER,
-  EMAIL_PROVIDER: 'resend', EMAIL_FROM: 'onboarding@resend.dev', PLAY_URL: PLAY, EMAIL_API_KEY: 're_unit_test_key_123',
+  EMAIL_PROVIDER: 'resend', EMAIL_FROM: 'noreply@portsolace.com', EMAIL_FROM_FALLBACK: 'onboarding@resend.dev', PLAY_URL: PLAY, EMAIL_API_KEY: 're_unit_test_key_123',
   ...over,
 });
 // A provider that records every call and answers as told (status, json).
@@ -74,7 +74,7 @@ async function askForLink(env, mail, { email = EMAIL, now = T0, ip } = {}) {
 describe('email module', () => {
   test('emailConfig reads the vars, defaults the provider and lists what is missing', () => {
     const ok = emailConfig(makeEnv());
-    assert.deepEqual(ok, { provider: 'resend', from: 'onboarding@resend.dev', playUrl: PLAY, key: 're_unit_test_key_123', missing: [], configured: true });
+    assert.deepEqual(ok, { provider: 'resend', from: 'noreply@portsolace.com', fallback: 'onboarding@resend.dev', playUrl: PLAY, key: 're_unit_test_key_123', missing: [], configured: true });
     assert.equal(emailConfig(makeEnv({ EMAIL_PROVIDER: undefined })).provider, 'resend');
     assert.equal(emailConfig(makeEnv({ EMAIL_PROVIDER: ' Brevo ' })).provider, 'brevo');
     const none = emailConfig({});
@@ -93,7 +93,7 @@ describe('email module', () => {
   test('resetEmail: plain text and HTML carry the link, the address and the time limit; HTML escapes the address', () => {
     const link = `${PLAY}?reset=tok123`;
     const m = resetEmail({ email: 'cmdr+<x>@example.com', link, playUrl: PLAY });
-    assert.equal(m.subject, 'Reset your Waystation password');
+    assert.equal(m.subject, 'Reset your Port Solace password');
     assert.match(m.text, /^Commander,\n/);
     assert.ok(m.text.includes(link)); assert.ok(m.text.includes('cmdr+<x>@example.com')); assert.ok(m.text.includes(`${RESET_MINUTES} minutes`));
     assert.ok(m.text.includes('recovery phrase')); assert.ok(m.text.includes('ignore this message'));
@@ -106,25 +106,25 @@ describe('email module', () => {
     assert.ok(m.html.includes('Set a new password')); assert.ok(m.html.includes(`${RESET_MINUTES} minutes`));
     assert.equal(/<script/i.test(m.html), false);
     const bare = resetEmail({ email: 'a@b.co', link, minutes: 5 });
-    assert.ok(bare.text.includes('5 minutes')); assert.ok(bare.text.trimEnd().endsWith('Waystation'));
+    assert.ok(bare.text.includes('5 minutes')); assert.ok(bare.text.trimEnd().endsWith('Port Solace'));
   });
 
-  test('sendEmail with Resend: bearer key, "Waystation <from>", to as an array, text and html; returns the id', async () => {
+  test('sendEmail with Resend: bearer key, "Port Solace <from>", to as an array, text and html; returns the id', async () => {
     const mail = provider({ status: 200, json: { id: 'em_resend_1' } });
     const r = await sendEmail(makeEnv(), { to: 'player@example.com', subject: 'S', text: 'T', html: '<p>H</p>' }, mail);
-    assert.deepEqual(r, { ok: true, id: 'em_resend_1', provider: 'resend' });
+    assert.deepEqual(r, { ok: true, id: 'em_resend_1', provider: 'resend', from: 'noreply@portsolace.com' });
     assert.equal(mail.calls.length, 1);
     const c = mail.calls[0];
     assert.equal(c.url, PROVIDERS.resend.url); assert.equal(c.method, 'POST');
     assert.equal(c.headers.authorization, 'Bearer re_unit_test_key_123'); assert.equal(c.headers['content-type'], 'application/json');
-    assert.deepEqual(c.body, { from: `${SENDER_NAME} <onboarding@resend.dev>`, to: ['player@example.com'], subject: 'S', text: 'T', html: '<p>H</p>' });
+    assert.deepEqual(c.body, { from: `${SENDER_NAME} <noreply@portsolace.com>`, to: ['player@example.com'], subject: 'S', text: 'T', html: '<p>H</p>' });
   });
 
   test('sendEmail with Brevo: api-key header, sender object, to as objects, textContent/htmlContent; returns the messageId', async () => {
     const mail = provider({ status: 201, json: { messageId: '<abc@relay.brevo.com>' } });
     const env = makeEnv({ EMAIL_PROVIDER: 'brevo', EMAIL_FROM: 'Owner@Example.com', EMAIL_API_KEY: 'xkeysib-unit-test' });
     const r = await sendEmail(env, { to: 'player@example.com', subject: 'S', text: 'T', html: '<p>H</p>' }, mail);
-    assert.deepEqual(r, { ok: true, id: '<abc@relay.brevo.com>', provider: 'brevo' });
+    assert.deepEqual(r, { ok: true, id: '<abc@relay.brevo.com>', provider: 'brevo', from: 'owner@example.com' });
     const c = mail.calls[0];
     assert.equal(c.url, PROVIDERS.brevo.url);
     assert.equal(c.headers['api-key'], 'xkeysib-unit-test'); assert.equal(c.headers.authorization, undefined);
@@ -141,6 +141,79 @@ describe('email module', () => {
     const none = await sendEmail(makeEnv({ EMAIL_API_KEY: '' }), { to: 'x@example.com', subject: 'S', text: 'T', html: 'H' }, provider());
     assert.equal(none.ok, false); assert.match(none.error, /email not configured: EMAIL_API_KEY/);
   });
+
+  // ---------------------------------------------------------- sender fallback while portsolace.com is not verified in Resend
+  const MSG = { to: 'player@example.com', subject: 'S', text: 'T', html: 'H' };
+  const UNVERIFIED = { statusCode: 403, name: 'validation_error', message: 'The portsolace.com domain is not verified. Please, add and verify your domain on https://resend.com/domains' };
+  // answers `first` to a send from EMAIL_FROM and `then` to any other sender
+  const bySender = (first, then = { status: 200, json: { id: 'em_fallback_1' } }) => provider(c => (c.body.from.endsWith('<noreply@portsolace.com>') ? first : then));
+
+  test('emailConfig: EMAIL_FROM_FALLBACK is optional, lowercased, and ignored when it is not an address', () => {
+    assert.equal(emailConfig(makeEnv({ EMAIL_FROM_FALLBACK: undefined })).fallback, '');
+    assert.equal(emailConfig(makeEnv({ EMAIL_FROM_FALLBACK: ' Onboarding@Resend.dev ' })).fallback, 'onboarding@resend.dev');
+    assert.equal(emailConfig(makeEnv({ EMAIL_FROM_FALLBACK: 'nope' })).fallback, '');
+    assert.deepEqual(emailConfig(makeEnv({ EMAIL_FROM_FALLBACK: 'nope' })).missing, [], 'a bad fallback never blocks sending');
+  });
+
+  test('Resend 403 "domain is not verified": one retry from EMAIL_FROM_FALLBACK, and the result names that sender', async () => {
+    const mail = bySender({ status: 403, json: UNVERIFIED });
+    const r = await sendEmail(makeEnv(), MSG, mail);
+    assert.deepEqual(r, { ok: true, id: 'em_fallback_1', provider: 'resend', from: 'onboarding@resend.dev' });
+    assert.equal(mail.calls.length, 2);
+    assert.equal(mail.calls[0].body.from, `${SENDER_NAME} <noreply@portsolace.com>`);
+    assert.equal(mail.calls[1].body.from, `${SENDER_NAME} <onboarding@resend.dev>`);
+    assert.deepEqual(mail.calls[1].body.to, ['player@example.com']); assert.equal(mail.calls[1].body.subject, 'S');
+  });
+
+  test('Resend 422 naming the domain also falls back', async () => {
+    const mail = bySender({ status: 422, json: { statusCode: 422, name: 'invalid_from_address', message: 'Invalid `from` field: the domain portsolace.com has not been verified' } });
+    const r = await sendEmail(makeEnv(), MSG, mail);
+    assert.equal(r.ok, true); assert.equal(r.from, 'onboarding@resend.dev'); assert.equal(mail.calls.length, 2);
+  });
+
+  test('a failed retry is reported with the fallback sender; there is never a third attempt', async () => {
+    const mail = bySender({ status: 403, json: UNVERIFIED }, { status: 403, json: { statusCode: 403, name: 'validation_error', message: 'You can only send testing emails to your own email address' } });
+    const r = await sendEmail(makeEnv(), MSG, mail);
+    assert.equal(r.ok, false); assert.equal(r.status, 403); assert.equal(r.from, 'onboarding@resend.dev');
+    assert.match(r.error, /^Resend answered 403: You can only send testing emails/);
+    assert.equal(mail.calls.length, 2);
+  });
+
+  test('no fallback: success first time, other errors, no or the same fallback address, and Brevo', async () => {
+    const ok = provider();
+    assert.deepEqual(await sendEmail(makeEnv(), MSG, ok), { ok: true, id: 'em_1', provider: 'resend', from: 'noreply@portsolace.com' });
+    assert.equal(ok.calls.length, 1);
+    const other = provider({ status: 403, json: { statusCode: 403, name: 'validation_error', message: 'You can only send testing emails to your own email address' } });
+    assert.equal((await sendEmail(makeEnv(), MSG, other)).from, 'noreply@portsolace.com'); assert.equal(other.calls.length, 1, '403 without verif/domain');
+    const server = provider({ status: 500, json: { message: 'domain lookup failed' } });
+    assert.equal((await sendEmail(makeEnv(), MSG, server)).status, 500); assert.equal(server.calls.length, 1, 'only 403 and 422 qualify');
+    const unset = provider({ status: 403, json: UNVERIFIED });
+    const r = await sendEmail(makeEnv({ EMAIL_FROM_FALLBACK: '' }), MSG, unset);
+    assert.equal(r.ok, false); assert.equal(r.from, 'noreply@portsolace.com'); assert.equal(unset.calls.length, 1);
+    const same = provider({ status: 403, json: UNVERIFIED });
+    await sendEmail(makeEnv({ EMAIL_FROM_FALLBACK: 'NoReply@portsolace.com' }), MSG, same);
+    assert.equal(same.calls.length, 1, 'a fallback equal to EMAIL_FROM is not retried');
+    const brevo = provider({ status: 403, json: { message: 'sender domain not verified' } });
+    await sendEmail(makeEnv({ EMAIL_PROVIDER: 'brevo', EMAIL_API_KEY: 'xkeysib-unit-test' }), MSG, brevo);
+    assert.equal(brevo.calls.length, 1, 'the fallback is for Resend only');
+  });
+
+  test('/forgot still answers 200 and the email goes out from the fallback while the domain is unverified', async () => {
+    const env = makeEnv();
+    await signupUser(env);
+    const mail = bySender({ status: 403, json: UNVERIFIED });
+    const jobs = [];
+    const warn = console.warn; const warned = [];
+    console.warn = (...a) => warned.push(a.join(' '));
+    try {
+      const r = await read(await handle(req('/forgot', { method: 'POST', body: { email: EMAIL } }), env, at(T0 + 1000, { fetch: mail, waitUntil: p => jobs.push(p) })));
+      assert.equal(r.status, 200); assert.deepEqual(r.data, { ok: true });
+      assert.deepEqual(await jobs[0], { ok: true, id: 'em_fallback_1', provider: 'resend', from: 'onboarding@resend.dev' });
+    } finally { console.warn = warn; }
+    assert.equal(mail.calls.length, 2); assert.deepEqual(mail.calls[1].body.to, ['commander@example.com']);
+    assert.ok(mail.calls[1].body.text.includes(`${PLAY}?reset=`));
+    assert.equal(warned.length, 1); assert.match(warned[0], /noreply@portsolace\.com is not verified.*onboarding@resend\.dev/);
+  });
 });
 
 // ============================================================ POST /forgot
@@ -155,8 +228,8 @@ describe('POST /forgot', () => {
     assert.equal(mail.calls.length, 1);
     const sent = mail.calls[0].body;
     assert.deepEqual(sent.to, ['commander@example.com']);
-    assert.equal(sent.from, 'Waystation <onboarding@resend.dev>');
-    assert.equal(sent.subject, 'Reset your Waystation password');
+    assert.equal(sent.from, 'Port Solace <noreply@portsolace.com>');
+    assert.equal(sent.subject, 'Reset your Port Solace password');
     const token = sent.text.match(/\?reset=([A-Za-z0-9_-]+)/)[1];
     assert.match(token, /^[A-Za-z0-9_-]{43}$/);
     assert.ok(sent.text.includes(`${PLAY}?reset=${token}`)); assert.ok(sent.html.includes(`href="${PLAY}?reset=${token}"`));
@@ -220,7 +293,7 @@ describe('POST /forgot', () => {
     assert.equal(mail.calls.length, 1, 'the provider call started before the response');
     release();
     const out = await background[0];
-    assert.deepEqual(out, { ok: true, id: 'late', provider: 'resend' });
+    assert.deepEqual(out, { ok: true, id: 'late', provider: 'resend', from: 'noreply@portsolace.com' });
   });
 
   test('rate limits: 3 per hour per IP and 3 per hour per address, each with its own window', async () => {
@@ -331,7 +404,8 @@ describe('POST /reset', () => {
 
   test('health reports the email configuration without the key; the worker entry forwards waitUntil', async () => {
     const h = await read(await worker.fetch(req('/health'), makeEnv(), { waitUntil() {} }));
-    assert.deepEqual(h.data.email, { provider: 'resend', from: 'onboarding@resend.dev', playUrl: PLAY, configured: true, missing: [], resetMinutes: 30 });
+    assert.deepEqual(h.data.email, { provider: 'resend', from: 'noreply@portsolace.com', fromFallback: 'onboarding@resend.dev', playUrl: PLAY, configured: true, missing: [], resetMinutes: 30 });
+    assert.equal(h.data.emailFrom, 'noreply@portsolace.com'); assert.equal(h.data.emailFromFallback, 'onboarding@resend.dev');
     assert.equal(JSON.stringify(h.data).includes('re_unit_test_key_123'), false);
     const bare = await read(await worker.fetch(req('/health'), makeEnv({ EMAIL_API_KEY: '' })));
     assert.equal(bare.data.email.configured, false); assert.deepEqual(bare.data.email.missing, ['EMAIL_API_KEY']);
@@ -346,7 +420,7 @@ describe('POST /reset', () => {
       const r = await read(await worker.fetch(req('/forgot', { method: 'POST', body: { email: EMAIL } }), env, { waitUntil: p => jobs.push(p) }));
       assert.equal(r.status, 200);
       assert.equal(jobs.length, 1, 'the entry hands the send to the runtime');
-      assert.deepEqual(await jobs[0], { ok: true, id: 'em_1', provider: 'resend' });
+      assert.deepEqual(await jobs[0], { ok: true, id: 'em_1', provider: 'resend', from: 'noreply@portsolace.com' });
       assert.equal(mail.calls.length, 1); assert.deepEqual(mail.calls[0].body.to, ['commander@example.com']);
     } finally { globalThis.fetch = realFetch; }
   });

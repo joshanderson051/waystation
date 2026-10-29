@@ -1,8 +1,8 @@
 {
-  "name": "waystation-account-worker",
+  "name": "portsolace-account-worker",
   "version": "1.0.0",
   "private": true,
-  "description": "Waystation accounts and cloud saves: a Cloudflare Worker with email + password sign-in (PBKDF2-SHA256), recovery phrases, sliding tokens and one cloud save per account in KV (DESIGN2.md A2.1). No runtime dependencies.",
+  "description": "Port Solace accounts and cloud saves: a Cloudflare Worker with email + password sign-in (PBKDF2-SHA256), recovery phrases, sliding tokens and one cloud save per account in KV (DESIGN2.md A2.1). No runtime dependencies.",
   "type": "module",
   "main": "src/index.js",
   "scripts": {

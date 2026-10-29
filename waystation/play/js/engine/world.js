@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — engine/world.js (Engineer E)
+// PORT SOLACE v2 — engine/world.js (Engineer E)
 // The station layer. Each occupied cell is a miniature (A6): the pack render
 // modules/512/<id>.webp standing on its cell in painter's order, with a drop
 // shadow on the deck, one soft additive glow for bloom, the dock approach

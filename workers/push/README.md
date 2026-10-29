@@ -1,4 +1,4 @@
-# Waystation push notifications backend
+# Port Solace push notifications backend
 
 This folder is the small server that tells a player **their build, upgrade, expedition or plot clearing has
 finished while the game tab was closed**, and optionally reminds them of the daily reward. It runs as a
@@ -12,6 +12,15 @@ You do not need to be a developer to set it up. Each step says exactly what to t
 
 Until this backend exists, the switch in the game's Settings panel reads **Not connected** and does nothing.
 Players opt in themselves; nobody is ever asked for notification permission before they flip the switch.
+
+**The live setup.** The game is at <https://portsolace.com/play/> and this worker answers at
+<https://push.portsolace.com> (a Cloudflare custom domain, the `routes` line in `wrangler.toml`). Its
+`*.workers.dev` address keeps working too and is what the first-time steps below use. `VAPID_SUBJECT` is
+`https://portsolace.com/`.
+
+The old internal names (the Worker script `waystation-push`, the `service` that `/health` reports, the
+`workers.dev` address and the repository folders) stay on purpose: renaming them would create a new Worker
+and drop every player's subscription.
 
 ---
 
@@ -131,6 +140,11 @@ Open `https://waystation-push.<your-subdomain>.workers.dev/health` in a browser.
 `"vapid": {"publicKey": "ok", "privateKey": "set", …}` and `"kv": true`. If `publicKey` says `missing` or
 `invalid`, step 1 was not pasted completely; if `privateKey` says `missing`, repeat step 4.
 
+The same deploy attaches the custom domain from the `routes` line in `wrangler.toml`: Cloudflare creates the
+DNS record and the certificate for `push.portsolace.com` (the first time can take a few minutes). Check it at
+<https://push.portsolace.com/health>. If the deploy says the zone was not found, `portsolace.com` is not on
+the Cloudflare account you are logged in to (`npx wrangler whoami`).
+
 ---
 
 ## 6. Switch the game on
@@ -138,15 +152,17 @@ Open `https://waystation-push.<your-subdomain>.workers.dev/health` in a browser.
 In `waystation/play/index.html` the `<head>` holds one line that tells the game where the backend is:
 
 ```html
-<meta name="waystation-push" content='{"apiBase":""}'>
+<meta name="portsolace-push" content='{"apiBase":""}'>
 ```
 
 Put the worker's address in it (keep the single quotes around the JSON and the double quotes inside, no
 trailing slash):
 
 ```html
-<meta name="waystation-push" content='{"apiBase":"https://waystation-push.<your-subdomain>.workers.dev"}'>
+<meta name="portsolace-push" content='{"apiBase":"https://push.portsolace.com"}'>
 ```
+
+(The `*.workers.dev` address works there too, for example before the custom domain is attached.)
 
 Commit and push to `main`. GitHub Pages redeploys within a minute or two. The Settings switch now reads **Off**
 instead of **Not connected**.
@@ -155,11 +171,11 @@ instead of **Not connected**.
 
 ## 7. Try it
 
-1. Open <https://joshanderson051.github.io/waystation/play/> in Chrome, Edge or Firefox and open **Settings**
+1. Open <https://portsolace.com/play/> in Chrome, Edge or Firefox and open **Settings**
    (the bottom button of the command rail).
 2. Switch **Notify me when something finishes** on and click **Allow** in the browser's prompt. The chip next
    to the switch turns to **On** and two more rows appear.
-3. Click **Send a test notification**. Within a minute a notification titled "Waystation" arrives; clicking it
+3. Click **Send a test notification**. Within a minute a notification titled "Port Solace" arrives; clicking it
    focuses the game. (On Windows, check that Focus Assist or Do Not Disturb is not hiding notifications.)
 4. Place a tier-1 module (90 seconds), close the tab, and wait. The "Docking Collar online" notification
    arrives within about a minute of the build finishing.
@@ -168,11 +184,11 @@ If you want to try before changing the live site, the game accepts a per-browser
 console (F12 → Console) on the live game and paste, with your worker address:
 
 ```js
-localStorage.setItem('waystation.push', JSON.stringify({ apiBase: 'https://waystation-push.<your-subdomain>.workers.dev' }));
+localStorage.setItem('portsolace.push', JSON.stringify({ apiBase: 'https://waystation-push.<your-subdomain>.workers.dev' }));
 location.reload();
 ```
 
-Remove it when done: `localStorage.removeItem('waystation.push'); location.reload();`
+Remove it when done: `localStorage.removeItem('portsolace.push'); location.reload();`
 
 ---
 
@@ -188,7 +204,8 @@ Remove it when done: `localStorage.removeItem('waystation.push'); location.reloa
   notifications pause until midnight UTC; the game itself is unaffected. The Workers Paid plan ($5 a month)
   raises it to one million writes a month.
 - **Changing the allowed site**: edit `ALLOWED_ORIGIN` in `wrangler.toml` (comma-separated, no trailing slash)
-  and run `npm run deploy`.
+  and run `npm run deploy`. It lists `https://portsolace.com`, `https://www.portsolace.com` and the old
+  GitHub Pages origin `https://joshanderson051.github.io`, kept while players move over.
 - **Turning it off**: remove the address from the `<meta>` tag and push; the switch reads **Not connected**
   again and the game stops calling the worker. Existing subscriptions expire on their own.
 
@@ -206,7 +223,7 @@ Serve the game (`node waystation/serve.js` from the repository root, port 8787),
 <http://localhost:8787/play/>, and set the override in the browser console:
 
 ```js
-localStorage.setItem('waystation.push', JSON.stringify({ apiBase: 'http://127.0.0.1:8789' })); location.reload();
+localStorage.setItem('portsolace.push', JSON.stringify({ apiBase: 'http://127.0.0.1:8789' })); location.reload();
 ```
 
 Chrome treats `localhost` as a secure context, so the real subscription flow works against the local worker,

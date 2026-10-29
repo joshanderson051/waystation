@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — notify: opt-in push notifications for finished timers (DESIGN2.md Addendum A3)
+// PORT SOLACE — notify: opt-in push notifications for finished timers (DESIGN2.md Addendum A3)
 // Classic script; exposes the `Notify` global. Loads after store.js and before main.js (0.1).
 //
 // What it does
@@ -16,10 +16,10 @@
 //   While the tab is visible, timers due within NEAR_MS are left out (the player is watching them finish);
 //   the flush on hide or close posts everything.
 //
-// Configuration: <meta name="waystation-push" content='{"apiBase":"https://…workers.dev"}'> in index.html
+// Configuration: <meta name="portsolace-push" content='{"apiBase":"https://push.portsolace.com"}'> in index.html
 //   (optional "publicKey" skips the GET /key round trip). Without an http(s) apiBase the module is in sandbox
 //   mode: the Settings switch shows "Not connected" and nothing is ever requested or registered.
-//   localStorage['waystation.push'] = {"apiBase":"http://127.0.0.1:8789"} overrides the tag for local testing.
+//   localStorage['portsolace.push'] = {"apiBase":"http://127.0.0.1:8789"} overrides the tag for local testing.
 //
 // Settings (Meta.profile.settings): notify (bool), notifyDaily (bool, default off).
 // Everything fails quietly: a missing backend, a refused permission or a network error never throws into
@@ -28,7 +28,7 @@
 'use strict';
 
 const Notify = (() => {
-  const KEYS = { config: 'waystation.push', local: 'waystation.push.sub' };   // local: {apiBase, playerId, endpoint, token}
+  const KEYS = { config: 'portsolace.push', local: 'portsolace.push.sub' };   // local: {apiBase, playerId, endpoint, token}
   const SW_URL = 'sw.js';
   const DEBOUNCE_MS = 4000;
   const NEAR_MS = 120e3;                // visible tab: timers this close are the player's to watch
@@ -66,7 +66,7 @@ const Notify = (() => {
 
   function readTagConfig() {
     if (!hasDoc() || typeof document.querySelector !== 'function') return {};
-    const tag = document.querySelector('meta[name="waystation-push"]');
+    const tag = document.querySelector('meta[name="portsolace-push"]');
     const content = tag && (typeof tag.getAttribute === 'function' ? tag.getAttribute('content') : tag.content);
     if (!content) return {};
     try { const v = JSON.parse(content); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; }
@@ -214,7 +214,7 @@ const Notify = (() => {
   function tellWorker(clear) {
     const w = registration && (registration.active || registration.waiting || registration.installing);
     if (!w || typeof w.postMessage !== 'function') return;
-    try { w.postMessage(clear ? { type: 'waystation-push-config' } : { type: 'waystation-push-config', apiBase: config.apiBase, playerId: local ? local.playerId : playerId(), publicKey: config.publicKey }); } catch (e) { /* no-op */ }
+    try { w.postMessage(clear ? { type: 'portsolace-push-config' } : { type: 'portsolace-push-config', apiBase: config.apiBase, playerId: local ? local.playerId : playerId(), publicKey: config.publicKey }); } catch (e) { /* no-op */ }
   }
   function fail(e, where) {
     const perm = typeof Notification !== 'undefined' ? Notification.permission : 'default';
@@ -336,7 +336,7 @@ const Notify = (() => {
         await reg.unregister();
       }
       registration = null;
-      if (typeof caches !== 'undefined' && caches && caches.delete) caches.delete('waystation-push-config').catch(() => {});
+      if (typeof caches !== 'undefined' && caches && caches.delete) caches.delete('portsolace-push-config').catch(() => {});
     } catch (e) { /* the backend prunes dead subscriptions on its own */ }
     return true;
   }

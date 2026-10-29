@@ -1,4 +1,5 @@
 # Publishes the waystation/ folder to GitHub Pages on every push to main.
+# Port Solace: the custom domain portsolace.com is set in Settings > Pages (an Actions deploy ignores a CNAME file).
 # Pages must be set to "GitHub Actions" as its source (Settings > Pages), which `gh api` did on first deploy.
 name: Deploy to GitHub Pages
 

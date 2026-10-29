@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — store tests (DESIGN2.md 7.4 / 10.1)
+// PORT SOLACE — store tests (DESIGN2.md 7.4 / 10.1)
 // Run with `node workers/store/test/store.test.js` (or `npm test` in workers/store). Exit code 0 = all green.
 //
 // Part 1 exercises the Worker handlers through `handle(request, env)` with a mocked globalThis.fetch for
@@ -16,8 +16,8 @@ import vm from 'node:vm';
 import worker, { handle, signPayload, verifyStripeSignature, hmacSha256Hex, timingSafeEqual, parsePrices } from '../src/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const ORIGIN = 'https://joshanderson051.github.io';
-const RETURN_URL = `${ORIGIN}/waystation/play/`;
+const ORIGIN = 'https://portsolace.com';
+const RETURN_URL = `${ORIGIN}/play/`;
 const PLAYER = '7f0c1c2e-6d4a-4a7b-9b7e-1f2d3c4b5a69';
 const OTHER_PLAYER = '00000000-1111-4222-8333-444444444444';
 const WH_SECRET = 'whsec_test_secret_for_unit_tests';
@@ -167,6 +167,21 @@ describe('worker: POST /checkout', () => {
     assert.equal(call.body.get('metadata[sku]'), 'am_140');
     assert.equal(call.body.get('success_url'), `${RETURN_URL}?purchase=success&session_id={CHECKOUT_SESSION_ID}`);
     assert.equal(call.body.get('cancel_url'), `${RETURN_URL}?purchase=cancel`);
+  });
+
+  test('every session names the game on the card statement', async () => {
+    const env = makeEnv();
+    const stripe = stripeMock(); globalThis.fetch = stripe;
+    for (const sku of ['am_50', 'am_140']) {
+      await handle(req('/checkout', { method: 'POST', body: { sku, playerId: PLAYER, returnUrl: RETURN_URL } }), env);
+    }
+    assert.equal(stripe.calls.length, 2);
+    for (const call of stripe.calls) {
+      const suffix = call.body.get('payment_intent_data[statement_descriptor_suffix]');
+      assert.equal(suffix, 'WAYSTATION');
+      assert.ok('PRIME SIGN'.length + 2 + suffix.length <= 22, 'prefix + "* " + suffix fits the 22-character limit');
+      assert.doesNotMatch(suffix, /[<>\\'"*]/, 'no characters Stripe rejects in a descriptor');
+    }
   });
 
   test('strips any query from returnUrl and rejects foreign origins', async () => {
@@ -389,9 +404,9 @@ function loadStore({ meta: metaContent, storage = fakeStorage(), search = '', Me
     localStorage: storage,
     document: {
       readyState: 'complete', body: { dataset: {} }, addEventListener() {},
-      querySelector(sel) { return (metaContent !== undefined && sel.includes('waystation-store')) ? { getAttribute: n => (n === 'content' ? metaContent : null) } : null; },
+      querySelector(sel) { return (metaContent !== undefined && sel.includes('portsolace-store')) ? { getAttribute: n => (n === 'content' ? metaContent : null) } : null; },
     },
-    location: { origin: ORIGIN, pathname: '/waystation/play/', search, hash: '', href: `${RETURN_URL}${search}`, assigned: null, assign(u) { this.assigned = u; } },
+    location: { origin: ORIGIN, pathname: '/play/', search, hash: '', href: `${RETURN_URL}${search}`, assigned: null, assign(u) { this.assigned = u; } },
     history: { state: null, replaceState(state, title, url) { replaced.push(url); } },
     Sim,
   };
@@ -421,7 +436,7 @@ describe('client: configuration and catalog', () => {
     assert.equal(invalid.Store.mode, 'sandbox', 'stripe without apiBase falls back');
     assert.ok(invalid.Store.warnings.some(w => /apiBase/.test(w)));
 
-    const overridden = loadStore({ meta: '{"mode":"sandbox"}', storage: fakeStorage({ 'waystation.store': '{"mode":"stripe","apiBase":"http://127.0.0.1:8788"}' }) });
+    const overridden = loadStore({ meta: '{"mode":"sandbox"}', storage: fakeStorage({ 'portsolace.store': '{"mode":"stripe","apiBase":"http://127.0.0.1:8788"}' }) });
     assert.equal(overridden.Store.mode, 'stripe');
     overridden.Store.configure({ mode: 'sandbox' });
     assert.equal(overridden.Store.mode, 'stripe', 'the local override wins over configure()');
@@ -475,7 +490,7 @@ describe('client: sandbox purchase', () => {
     assert.equal(simEvents.length, 1); assert.equal(simEvents[0][0], 'purchase');
     same({ sku: simEvents[0][1].sku, granted: simEvents[0][1].granted, mode: simEvents[0][1].mode }, { sku: 'am_50', granted: { am: 50 }, mode: 'sandbox' });
     assert.equal(Store.pending().length, 1, 'queued in localStorage while Meta is absent');
-    assert.equal(JSON.parse(storage.getItem('waystation.store.pending')).length, 1);
+    assert.equal(JSON.parse(storage.getItem('portsolace.store.pending')).length, 1);
     assert.equal(Store.flush().length, 0, 'flush without Meta is a no-op');
     assert.equal(Store.pending().length, 1);
   });
@@ -543,10 +558,10 @@ describe('client: sandbox purchase', () => {
     first.Store.configure({ latencyMs: 0 }); first.Store.ui.confirm = async () => true;
     await first.Store.purchase('am_50');
     await first.Store.purchase('liveries');
-    const localId = storage.getItem('waystation.playerId');
+    const localId = storage.getItem('portsolace.playerId');
     assert.equal(localId, null, 'sandbox purchases need no player id');
     assert.equal(first.Store.playerId().length, 36);
-    assert.equal(storage.getItem('waystation.playerId'), first.Store.playerId(), 'playerId() persists a uuid');
+    assert.equal(storage.getItem('portsolace.playerId'), first.Store.playerId(), 'playerId() persists a uuid');
     assert.equal(first.Store.owned('liveries'), true, 'queued cosmetics already count as owned');
 
     // A later page load: Meta exists now (same localStorage).
@@ -596,7 +611,7 @@ describe('client: stripe flow', () => {
     same(JSON.parse(calls[0].init.body), { sku: 'am_140', playerId: PLAYER, returnUrl: RETURN_URL });
     assert.equal(ctx.location.assigned, 'https://checkout.stripe.com/c/pay/cs_test_redirect01');
     same({ ok: res.ok, redirect: res.redirect, granted: res.granted, sessionId: res.sessionId }, { ok: true, redirect: true, granted: false, sessionId: 'cs_test_redirect01' });
-    assert.equal(JSON.parse(storage.getItem('waystation.store.inflight')).sku, 'am_140');
+    assert.equal(JSON.parse(storage.getItem('portsolace.store.inflight')).sku, 'am_140');
     same(Meta.calls.addAM, [], 'nothing is granted before the claim');
   });
 
@@ -616,7 +631,7 @@ describe('client: stripe flow', () => {
     const calls = [];
     const fetch = async url => { calls.push(url); return jsonRes(200, { sku: 'am_140', granted: true, grantId: 'cs_test_claim0001', playerId: PLAYER, duplicate: false }); };
     const Meta = fakeMeta({ playerId: PLAYER });
-    const storage = fakeStorage({ 'waystation.store.inflight': JSON.stringify({ sku: 'am_140', sessionId: 'cs_test_claim0001', at: 1 }) });
+    const storage = fakeStorage({ 'portsolace.store.inflight': JSON.stringify({ sku: 'am_140', sessionId: 'cs_test_claim0001', at: 1 }) });
     const { Store, simEvents, replaced } = loadStore({ meta: STRIPE_META, Meta, fetch, storage, search: '?purchase=success&session_id=cs_test_claim0001&keep=1' });
     const res = await Store.resume();
     assert.equal(calls.length, 1);
@@ -624,9 +639,9 @@ describe('client: stripe flow', () => {
     same({ handled: res.handled, ok: res.ok, sku: res.sku, granted: res.granted, grantId: res.grantId, mode: res.mode }, { handled: true, ok: true, sku: 'am_140', granted: { am: 140 }, grantId: 'cs_test_claim0001', mode: 'stripe' });
     same(Meta.calls.addAM, [[140, 'store:am_140']]);
     assert.equal(Meta.calls.grantEntitlement[0][1].grantId, 'cs_test_claim0001', 'the Checkout session id is the grant id');
-    same(replaced, ['/waystation/play/?keep=1'], 'purchase and session_id are stripped, other params kept');
+    same(replaced, ['/play/?keep=1'], 'purchase and session_id are stripped, other params kept');
     assert.equal(simEvents.length, 1); assert.equal(simEvents[0][1].mode, 'stripe'); assert.equal(simEvents[0][1].grantId, 'cs_test_claim0001');
-    assert.equal(storage.getItem('waystation.store.inflight'), null);
+    assert.equal(storage.getItem('portsolace.store.inflight'), null);
 
     // The same session again (e.g. the player re-opens the success URL from history): no second fetch, no second grant.
     const again = loadStore({ meta: STRIPE_META, Meta, fetch, storage, search: '?purchase=success&session_id=cs_test_claim0001' });
@@ -638,12 +653,12 @@ describe('client: stripe flow', () => {
   });
 
   test('resume() handles ?purchase=cancel, no query, and a definitive claim failure', async () => {
-    const cancel = loadStore({ meta: STRIPE_META, Meta: fakeMeta({ playerId: PLAYER }), search: '?purchase=cancel', storage: fakeStorage({ 'waystation.store.inflight': JSON.stringify({ sku: 'am_50', sessionId: 'cs_test_x', at: 1 }) }) });
+    const cancel = loadStore({ meta: STRIPE_META, Meta: fakeMeta({ playerId: PLAYER }), search: '?purchase=cancel', storage: fakeStorage({ 'portsolace.store.inflight': JSON.stringify({ sku: 'am_50', sessionId: 'cs_test_x', at: 1 }) }) });
     const r = await cancel.Store.resume();
     same({ handled: r.handled, ok: r.ok, cancelled: r.cancelled, sku: r.sku, granted: r.granted }, { handled: true, ok: false, cancelled: true, sku: 'am_50', granted: false });
     assert.equal(cancel.simEvents[0][1].granted, false);
-    same(cancel.replaced, ['/waystation/play/']);
-    assert.equal(cancel.storage.getItem('waystation.store.inflight'), null);
+    same(cancel.replaced, ['/play/']);
+    assert.equal(cancel.storage.getItem('portsolace.store.inflight'), null);
 
     const idle = loadStore({ meta: STRIPE_META, Meta: fakeMeta({ playerId: PLAYER }) });
     same(await idle.Store.resume(), { handled: false });
@@ -652,7 +667,7 @@ describe('client: stripe flow', () => {
     const unpaid = loadStore({ meta: STRIPE_META, Meta: fakeMeta({ playerId: PLAYER }), search: '?purchase=success&session_id=cs_test_unpaid01', fetch: async () => jsonRes(402, { error: 'unpaid', message: 'This checkout session has not been paid.' }) });
     const u = await unpaid.Store.resume();
     assert.equal(u.ok, false); assert.equal(u.error, 'unpaid'); assert.equal(u.granted, false);
-    assert.equal(unpaid.storage.getItem('waystation.store.inflight'), null, 'a 4xx is final: no retry');
+    assert.equal(unpaid.storage.getItem('portsolace.store.inflight'), null, 'a 4xx is final: no retry');
   });
 
   test('a network failure during claim is retried on the next resume()', async () => {
@@ -661,13 +676,13 @@ describe('client: stripe flow', () => {
     const down = loadStore({ meta: STRIPE_META, Meta, storage, search: '?purchase=success&session_id=cs_test_retry001', fetch: async () => { throw new TypeError('Failed to fetch'); } });
     const r1 = await down.Store.resume();
     assert.equal(r1.ok, false); assert.equal(r1.error, 'network');
-    assert.equal(JSON.parse(storage.getItem('waystation.store.inflight')).unclaimed, true);
+    assert.equal(JSON.parse(storage.getItem('portsolace.store.inflight')).unclaimed, true);
 
     const up = loadStore({ meta: STRIPE_META, Meta, storage, fetch: async () => jsonRes(200, { sku: 'am_50', granted: true, grantId: 'cs_test_retry001' }) });
     const r2 = await up.Store.resume();
     assert.equal(r2.ok, true); assert.equal(r2.retry, true); same(r2.granted, { am: 50 });
     same(Meta.calls.addAM, [[50, 'store:am_50']]);
-    assert.equal(storage.getItem('waystation.store.inflight'), null);
+    assert.equal(storage.getItem('portsolace.store.inflight'), null);
   });
 
   test('restore(email) applies grants the backend lists that are not yet applied; restore() without email uses /entitlements', async () => {

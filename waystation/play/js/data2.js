@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — meta-game data: sectors, missions, collection,
+// PORT SOLACE v2 — meta-game data: sectors, missions, collection,
 // expeditions, daily rewards, ranks, store catalog, timers
 // Engineer S. Source of truth: DESIGN2.md sections 4, 6, 7.1.
 // Loads after data.js and before sim.js (0.1).
@@ -108,10 +108,10 @@ const PACING_PRESETS = {
     expeditionMinutes: [30, 60, 120, 240, 360, 480, 720, 1440], dayMs: 48000, shipSpeed: 40, speeds: [0, 1],
     sectorCosts: { sable: 90000, kessler: 300000, thessaly: 1100000, marrow: 1200000, oros: 1500000, keth: 3000000, aurelia: 5500000 } },
 };
-// Override hook for experiments (the harness uses it; a page may define window.WAYSTATION_TUNING before data2.js):
+// Override hook for experiments (the harness uses it; a page may define window.PORTSOLACE_TUNING before data2.js):
 // { preset, dayMs, live, rateDivisor, capMinutes, buildMs, upgradeTimeMul, offlineBankCapH, expeditionMinutes, shipSpeed, speeds, sectorCostMul, sectorCosts }.
 const TUNING = (() => {
-  const ext = (typeof WAYSTATION_TUNING !== 'undefined' && WAYSTATION_TUNING) || {};
+  const ext = (typeof PORTSOLACE_TUNING !== 'undefined' && PORTSOLACE_TUNING) || {};
   return Object.assign({}, PACING_PRESETS[ext.preset || PACING_PRESET] || PACING_PRESETS.patient, ext);
 })();
 

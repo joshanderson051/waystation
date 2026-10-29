@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — account backend: Cloudflare module Worker (DESIGN2.md Addendum A2.1)
+// PORT SOLACE — account backend: Cloudflare module Worker (DESIGN2.md Addendum A2.1)
 // Email + password accounts and one cloud save per account. WebCrypto only; no SDK, no npm runtime
 // dependencies. Same house style as workers/store. Constants and pure helpers live in lib.js (a Worker's
 // main module may only export handlers and functions).
@@ -37,7 +37,7 @@
 // Environment (wrangler.toml [vars] / `wrangler secret put`)
 //   ALLOWED_ORIGIN   comma-separated list of site origins allowed to call this worker
 //   PEPPER           secret; a long random string appended to every password and phrase before hashing
-//   EMAIL_PROVIDER, EMAIL_FROM, PLAY_URL and the secret EMAIL_API_KEY: see email.js
+//   EMAIL_PROVIDER, EMAIL_FROM, EMAIL_FROM_FALLBACK, PLAY_URL and the secret EMAIL_API_KEY: see email.js
 // ============================================================
 import {
   HttpError, LIMITS, WORDS, PBKDF2_ITER, TOKEN_BYTES, TOKEN_TTL_S, TOKEN_REFRESH_MS, RESET_TOKEN_TTL_S, SAVE_MAX_BYTES, BODY_MAX_BYTES, PASSWORD_MAX, PHRASE_WORDS, TOKEN_RE,
@@ -198,7 +198,9 @@ async function health(request, url, env) {
       service: 'waystation-account',
       kv: Boolean(env.ACCOUNTS && typeof env.ACCOUNTS.get === 'function'),
       pepper: Boolean(env.PEPPER && String(env.PEPPER).length >= 16),
-      email: { provider: mail.provider, from: mail.from, playUrl: mail.playUrl, configured: mail.configured, missing: mail.missing, resetMinutes: RESET_MINUTES },
+      emailFrom: mail.from,
+      emailFromFallback: mail.fallback || null,
+      email: { provider: mail.provider, from: mail.from, fromFallback: mail.fallback || null, playUrl: mail.playUrl, configured: mail.configured, missing: mail.missing, resetMinutes: RESET_MINUTES },
       allowedOrigins: allowedOrigins(env),
       limits: LIMITS,
       tokenTtlDays: TOKEN_TTL_S / 86400,
@@ -285,7 +287,11 @@ async function forgot(request, url, env, ctx) {
     const link = resetLink(mail.playUrl, token);
     const message = resetEmail({ email, link, playUrl: mail.playUrl, minutes: RESET_MINUTES });
     // the send runs after the response when the runtime allows it, so the answer takes the same time either way
-    const job = sendEmail(env, { to: email, ...message }, ctx.fetch).then(r => { if (!r.ok) console.error('account: reset email not sent', r.error); return r; });
+    const job = sendEmail(env, { to: email, ...message }, ctx.fetch).then(r => {
+      if (!r.ok) console.error('account: reset email not sent', r.error);
+      else if (r.from && r.from !== mail.from) console.warn(`account: ${mail.from} is not verified with the email provider; the reset email went out from ${r.from}`);
+      return r;
+    });
     if (ctx.waitUntil) ctx.waitUntil(job); else await job;
   }
   return { data: { ok: true } };
@@ -342,7 +348,7 @@ async function putSave(request, url, env, ctx) {
   if (!Number.isInteger(base) || base < 0) throw new HttpError(400, 'bad-version', 'baseVersion must be a non-negative integer (0 when there is no cloud save yet).');
   const size = utf8Length(JSON.stringify(profile));
   if (size > SAVE_MAX_BYTES) throw new HttpError(413, 'too-large', `The profile is ${size} bytes; the cloud save limit is ${SAVE_MAX_BYTES} bytes.`, { max: SAVE_MAX_BYTES, size });
-  if (profile.v !== 2 || !profile.sectors || typeof profile.sectors !== 'object') throw new HttpError(400, 'bad-profile', 'Not a Waystation v2 profile.');
+  if (profile.v !== 2 || !profile.sectors || typeof profile.sectors !== 'object') throw new HttpError(400, 'bad-profile', 'Not a Port Solace v2 profile.');
 
   const key = saveKey(user.id);
   const existing = await kv(env).get(key, 'json');

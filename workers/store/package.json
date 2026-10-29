@@ -1,8 +1,8 @@
 {
-  "name": "waystation-store-worker",
+  "name": "portsolace-store-worker",
   "version": "1.0.0",
   "private": true,
-  "description": "Waystation store backend: a Cloudflare Worker that creates Stripe Checkout sessions and records grants in KV (DESIGN2.md 7.4). No runtime dependencies.",
+  "description": "Port Solace store backend: a Cloudflare Worker that creates Stripe Checkout sessions and records grants in KV (DESIGN2.md 7.4). No runtime dependencies.",
   "type": "module",
   "main": "src/index.js",
   "scripts": {

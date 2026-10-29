@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — engine/fx.js (Engineer E)
+// PORT SOLACE v2 — engine/fx.js (Engineer E)
 // Particles, rings, floaters, coin flights to the HUD, shockwaves,
 // level-up bursts and the warp transition (DESIGN2.md 3.6, 0.3 Engine.fx).
 //

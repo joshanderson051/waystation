@@ -1,6 +1,6 @@
 'use strict';
 // =====================================================================
-// WAYSTATION - js/art-mod-b.js (Engineer A3)
+// PORT SOLACE - js/art-mod-b.js (Engineer A3)
 //
 // ART entries for: habitat, reactor, customs, security, school, bank,
 // plaza, menagerie, refinery, shipyard, observatory, gate.
