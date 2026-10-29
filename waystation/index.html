@@ -18,9 +18,9 @@
 <meta property="og:description" content="Dock freighters, trade cargo, tap your banks, chart eight sectors and grow one docking collar into a galactic gate. Plays in the browser, saves on your device, no account.">
 <meta property="og:url" content="https://joshanderson051.github.io/waystation/">
 <meta property="og:image" content="https://joshanderson051.github.io/waystation/assets/og.jpg">
-<meta property="og:image:width" content="1440">
-<meta property="og:image:height" content="756">
-<meta property="og:image:alt" content="The Waystation bridge: a lit space station in plan view with glowing bank chips, ships on approach and the glass console">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Waystation key art: a vast lit space station with radial docking arms above an amber world">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Waystation — a space station builder for the browser">
 <meta name="twitter:description" content="Dock freighters, trade cargo, tap your banks, chart eight sectors and grow one docking collar into a galactic gate. Plays in the browser, saves on your device, no account.">
@@ -106,12 +106,12 @@
           <li>Free to play</li>
         </ul>
       </div>
-      <figure class="shot glass">
+      <figure class="shot glass keyart">
         <picture>
           <source srcset="assets/hero.webp" type="image/webp">
-          <img src="assets/hero.jpg" width="1440" height="900" alt="The Waystation bridge: a lit station in plan view with glowing bank chips, ships on approach, a module under construction and the Build console open" fetchpriority="high">
+          <img src="assets/hero.jpg" width="1536" height="1024" alt="Waystation key art: a vast lit space station with radial docking arms above an amber world, freighters on approach" fetchpriority="high">
         </picture>
-        <figcaption class="micro"><span>Lantern Reach &middot; Day 041 &middot; L3 Town in Space</span><span>Varro Reach &middot; Build console</span></figcaption>
+        <figcaption class="micro"><span>Lantern Reach &middot; Varro Reach</span><span>Key art</span></figcaption>
       </figure>
     </div>
   </section>
@@ -122,42 +122,42 @@
       <h2 class="shelf"><span class="shelf-label" id="what-title">What you do</span><span class="shelf-tag">Six systems &middot; one console</span></h2>
       <div class="cards">
         <article class="card" data-fam="ops">
-          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-dock"/></svg></span>
+          <span class="plate art"><img src="play/assets/art/modules/256/dock.webp" width="44" height="44" alt="Docking Bay" loading="lazy"></span>
           <div class="card-main">
             <h3 class="name">Dock the traffic <span class="tag">Ops</span></h3>
             <p class="desc">Freighters pull up to your bays for fuel, repairs and a hot meal, and pay on departure. One bay, one ship at a time; every bay needs an open side for the approach.</p>
           </div>
         </article>
         <article class="card" data-fam="trade">
-          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-market"/></svg></span>
+          <span class="plate art"><img src="play/assets/art/modules/256/market.webp" width="44" height="44" alt="Trade Exchange" loading="lazy"></span>
           <div class="card-main">
             <h3 class="name">Trade the cargo <span class="tag">Trade</span></h3>
             <p class="desc">Ships sell what their home world exports and buy what it imports. Set Buy and Sell per good, hold ore for a refinery, and ride the booms.</p>
           </div>
         </article>
         <article class="card" data-fam="trade">
-          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-credits"/></svg></span>
+          <span class="plate art"><img src="play/assets/art/icons/128/credits.webp" width="44" height="44" alt="Credits" loading="lazy"></span>
           <div class="card-main">
             <h3 class="name">Tap the banks <span class="tag">Income</span></h3>
             <p class="desc">Every module earns credits by the minute into its own bank. A glowing coin means it is ready: tap it and watch the credits fly home. Banks keep filling while you are away.</p>
           </div>
         </article>
         <article class="card" data-fam="power">
-          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-hub"/></svg></span>
+          <span class="plate art"><img src="play/assets/art/modules/256/hub.webp" width="44" height="44" alt="Core Hub" loading="lazy"></span>
           <div class="card-main">
             <h3 class="name">Build on the clock <span class="tag">Timers</span></h3>
             <p class="desc">Modules take real time to come online, from ninety seconds to four hours by tier, and upgrades take longer still. Queue a build, go live your life, come back to a brighter station. Antimatter skips the wait.</p>
           </div>
         </article>
         <article class="card" data-fam="ops">
-          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-ship"/></svg></span>
+          <span class="plate art"><img src="play/assets/art/ships/256/kestrel_courier.webp" width="44" height="44" alt="A Kestrel courier" loading="lazy"></span>
           <div class="card-main">
             <h3 class="name">Venture out <span class="tag">Expeditions</span></h3>
             <p class="desc">Send surveys from your docks to any of eight sectors. They come back with cargo, charts, Antimatter and discoveries for the Registry: ship classes, species, artifacts.</p>
           </div>
         </article>
         <article class="card" data-fam="culture">
-          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-gate"/></svg></span>
+          <span class="plate art"><img src="play/assets/art/modules/256/gate.webp" width="44" height="44" alt="Jump Gate Beacon" loading="lazy"></span>
           <div class="card-main">
             <h3 class="name">Claim new worlds <span class="tag">Galaxy</span></h3>
             <p class="desc">Clear rings of unclaimed space around your hub as the station grows, then found the next station in one of eight sectors: dust storms, an asteroid belt, an ocean, a ringed giant, the violet gate. One wallet across all of them.</p>
@@ -167,48 +167,59 @@
     </div>
   </section>
 
+  <!-- ================= The bridge ================= -->
+  <section class="block" aria-labelledby="bridge-title">
+    <div class="wrap">
+      <h2 class="shelf"><span class="shelf-label" id="bridge-title">The bridge</span><span class="shelf-tag">The console you command it from</span></h2>
+      <figure class="shot glass wide">
+        <img src="assets/bridge.webp" width="1440" height="900" alt="The Waystation console: the station as a lit diorama of modules with glowing bank chips, ships on approach and the glass panels of the bridge" loading="lazy">
+        <figcaption class="micro"><span>Lantern Reach &middot; Day 042 &middot; L3 Town in Space</span><span>Varro Reach &middot; the Build console</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
   <!-- ================= Come back for ================= -->
   <section id="return" class="block" aria-labelledby="return-title">
     <div class="wrap">
       <h2 class="shelf"><span class="shelf-label" id="return-title">Come back for</span><span class="shelf-tag">There is always something cooking</span></h2>
       <div class="cards">
         <article class="card" data-fam="trade">
-          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg></span>
+          <span class="plate art"><img src="play/assets/art/badges/128/ach_gold.webp" width="44" height="44" alt="Gold achievement badge" loading="lazy"></span>
           <div class="card-main">
             <h3 class="name">Missions</h3>
             <p class="desc">Fifty goals in seven chapters, three live at a time. Finish one, come back and claim the credits, Antimatter and rank it pays.</p>
           </div>
         </article>
         <article class="card" data-fam="trade">
-          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-rep"/></svg></span>
+          <span class="plate art"><img src="play/assets/art/badges/128/ach_silver.webp" width="44" height="44" alt="Silver achievement badge" loading="lazy"></span>
           <div class="card-main">
             <h3 class="name">Achievements</h3>
             <p class="desc">Twenty-four lifetime achievements in bronze, silver and gold, from your first fifty ships to the whole Registry, each tier paying Antimatter.</p>
           </div>
         </article>
         <article class="card" data-fam="am">
-          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-credits"/></svg></span>
+          <span class="plate art"><img src="play/assets/art/icons/128/antimatter.webp" width="44" height="44" alt="Antimatter" loading="lazy"></span>
           <div class="card-main">
             <h3 class="name">Daily reward</h3>
             <p class="desc">A seven-day streak of credits, crates and Antimatter, with a livery token on day seven. Miss a day and you can mend the streak.</p>
           </div>
         </article>
         <article class="card" data-fam="ops">
-          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-rep"/></svg></span>
+          <span class="plate art"><img src="play/assets/art/badges/128/rank_03.webp" width="44" height="44" alt="Rank badge" loading="lazy"></span>
           <div class="card-main">
             <h3 class="name">Commander rank</h3>
             <p class="desc">Ensign to Admiral of the Reach. Ranks are earned across every sector and grant real powers: collect all banks at once, a fourth mission, a bonus on every rate.</p>
           </div>
         </article>
         <article class="card" data-fam="culture">
-          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-people"/></svg></span>
+          <span class="plate art"><img src="play/assets/art/species/256/varroan.webp" width="44" height="44" alt="A Varroan" loading="lazy"></span>
           <div class="card-main">
             <h3 class="name">The Registry</h3>
             <p class="desc">Twenty-four ship classes, twelve alien species and sixteen artifacts to find, with lore for each. Completing a set pays Antimatter and a title.</p>
           </div>
         </article>
         <article class="card" data-fam="life">
-          <span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-plaza"/></svg></span>
+          <span class="plate art"><img src="play/assets/art/modules/256/plaza.webp" width="44" height="44" alt="Promenade" loading="lazy"></span>
           <div class="card-main">
             <h3 class="name">Territory</h3>
             <p class="desc">Every station starts on a small plot. Buy the next ring of unclaimed space, wait for the crews to clear it, and the station grows outward, ring by ring, in every sector.</p>
@@ -232,35 +243,66 @@
     </div>
   </section>
 
+  <!-- ================= Sectors ================= -->
+  <section class="block" aria-labelledby="sectors-title">
+    <div class="wrap">
+      <h2 class="shelf"><span class="shelf-label" id="sectors-title">Eight sectors</span><span class="shelf-tag">Each one a whole new station</span></h2>
+      <ul class="sectors">
+        <li><img src="play/assets/art/sectors/256/home.webp" width="256" height="256" alt="" loading="lazy"><span class="sname">Varro Reach</span><span class="sdesc">A quiet amber sun. Every commander starts here.</span></li>
+        <li><img src="play/assets/art/sectors/256/sable.webp" width="256" height="256" alt="" loading="lazy"><span class="sname">Sable Drift</span><span class="sdesc">Dust storms the size of continents; ore and alloy at a premium.</span></li>
+        <li><img src="play/assets/art/sectors/256/kessler.webp" width="256" height="256" alt="" loading="lazy"><span class="sname">Kessler Belt</span><span class="sdesc">No planet, only rock. Mining country.</span></li>
+        <li><img src="play/assets/art/sectors/256/thessaly.webp" width="256" height="256" alt="" loading="lazy"><span class="sname">Thessaly Deep</span><span class="sdesc">An ocean world; water, grain and Tidewater liners.</span></li>
+        <li><img src="play/assets/art/sectors/256/marrow.webp" width="256" height="256" alt="" loading="lazy"><span class="sname">Marrow Verge</span><span class="sdesc">Volcanic. Fuel runs rich and pirates run often.</span></li>
+        <li><img src="play/assets/art/sectors/256/oros.webp" width="256" height="256" alt="" loading="lazy"><span class="sname">Oros Halo</span><span class="sdesc">A ringed giant and its festivals.</span></li>
+        <li><img src="play/assets/art/sectors/256/keth.webp" width="256" height="256" alt="" loading="lazy"><span class="sname">Keth Meridian</span><span class="sdesc">A garden world where residents arrive in numbers.</span></li>
+        <li><img src="play/assets/art/sectors/256/aurelia.webp" width="256" height="256" alt="" loading="lazy"><span class="sname">Aurelia Gate</span><span class="sdesc">The violet terminus and its jump gate.</span></li>
+      </ul>
+    </div>
+  </section>
+
   <!-- ================= Module roster ================= -->
   <section id="modules" class="block" aria-labelledby="modules-title">
     <div class="wrap">
       <h2 class="shelf"><span class="shelf-label" id="modules-title">The module roster</span><span class="shelf-tag">24 modules &middot; six families &middot; three levels each</span></h2>
       <ul class="roster">
-        <li data-fam="hub"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-hub"/></svg></span><span class="rname">Core Hub</span><span class="rtier micro">Core</span></li>
-        <li data-fam="ops"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-dock"/></svg></span><span class="rname">Docking Bay</span><span class="rtier micro">Tier 1</span></li>
-        <li data-fam="trade"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-warehouse"/></svg></span><span class="rname">Cargo Warehouse</span><span class="rtier micro">Tier 1</span></li>
-        <li data-fam="power"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-solar"/></svg></span><span class="rname">Solar Array</span><span class="rtier micro">Tier 1</span></li>
-        <li data-fam="trade"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-fuel"/></svg></span><span class="rname">Fuel Depot</span><span class="rtier micro">Tier 1</span></li>
-        <li data-fam="life"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-quarters"/></svg></span><span class="rname">Crew Quarters</span><span class="rtier micro">Tier 1</span></li>
-        <li data-fam="life"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-cantina"/></svg></span><span class="rname">Cantina</span><span class="rtier micro">Tier 1</span></li>
-        <li data-fam="ops"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-comms"/></svg></span><span class="rname">Comms Relay</span><span class="rtier micro">Tier 2</span></li>
-        <li data-fam="trade"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-market"/></svg></span><span class="rname">Trade Exchange</span><span class="rtier micro">Tier 2</span></li>
-        <li data-fam="culture"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-rec"/></svg></span><span class="rname">Rec Deck</span><span class="rtier micro">Tier 2</span></li>
-        <li data-fam="life"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-hydro"/></svg></span><span class="rname">Hydroponics</span><span class="rtier micro">Tier 2</span></li>
-        <li data-fam="life"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-clinic"/></svg></span><span class="rname">Med Bay</span><span class="rtier micro">Tier 2</span></li>
-        <li data-fam="life"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-habitat"/></svg></span><span class="rname">Residential Habitat</span><span class="rtier micro">Tier 2</span></li>
-        <li data-fam="power"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-reactor"/></svg></span><span class="rname">Fusion Reactor</span><span class="rtier micro">Tier 2</span></li>
-        <li data-fam="ops"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-customs"/></svg></span><span class="rname">Customs Office</span><span class="rtier micro">Tier 2</span></li>
-        <li data-fam="ops"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-security"/></svg></span><span class="rname">Security Post</span><span class="rtier micro">Tier 2</span></li>
-        <li data-fam="life"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-school"/></svg></span><span class="rname">Academy</span><span class="rtier micro">Tier 3</span></li>
-        <li data-fam="trade"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-bank"/></svg></span><span class="rname">Mercantile Bank</span><span class="rtier micro">Tier 3</span></li>
-        <li data-fam="culture"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-plaza"/></svg></span><span class="rname">Promenade</span><span class="rtier micro">Tier 3</span></li>
-        <li data-fam="culture"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-menagerie"/></svg></span><span class="rname">Xeno Menagerie</span><span class="rtier micro">Tier 3</span></li>
-        <li data-fam="trade"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-refinery"/></svg></span><span class="rname">Ore Refinery</span><span class="rtier micro">Tier 3</span></li>
-        <li data-fam="ops"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-shipyard"/></svg></span><span class="rname">Shipyard</span><span class="rtier micro">Tier 3</span></li>
-        <li data-fam="culture"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-observatory"/></svg></span><span class="rname">Deep Space Observatory</span><span class="rtier micro">Tier 4</span></li>
-        <li data-fam="culture"><span class="plate"><svg class="ic" aria-hidden="true"><use href="#i-gate"/></svg></span><span class="rname">Jump Gate Beacon</span><span class="rtier micro">Tier 4</span></li>
+        <li data-fam="hub"><span class="plate art"><img src="play/assets/art/modules/256/hub.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Core Hub</span><span class="rtier micro">Core</span></li>
+        <li data-fam="ops"><span class="plate art"><img src="play/assets/art/modules/256/dock.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Docking Bay</span><span class="rtier micro">Tier 1</span></li>
+        <li data-fam="trade"><span class="plate art"><img src="play/assets/art/modules/256/warehouse.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Cargo Warehouse</span><span class="rtier micro">Tier 1</span></li>
+        <li data-fam="power"><span class="plate art"><img src="play/assets/art/modules/256/solar.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Solar Array</span><span class="rtier micro">Tier 1</span></li>
+        <li data-fam="trade"><span class="plate art"><img src="play/assets/art/modules/256/fuel.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Fuel Depot</span><span class="rtier micro">Tier 1</span></li>
+        <li data-fam="life"><span class="plate art"><img src="play/assets/art/modules/256/quarters.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Crew Quarters</span><span class="rtier micro">Tier 1</span></li>
+        <li data-fam="life"><span class="plate art"><img src="play/assets/art/modules/256/cantina.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Cantina</span><span class="rtier micro">Tier 1</span></li>
+        <li data-fam="ops"><span class="plate art"><img src="play/assets/art/modules/256/comms.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Comms Relay</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="trade"><span class="plate art"><img src="play/assets/art/modules/256/market.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Trade Exchange</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="culture"><span class="plate art"><img src="play/assets/art/modules/256/rec.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Rec Deck</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="life"><span class="plate art"><img src="play/assets/art/modules/256/hydro.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Hydroponics</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="life"><span class="plate art"><img src="play/assets/art/modules/256/clinic.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Med Bay</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="life"><span class="plate art"><img src="play/assets/art/modules/256/habitat.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Residential Habitat</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="power"><span class="plate art"><img src="play/assets/art/modules/256/reactor.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Fusion Reactor</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="ops"><span class="plate art"><img src="play/assets/art/modules/256/customs.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Customs Office</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="ops"><span class="plate art"><img src="play/assets/art/modules/256/security.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Security Post</span><span class="rtier micro">Tier 2</span></li>
+        <li data-fam="life"><span class="plate art"><img src="play/assets/art/modules/256/school.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Academy</span><span class="rtier micro">Tier 3</span></li>
+        <li data-fam="trade"><span class="plate art"><img src="play/assets/art/modules/256/bank.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Mercantile Bank</span><span class="rtier micro">Tier 3</span></li>
+        <li data-fam="culture"><span class="plate art"><img src="play/assets/art/modules/256/plaza.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Promenade</span><span class="rtier micro">Tier 3</span></li>
+        <li data-fam="culture"><span class="plate art"><img src="play/assets/art/modules/256/menagerie.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Xeno Menagerie</span><span class="rtier micro">Tier 3</span></li>
+        <li data-fam="trade"><span class="plate art"><img src="play/assets/art/modules/256/refinery.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Ore Refinery</span><span class="rtier micro">Tier 3</span></li>
+        <li data-fam="ops"><span class="plate art"><img src="play/assets/art/modules/256/shipyard.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Shipyard</span><span class="rtier micro">Tier 3</span></li>
+        <li data-fam="culture"><span class="plate art"><img src="play/assets/art/modules/256/observatory.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Deep Space Observatory</span><span class="rtier micro">Tier 4</span></li>
+        <li data-fam="culture"><span class="plate art"><img src="play/assets/art/modules/256/gate.webp" width="40" height="40" alt="" loading="lazy"></span><span class="rname">Jump Gate Beacon</span><span class="rtier micro">Tier 4</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= Registry teaser ================= -->
+  <section class="block" aria-labelledby="registry-title">
+    <div class="wrap">
+      <h2 class="shelf"><span class="shelf-label" id="registry-title">Who comes through</span><span class="shelf-tag">24 ship classes &middot; 12 species &middot; 16 artifacts to find</span></h2>
+      <ul class="teaser">
+        <li><img src="play/assets/art/species/256/varroan.webp" width="256" height="256" alt="" loading="lazy"><span class="tname">Varroan</span><span class="tdesc">Dockhands and freighter crews from the home world.</span></li>
+        <li><img src="play/assets/art/species/256/thessalid.webp" width="256" height="256" alt="" loading="lazy"><span class="tname">Thessalid</span><span class="tdesc">Ocean-born navigators of the Tidewater line.</span></li>
+        <li><img src="play/assets/art/species/256/lantern_moth.webp" width="256" height="256" alt="" loading="lazy"><span class="tname">Lantern moth</span><span class="tdesc">Follows the running lights; found by expedition.</span></li>
+        <li><img src="play/assets/art/ships/256/aurelian_liner.webp" width="256" height="256" alt="" loading="lazy"><span class="tname">Aurelian liner</span><span class="tdesc">Long-haul passengers of the galactic tier.</span></li>
+        <li><img src="play/assets/art/artifacts/256/gate_resonator.webp" width="256" height="256" alt="" loading="lazy"><span class="tname">Gate resonator</span><span class="tdesc">An artifact from the terminus. Epic.</span></li>
       </ul>
     </div>
   </section>

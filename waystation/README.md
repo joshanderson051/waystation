@@ -16,11 +16,11 @@ next star system.
 | `play/js/data2.js`, `meta.js` | The meta-game: sectors, timers, banks, upgrades, expeditions, missions, daily rewards, rank, collection, Antimatter |
 | `play/js/store.js` | In-app purchases: sandbox provider today, Stripe Checkout through `workers/store` when connected |
 | `play/dev/` | Harnesses: `engine-preview.html`, `hud2-preview.html`, `sim-test.js` (node), `pixi-check.html`, art and ship previews; screenshots in `shots/` |
-| `assets/` | Production images: `hero.png` (landing), `og.png` (link previews), app icons |
+| `assets/` | Production images: the key art as `hero.webp` / `hero.jpg` and `og.jpg`, the bridge screenshot, app icons |
 | `favicon.svg`, `site.webmanifest` | The Core Hub mark as a tab icon; install metadata |
 | `404.html`, `_headers`, `robots.txt` | Not-found page (self-contained), cache and security headers for Cloudflare Pages / Netlify, crawl policy |
 | `serve.js` | Dependency-free local server with a subpath mode |
-| `tools/` | Screenshot and icon generators (headless Chrome via puppeteer-core; `npm install` inside `tools/`) |
+| `tools/` | Screenshot and icon generators and `art-build.js`, which converts the generated art pack to the WebP files under `play/assets/art/` and writes `play/js/artpack.js` (headless Chrome via puppeteer-core; `npm install` inside `tools/`) |
 | `DESIGN2.md` | The canonical v2 specification: visual language, world rendering, game design, HUD, store, sound |
 | `DESIGN.md` | The v1 specification; its colour tokens (2), module art (8) and ship art (9) sections still apply |
 
@@ -86,6 +86,14 @@ Sandbox is the default: purchases are free, local and clearly labelled. To sell 
 Cloudflare Worker in `workers/store` with your Stripe keys (its README walks through test mode and live mode),
 then set `<meta name="waystation-store" content='{"mode":"stripe","apiBase":"https://…workers.dev"}'>` in
 `play/index.html`.
+
+## The art pack
+
+The illustrated look (DESIGN2.md Addendum A6) comes from a generated art pack: 24 module renders, 24 ships, 12 species, 16
+artifacts, 8 sector cards, 12 goods, 5 icons, 18 badges, people and loader sprite sheets, a gangway and the key art. The
+source PNG masters stay outside the repository; `tools/art-build.js <pack folder>` converts them to WebP named by game id
+under `play/assets/art/` (about 11 MB) and regenerates `play/js/artpack.js`, whose `ARTPACK.url(group, id, size)` is the
+only way code refers to a picture. Rebuild the pack when a master changes; never hand-edit the WebP files.
 
 ## Manual, tutorial, accounts, admin
 
