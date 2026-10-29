@@ -136,6 +136,9 @@
     if (has(Engine, 'on')) {
       // one HUD pulse per coin landing (E emits fx-arrive; H exposes anchorHit)
       Engine.on('fx-arrive', e => { if (e && e.index > 1) call(UI, 'anchorHit', 'credits'); });
+      // A6: the resume card's thumbnail may be drawn before the module renders are in; redraw it once they are
+      let thumbArt = false;
+      Engine.on('loading', () => { if (!thumbArt && artReady()) { thumbArt = true; if (T.open && T.resume && !T.resume.hidden) fillResumeCard(); } });
     }
     Sim.on('event', () => {
       const p = Sim.state && Sim.state.pending;

@@ -1153,7 +1153,9 @@ const EngineWorld = (() => {
     return best;
   }
 
-  // ---------------------------------------------------------------- thumbnail (v1 port; state.grid only, no Sim calls)
+  // ---------------------------------------------------------------- thumbnail (A6: the resume card's diorama; state.grid only, no Sim calls)
+  // Framed on the occupied cells (one cell of margin, never tighter than 5x3), each module on its family pad with
+  // its three-quarter render when the texture is in, the flat family square otherwise.
   function thumbnail(state, w, h) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const c = document.createElement('canvas');
@@ -1165,24 +1167,52 @@ const EngineWorld = (() => {
     const grid = state && state.grid;
     if (!grid || !grid.length) return c;
     const rows = grid.length, cols = grid[0].length;
-    const cell = Math.floor(Math.min(w / cols, h / rows));
-    const ox = Math.floor((w - cols * cell) / 2), oy = Math.floor((h - rows * cell) / 2);
-    g.strokeStyle = U.pal('hull-edge'); g.lineWidth = 2; g.beginPath();
-    for (let r = 0; r < rows; r++) for (let cc = 0; cc < cols; cc++) {
+    let r0 = rows, r1 = -1, c0 = cols, c1 = -1;
+    for (let r = 0; r < rows; r++) for (let cc = 0; cc < cols; cc++) if (grid[r][cc]) { r0 = Math.min(r0, r); r1 = Math.max(r1, r); c0 = Math.min(c0, cc); c1 = Math.max(c1, cc); }
+    if (r1 < 0) return c;
+    // frame: the occupied span centred, with 0.6 of a cell of breathing room on every side (a lone hub fills the card)
+    const spanC = c1 - c0 + 1, spanR = r1 - r0 + 1;
+    const cell = Math.max(2, Math.min(56, Math.floor(Math.min(w / Math.max(spanC + 1.2, 3.2), h / Math.max(spanR + 1.2, 2.2)))));
+    const ox = Math.round((w - spanC * cell) / 2) - c0 * cell, oy = Math.round((h - spanR * cell) / 2) - r0 * cell;
+    // a faint plate grid under the station, then the connectors between neighbours
+    g.strokeStyle = U.rgba(U.pal('hull-edge'), 0.18); g.lineWidth = 1; g.beginPath();
+    for (let x = ((ox % cell) + cell) % cell; x <= w; x += cell) { g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, h); }
+    for (let y = ((oy % cell) + cell) % cell; y <= h; y += cell) { g.moveTo(0, y + 0.5); g.lineTo(w, y + 0.5); }
+    g.stroke();
+    g.strokeStyle = U.rgba(U.pal('hull-edge'), 0.8); g.lineWidth = Math.max(1, Math.round(cell / 12)); g.beginPath();
+    for (let r = r0; r <= r1; r++) for (let cc = c0; cc <= c1; cc++) {
       if (!grid[r][cc]) continue;
       const x = ox + cc * cell + cell / 2, y = oy + r * cell + cell / 2;
       if (cc + 1 < cols && grid[r][cc + 1]) { g.moveTo(x, y); g.lineTo(x + cell, y); }
       if (r + 1 < rows && grid[r + 1][cc]) { g.moveTo(x, y); g.lineTo(x, y + cell); }
     }
     g.stroke();
-    const size = Math.max(2, cell - 2), rad = Math.max(1, size / 4);
-    const lv = liveryById(wantedLiveryId()), custom = lv.id !== 'default', bar = Math.max(1, Math.round(size / 6));
-    for (let r = 0; r < rows; r++) for (let cc = 0; cc < cols; cc++) {
+    const lv = liveryById(wantedLiveryId()), custom = lv.id !== 'default';
+    const inset = Math.max(1, Math.round(cell * 5 / 54)), rad = Math.max(2, Math.round(cell / 9));
+    const bar = Math.max(1, Math.round(cell / 18));
+    for (let r = r0; r <= r1; r++) for (let cc = c0; cc <= c1; cc++) {
       const m = grid[r][cc]; if (!m) continue;
-      const x = ox + cc * cell + 1, y = oy + r * cell + 1;
-      g.fillStyle = U.rgba(m.id === 'hub' ? (lv.rim || U.pal('ivory')) : U.famColor(m.id), 0.8);
-      const p = new Path2D(); roundRectPath(p, x, y, size, size, rad); g.fill(p);
-      if (custom && m.id !== 'hub' && size >= 6) { g.fillStyle = lv.strip === 'family' ? U.famColor(m.id) : lv.strip; g.fillRect(x + 2, y + 1, size - 4, bar); }   // A5 livery strip
+      const x = ox + cc * cell, y = oy + r * cell, px = x + inset, py = y + inset, pw = cell - inset * 2;
+      const col = padColor(m.id);
+      // the pad: dark seat, family fill and rim, exactly as the world draws it
+      let p = new Path2D(); roundRectPath(p, px - 1.5, py - 1.5, pw + 3, pw + 3, rad + 1); g.fillStyle = 'rgba(3,4,10,0.55)'; g.fill(p);
+      p = new Path2D(); roundRectPath(p, px, py, pw, pw, rad);
+      g.fillStyle = U.rgba(col, 0.14); g.fill(p); g.strokeStyle = U.rgba(col, 0.6); g.lineWidth = 1; g.stroke(p);
+      if (custom && m.id !== 'hub' && pw >= 8) { g.fillStyle = stripColor(m.id); g.fillRect(px + 2, py + 1, pw - 4, bar); }   // A5 livery strip
+      // the render (1.0 x cell, the world's miniature scale); the flat family square when the texture is not in
+      let drawn = false;
+      try {
+        const tex = ST.assets.texture(ST.assets.url('modules', m.id, 512));
+        const src = tex && tex.source && tex.source.resource;
+        if (src && (src.width || src.naturalWidth)) {
+          g.save(); g.shadowColor = 'rgba(0,0,0,0.6)'; g.shadowBlur = Math.max(2, cell / 10); g.shadowOffsetY = Math.max(1, cell / 24);
+          g.drawImage(src, x, y, cell, cell); g.restore(); drawn = true;
+        }
+      } catch (e) { drawn = false; }
+      if (!drawn) {
+        const sq = Math.max(2, pw - 4), p2 = new Path2D(); roundRectPath(p2, px + 2, py + 2, sq, sq, Math.max(1, sq / 4));
+        g.fillStyle = U.rgba(m.id === 'hub' ? (lv.rim || U.pal('ivory')) : U.famColor(m.id), 0.8); g.fill(p2);
+      }
     }
     return c;
   }

@@ -125,8 +125,15 @@
           <li>Numbers from the shipped game data</li>
           <li>Real-time timers</li>
           <li>Desktop and tablet</li>
-          <li>Updated 2026-10-19</li>
+          <li>Updated 2026-10-29</li>
         </ul>
+        <figure class="fig glass masthead">
+          <picture>
+            <source media="(max-width: 1100px)" srcset="../play/assets/art/keyart/hero-1024.webp">
+            <img src="../play/assets/art/keyart/hero-1536.webp" width="1536" height="1024" alt="Waystation key art: a vast lit space station with a central spire and radial docking arms above an amber world, freighters on approach with blue drive flares" fetchpriority="high">
+          </picture>
+          <figcaption class="micro"><span class="cap">The station the game is about. Modules in the world, the Build cards, the Registry and the galaxy map all draw from the same illustrated pack: charcoal and titanium hulls, cyan navigation light, warm amber where people live.</span><span class="tag">Key art</span></figcaption>
+        </figure>
       </header>
 
       <!-- 01 -->
@@ -164,11 +171,11 @@
           <p class="intro">The game opens a short guided tour the first time you commission a station. This chapter walks the same path, so you can read ahead or catch anything you skipped. You can replay the tour later from <span class="ui">Settings</span>.</p>
         </div>
         <figure class="fig glass">
-          <img src="../assets/manual/fig-title.webp" width="1440" height="900" alt="The Waystation title screen: the wordmark on a dark glass band over a drifting amber world, a station-name field with a reroll button, the registry line and the Commission station button" loading="lazy">
-          <figcaption class="micro"><span class="cap">The title screen. Type a station name or take the one the registry offers, then commission. On later visits a resume card sits here instead, with your rank, station, day, credits and the banked total waiting for you.</span><span class="tag">Figure 1 &middot; Title</span></figcaption>
+          <img src="../assets/manual/fig-title.webp" width="1440" height="900" alt="The title screen over the key art: a dark glass band with the wordmark, Station commissioning and a Sign in lozenge; below it the station-name field with a reroll button, the registry line and the Commission station button" loading="lazy">
+          <figcaption class="micro"><span class="cap">The title screen. The key art sits behind a dark glass band with the wordmark and a <span class="ui">Sign in</span> lozenge; under it the name field, the registry line and <span class="ui">Commission station</span>, which lights once the module pictures have loaded (a line under the wordmark counts them in). On later visits a resume card with your rank badge sits here instead.</span><span class="tag">Figure 1 &middot; Title</span></figcaption>
         </figure>
         <div class="prose">
-          <p>Before the tour starts, two things happen. The daily reward sheet opens, because a fresh profile has a reward waiting; claim it or press <span class="ui">Later</span>. And the <span class="ui">Build</span> button on the left rail starts to pulse: that is the game's first pointer.</p>
+          <p>While the module pictures load, the title shows a loading line under the wordmark and <span class="ui">Commission station</span> waits for it to reach 100%. Before the tour starts, two things happen. The daily reward sheet opens, because a fresh profile has a reward waiting; claim it or press <span class="ui">Later</span>. And the <span class="ui">Build</span> button on the left rail starts to pulse: that is the game's first pointer.</p>
           <ol class="steps">
             <li><span class="st">Welcome, Commander</span><p>The Core Hub sits in the middle of the world. Drag to pan and roll the wheel to zoom; <kbd>0</kbd> fits the station back into view. The dashed line around the hub is the edge of your plot: a 7&times;5 field of 35 cells you can build on.</p></li>
             <li><span class="st">The status bar</span><p>Across the top: Credits with yesterday's income, Antimatter with a <span class="ui">+</span> that opens the Store, Power used over produced, Residents over homes with the crews aboard, Reputation out of five, then your Commander rank ring, the daily reward bell and the Pause / 1&times; control.</p></li>
@@ -177,12 +184,12 @@
             <li><span class="st">Power: a Solar Array</span><p>Every module draws power; the hub makes 10 and a Solar Array adds 6. Place one now, before the readout turns red.</p></li>
             <li><span class="st">Storage: a Cargo Warehouse</span><p>The hub holds 50 units of cargo. A warehouse adds 200. Without room you cannot buy what ships are hauling, and trade is where the live credits come from.</p></li>
             <li><span class="st">Builds take time from now on</span><p>Your fourth module arrives as a scaffold: a hatched plate, a progress ring and a timer. Tier-1 builds take 90 seconds, tier 2 twelve minutes, tier 3 an hour, tier 4 four hours. Click the scaffold and you can skip the wait for Antimatter: 1 AM per eight minutes left, so the first skips cost a single AM.</p></li>
-            <li><span class="st">Banks</span><p>Modules earn into a local bank. When a bank is a quarter full a bobbing coin appears above the plate; when it is full the coin grows a halo and nothing more accrues until you collect. Tap the coin. The hub's bank is the first one you will see.</p></li>
+            <li><span class="st">Banks</span><p>Modules earn into a local bank. When a bank is a quarter full a bobbing coin appears above the module's miniature; when it is full the coin grows a halo and nothing more accrues until you collect. Tap the coin. The hub's bank is the first one you will see.</p></li>
             <li><span class="st">Ships and trade</span><p>The first ship is already on approach. <span class="ui">Fleet</span> (<kbd>F</kbd>) shows who is docked, holding or departing and what each company trusts you; <span class="ui">Market</span> (<kbd>M</kbd>) shows prices, your stock and the Buy / Sell policy for every good.</p></li>
             <li><span class="st">Missions and achievements</span><p><span class="ui">Missions</span> (<kbd>J</kbd>) keeps three goals live at a time and a second tab of lifetime achievements in bronze, silver and gold. Finishing a goal is not the end of it: come back and press <span class="ui">Claim</span>.</p></li>
             <li><span class="st">Territory and the galaxy</span><p>The hatched, dim field around your plot is unclaimed space. Click it to buy the next ring. <span class="ui">Map</span> (<kbd>G</kbd>) shows the other seven sectors, each with its own world, bias and lock.</p></li>
             <li><span class="st">Expeditions</span><p><span class="ui">Expeditions</span> (<kbd>E</kbd>) sends a survey from your Docking Bay to any sector, locked or not. It comes back after 30 minutes to a day with goods, often a chart, sometimes Antimatter or a discovery for the Registry.</p></li>
-            <li><span class="st">Daily reward, the Store and this manual</span><p>The bell in the status bar is the seven-day streak. The Store sells Antimatter and runs in test mode for now. You have the bridge.</p></li>
+            <li><span class="st">Daily reward, the Store and this manual</span><p>The bell in the status bar is the seven-day streak. The Store sells Antimatter through a checkout that runs in test mode for now. You have the bridge.</p></li>
           </ol>
           <h3>A sensible first session</h3>
           <p>The Commissioning chapter of missions is the tutorial's reward track: build a dock, a warehouse and a solar array, tap a bank, serve three ships, read a transmission, clear your first ring. Together those seven missions pay 35 Antimatter on top of the 20 you start with, plus 4,100 credits. With a Fuel Depot and Crew Quarters down as well, you have a station that earns about 25 credits a minute into its banks and takes visitors' money on the side.</p>
@@ -194,8 +201,8 @@
       <section class="chapter" id="s3" aria-labelledby="h1-3">
         <h2 class="shelf"><span class="idx">03</span><span class="shelf-label" id="h1-3">The bridge</span><span class="shelf-tag">Status bar &middot; rail &middot; panels &middot; context bar</span></h2>
         <figure class="fig glass">
-          <img src="../assets/manual/fig-bridge.webp" width="1440" height="900" alt="The bridge at 1440 by 900: the status bar across the top, the command rail down the left, a level-3 station of about two dozen modules in the middle with glowing bank coins and two scaffolds under construction, two freighters on approach, the Next up strip on the right and the context bar along the bottom" loading="lazy">
-          <figcaption class="micro"><span class="cap">The bridge. Lantern Reach in Varro Reach at level 3: twenty-six modules, ready banks glowing amber, a Docking Bay and an Ore Refinery still on their timers, two freighters on approach and the Next up strip counting them down.</span><span class="tag">Figure 2 &middot; Bridge</span></figcaption>
+          <img src="../assets/manual/fig-bridge.webp" width="1440" height="900" alt="The bridge at 1440 by 900: the status bar with the credit and Antimatter icons and the rank badge, the command rail, a level-3 station drawn as a diorama of module miniatures on coloured pads with amber coins floating above the ready banks, a Tidewater hauler and an Ouroboros freighter docked at their bays with gangways down and small figures on them, a Docking Bay and an Ore Refinery still under construction, and the Next up strip on the right" loading="lazy">
+          <figcaption class="micro"><span class="cap">The bridge. Lantern Reach at level 3 as a diorama: every module is its miniature standing on a family-coloured pad, trusses run pad to pad, amber coins float above the banks that are ready, a Docking Bay and an Ore Refinery are still on their timers, and a Tidewater hauler and an Ouroboros freighter have settled at their bays with gangways down and figures crossing them. Next up counts the timers down on the right.</span><span class="tag">Figure 2 &middot; Bridge</span></figcaption>
         </figure>
         <div class="prose">
           <p class="intro">The world fills the screen. Everything you touch floats over it as glass: a status bar, a command rail, one panel at a time, a notices column and a context bar. Nothing on the bridge blocks the world; the camera slides over when a panel would cover the station.</p>
@@ -208,7 +215,8 @@
             <li><b>Power.</b> Used over produced, with pips. Ice when healthy, amber with a square during a solar flare, red with a down-triangle when you are drawing more than you make.</li>
             <li><b>Residents.</b> Permanent residents over homes, and under it the visitors aboard: the crews of every docked ship.</li>
             <li><b>Reputation.</b> Zero to five, with five pips that fill as it climbs.</li>
-            <li><b>Rank ring.</b> Your Commander level inside an arc that fills toward the next rank. Hover it for the exact XP and what the next rank grants.</li>
+            <li><b>Rank ring.</b> Your rank badge inside an arc that fills toward the next rank. Hover it for the exact XP and what the next rank grants.</li>
+            <li><b>Cloud glyph.</b> The state of your cloud save: ice when synced, pulsing while it syncs, amber when offline or in error. Click it for <span class="ui">Settings &rsaquo; Account</span>.</li>
             <li><b>Daily bell.</b> A dot means today's reward is unclaimed.</li>
             <li><b>Speed.</b> Pause or 1&times;. There is no faster setting.</li>
           </ul>
@@ -220,10 +228,10 @@
           <h3>Panels</h3>
           <p>One panel opens at a time, 440 pixels wide, sliding in from the rail. Each has a title, a one-line subtitle with the numbers that matter, sometimes a tab strip, and a scrolling body. The panels in brief:</p>
           <ul>
-            <li><b>Build</b>: four tier shelves of module cards; station rate, power and berths at the top. See <a href="#s4">Building</a>.</li>
-            <li><b>Station</b>: with nothing selected, the overview: quality of life, residents, power, berths, the banked total with <span class="ui">Collect all</span>, the Territory block, income by category and telemetry. Click a module and the panel becomes its card: bank, build progress, upgrade and scrap.</li>
+            <li><b>Build</b>: four tier shelves of module cards, each with its render; station rate, power and berths at the top. See <a href="#s4">Building</a>.</li>
+            <li><b>Station</b>: with nothing selected, the overview: quality of life, residents, power, berths, the banked total with <span class="ui">Collect all</span>, the Territory block, income by category and telemetry. Click a module and the panel becomes its card, led by the module's full picture: bank, build progress, upgrade and scrap.</li>
             <li><b>Market</b>: every good with its price, your stock, Buy / Sell toggles and a broker button. See <a href="#s6">Trade</a>.</li>
-            <li><b>Fleet</b>: ships in the sector by state, then each company's trust bar, office, loan and the goods it brings and buys.</li>
+            <li><b>Fleet</b>: ships in the sector by state, each with its render, then each company's trust bar, office, loan and the goods it brings and buys.</li>
             <li><b>Expeditions</b>: slots, crews under way with countdown rings, returned crews with <span class="ui">Debrief</span>, and the eight destinations.</li>
             <li><b>Map</b>: the galaxy as a constellation; click a node for its sector card.</li>
             <li><b>Missions</b> with an <b>Achievements</b> tab.</li>
@@ -238,7 +246,8 @@
           <p>The bottom bar is the game talking to you. On the left, a hint that changes with the situation: what to do with a placing ghost, why a cell is invalid, that a berth is blocked, that a hopper is ready, that an expedition is back. In the middle, when a module is selected, its quick actions: <span class="ui">Collect</span>, <span class="ui">Skip</span> for Antimatter while it builds, <span class="ui">Upgrade</span>, <span class="ui">Focus</span>, <span class="ui">Scrap</span>. On the right, the <kbd>?</kbd> button opens the keys reference.</p>
 
           <h3>In the world</h3>
-          <p>Hover a module for a tooltip with its description, bank and power; hover a ship for its company, captain, crew, hold and wants. Click a module to select it (the Station panel follows). Double-click to focus the camera on it. Bank coins, scaffold rings and the rising numbers when ships pay all live in the world and zoom with it. Ships show their state: on approach, docked, departing, or holding in orbit with a <span class="mono">HOLD</span> tag and the days waited.</p>
+          <p>Every module is a <b>miniature</b> of its render standing on a <b>pad</b>: a rounded square in the module's family hue that keeps the grid legible. Trusses run pad to pad and a soft lamp glows under each miniature. Hover a module for a tooltip with its description, bank and power; hover a ship for its company, captain, crew, hold and wants. Click a module to select it (the Station panel follows, led by the full picture); double-click to focus the camera on it. Bank coins float above the miniatures; scaffold rings and the rising numbers when ships pay live in the world too, and all of it zooms with the camera.</p>
+          <p>Ships are their renders as well. They come in nose first, settle beside their bay's open side and lower a <b>gangway</b>, and two to five figures walk aboard: crews from freighters and haulers, passengers from liners, traders from Ouroboros and Aurelian ships, a security officer when you have a Security Post, dockworkers with a loader when cargo moves at a warehouse. Ships waiting for a berth hold in orbit with a <span class="mono">HOLD</span> tag and the days waited. The figures need the effects tier at High and a zoom above 0.9, and stay home under reduced motion.</p>
         </div>
       </section>
 
@@ -246,10 +255,20 @@
       <section class="chapter" id="s4" aria-labelledby="h1-4">
         <h2 class="shelf"><span class="idx">04</span><span class="shelf-label" id="h1-4">Building</span><span class="shelf-tag">24 modules &middot; four tiers &middot; three levels</span></h2>
         <figure class="fig glass">
-          <img src="../assets/manual/fig-build.webp" width="1440" height="900" alt="The Build panel open beside a young station: tier 1 cards with cost, rate per minute, build time and power pips, a Cantina card in placing mode, bracketed valid cells around the hub, a Fuel Depot scaffold with a 1:27 timer, and a red hatched Unclaimed space marker where the pointer rests outside the plot" loading="lazy">
-          <figcaption class="micro"><span class="cap">The Build panel with a Cantina in placing mode. Valid cells wear ivory brackets; the Fuel Depot below the hub is a scaffold with 1:27 left; the pointer is resting on unclaimed space, so the ghost is hatched red and the hint explains why.</span><span class="tag">Figure 3 &middot; Build</span></figcaption>
+          <img src="../assets/manual/fig-build.webp" width="1440" height="900" alt="The Build panel beside a young station: tier-1 cards each with the module render, cost, rate per minute, build time and power pips; a Cantina card in placing mode; bracketed valid cells around the hub miniature; a Fuel Depot scaffold with 1:27 left; and a red hatched Unclaimed space marker where the pointer rests outside the plot" loading="lazy">
+          <figcaption class="micro"><span class="cap">The Build panel with a Cantina in placing mode. Every card carries its module's render; valid cells wear ivory brackets; the Fuel Depot below the hub is a scaffold, its miniature dimmed under the hatch with 1:27 on the ring; the pointer is resting on unclaimed space, so the ghost is hatched red and the hint explains why.</span><span class="tag">Figure 3 &middot; Build</span></figcaption>
         </figure>
         <div class="prose">
+          <h3>Tier 1: the way station kit</h3>
+          <p>Six modules are open from the first minute. Together they are a berth, a hold, power, fuel, beds and meals: everything a passing freighter asks for.</p>
+          <ul class="gallery six" aria-label="Tier-1 modules">
+            <li><img src="../play/assets/art/modules/256/dock.webp" width="256" height="256" alt="Docking Bay render" loading="lazy"><span class="gname">Docking Bay</span><span class="gsub">800 cr &middot; 90 s</span></li>
+            <li><img src="../play/assets/art/modules/256/warehouse.webp" width="256" height="256" alt="Cargo Warehouse render" loading="lazy"><span class="gname">Cargo Warehouse</span><span class="gsub">600 cr &middot; 90 s</span></li>
+            <li><img src="../play/assets/art/modules/256/solar.webp" width="256" height="256" alt="Solar Array render" loading="lazy"><span class="gname">Solar Array</span><span class="gsub">500 cr &middot; 90 s</span></li>
+            <li><img src="../play/assets/art/modules/256/fuel.webp" width="256" height="256" alt="Fuel Depot render" loading="lazy"><span class="gname">Fuel Depot</span><span class="gsub">900 cr &middot; 90 s</span></li>
+            <li><img src="../play/assets/art/modules/256/quarters.webp" width="256" height="256" alt="Crew Quarters render" loading="lazy"><span class="gname">Crew Quarters</span><span class="gsub">700 cr &middot; 90 s</span></li>
+            <li><img src="../play/assets/art/modules/256/cantina.webp" width="256" height="256" alt="Cantina render" loading="lazy"><span class="gname">Cantina</span><span class="gsub">800 cr &middot; 90 s</span></li>
+          </ul>
           <h3>Placement rules</h3>
           <p>Pick a card, then click a cell. A cell is valid when all of these hold, and the hint tells you which one failed:</p>
           <ul>
@@ -259,13 +278,13 @@
             <li>You can afford it. Cards you cannot afford dim their cost and show how much more you need.</li>
             <li>It <b>touches the station</b>: at least one of its four neighbours is already occupied. A module still under construction counts as a neighbour.</li>
           </ul>
-          <p>Placing deducts the cost at once. Press <kbd>Esc</kbd> or right-click to stop placing; running out of credits stops it for you. The first three tier-1 builds of a brand-new profile finish instantly; every build after that runs on its timer.</p>
+          <p>The placing ghost is the module's own picture at half strength: ivory on a valid cell, hatched red on an invalid one. Placing deducts the cost at once. Press <kbd>Esc</kbd> or right-click to stop placing; running out of credits stops it for you. The first three tier-1 builds of a brand-new profile finish instantly; every build after that runs on its timer.</p>
 
           <h3>Docks and the open side</h3>
           <p>A Docking Bay only works if it has an <b>empty cell next to it</b>. Ships pull up to the empty neighbour farthest from the hub; that cell is the berth. Box a bay in on all four sides and it still counts as a module, still draws power and still fills its bank, but no ship can use it. The station tooltip and the Station panel say <span class="ui">Berth blocked</span> when this happens, and the context bar nags you about it. The Core Hub has a berth of its own under the same rule.</p>
 
           <h3>Timers, scaffolds and skips</h3>
-          <p>A module under construction is a scaffold: the plate at a third of its brightness under a hatched frame, an ice progress ring and a timer. While it builds it draws power and counts as a neighbour, but it has no berth, beds, storage or bank, and it does not count toward your station level. When the ring closes the module lands with a chime, a toast offers <span class="ui">Focus</span>, and the level is recomputed.</p>
+          <p>A module under construction is a scaffold: its miniature dimmed and greyed under a hatched frame, with an ice progress ring and a timer. While it builds it draws power and counts as a neighbour, but it has no berth, beds, storage or bank, and it does not count toward your station level. When the ring closes the module lands with a chime, a toast offers <span class="ui">Focus</span>, and the level is recomputed.</p>
           <p>Click a scaffold (or select it and use the context bar) to <b>skip</b> the rest for Antimatter. The cost is the same everywhere a timer runs: <span class="num">1 AM for every 8 minutes remaining, rounded up, minimum 1</span>. Ninety seconds costs 1 AM; twelve minutes, 2; an hour, 8; four hours, 30; a twenty-hour level-3 gate, 150.</p>
           <div class="tscroll">
             <table class="data compact">
@@ -302,34 +321,34 @@
             <thead><tr><th>Module</th><th class="n">Cost</th><th class="n">Power</th><th class="n">Rate</th><th class="n">Cap L1</th><th class="n">Build</th><th>Upgrades</th><th>What it does</th></tr></thead>
             <tbody>
               <tr class="tier"><td colspan="8">Core</td></tr>
-              <tr data-fam="hub"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-hub"/></svg>Core Hub</td><td class="n">&mdash;</td><td class="n ice">+10</td><td class="n amber">3</td><td class="n">540</td><td class="n">&mdash;</td><td class="up dim">&mdash;</td><td>Command, one berth, 50 cargo, 6 beds, food for 10. Cannot be upgraded or removed.</td></tr>
+              <tr data-fam="hub"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/hub.webp" width="40" height="40" alt="" loading="lazy"><span>Core Hub</span></span></td><td class="n">&mdash;</td><td class="n ice">+10</td><td class="n amber">3</td><td class="n">540</td><td class="n">&mdash;</td><td class="up dim">&mdash;</td><td>Command, one berth, 50 cargo, 6 beds, food for 10. Cannot be upgraded or removed.</td></tr>
               <tr class="tier"><td colspan="8">Tier 1 &middot; Way Station &middot; 90 s</td></tr>
-              <tr data-fam="ops"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-dock"/></svg>Docking Bay</td><td class="n">800</td><td class="n">&minus;2</td><td class="n amber">5</td><td class="n">900</td><td class="n">90 s</td><td class="up"><span>L2 1,600 &middot; 3 min</span><span>L3 4,000 &middot; 7 min 30 s</span></td><td>One more berth. Needs an open side. Upgrades serve ships 15% / 30% faster.</td></tr>
-              <tr data-fam="trade"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-warehouse"/></svg>Cargo Warehouse</td><td class="n">600</td><td class="n">&minus;1</td><td class="n amber">4</td><td class="n">720</td><td class="n">90 s</td><td class="up"><span>L2 1,200 &middot; 3 min</span><span>L3 3,000 &middot; 7 min 30 s</span></td><td>Holds 200 units of cargo.</td></tr>
-              <tr data-fam="power"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-solar"/></svg>Solar Array</td><td class="n">500</td><td class="n ice">+6</td><td class="n amber">3</td><td class="n">540</td><td class="n">90 s</td><td class="up"><span>L2 1,000 &middot; 3 min</span><span>L3 2,500 &middot; 7 min 30 s</span></td><td>Cheap power; dark during a flare. Upgrades add 25% / 50%.</td></tr>
-              <tr data-fam="trade"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-fuel"/></svg>Fuel Depot</td><td class="n">900</td><td class="n">&minus;1</td><td class="n amber">6</td><td class="n">1,080</td><td class="n">90 s</td><td class="up"><span>L2 1,800 &middot; 3 min</span><span>L3 4,500 &middot; 7 min 30 s</span></td><td>Sells reaction mass to every docked ship; a second depot adds 30%.</td></tr>
-              <tr data-fam="life"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-quarters"/></svg>Crew Quarters</td><td class="n">700</td><td class="n">&minus;2</td><td class="n amber">5</td><td class="n">900</td><td class="n">90 s</td><td class="up"><span>L2 1,400 &middot; 3 min</span><span>L3 3,500 &middot; 7 min 30 s</span></td><td>20 bunks for visiting crews (25 / 30 upgraded).</td></tr>
-              <tr data-fam="life"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-cantina"/></svg>Cantina</td><td class="n">800</td><td class="n">&minus;2</td><td class="n amber">5</td><td class="n">900</td><td class="n">90 s</td><td class="up"><span>L2 1,600 &middot; 3 min</span><span>L3 4,000 &middot; 7 min 30 s</span></td><td>Hot meals for 30 people a day.</td></tr>
+              <tr data-fam="ops"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/dock.webp" width="40" height="40" alt="" loading="lazy"><span>Docking Bay</span></span></td><td class="n">800</td><td class="n">&minus;2</td><td class="n amber">5</td><td class="n">900</td><td class="n">90 s</td><td class="up"><span>L2 1,600 &middot; 3 min</span><span>L3 4,000 &middot; 7 min 30 s</span></td><td>One more berth. Needs an open side. Upgrades serve ships 15% / 30% faster.</td></tr>
+              <tr data-fam="trade"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/warehouse.webp" width="40" height="40" alt="" loading="lazy"><span>Cargo Warehouse</span></span></td><td class="n">600</td><td class="n">&minus;1</td><td class="n amber">4</td><td class="n">720</td><td class="n">90 s</td><td class="up"><span>L2 1,200 &middot; 3 min</span><span>L3 3,000 &middot; 7 min 30 s</span></td><td>Holds 200 units of cargo.</td></tr>
+              <tr data-fam="power"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/solar.webp" width="40" height="40" alt="" loading="lazy"><span>Solar Array</span></span></td><td class="n">500</td><td class="n ice">+6</td><td class="n amber">3</td><td class="n">540</td><td class="n">90 s</td><td class="up"><span>L2 1,000 &middot; 3 min</span><span>L3 2,500 &middot; 7 min 30 s</span></td><td>Cheap power; dark during a flare. Upgrades add 25% / 50%.</td></tr>
+              <tr data-fam="trade"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/fuel.webp" width="40" height="40" alt="" loading="lazy"><span>Fuel Depot</span></span></td><td class="n">900</td><td class="n">&minus;1</td><td class="n amber">6</td><td class="n">1,080</td><td class="n">90 s</td><td class="up"><span>L2 1,800 &middot; 3 min</span><span>L3 4,500 &middot; 7 min 30 s</span></td><td>Sells reaction mass to every docked ship; a second depot adds 30%.</td></tr>
+              <tr data-fam="life"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/quarters.webp" width="40" height="40" alt="" loading="lazy"><span>Crew Quarters</span></span></td><td class="n">700</td><td class="n">&minus;2</td><td class="n amber">5</td><td class="n">900</td><td class="n">90 s</td><td class="up"><span>L2 1,400 &middot; 3 min</span><span>L3 3,500 &middot; 7 min 30 s</span></td><td>20 bunks for visiting crews (25 / 30 upgraded).</td></tr>
+              <tr data-fam="life"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/cantina.webp" width="40" height="40" alt="" loading="lazy"><span>Cantina</span></span></td><td class="n">800</td><td class="n">&minus;2</td><td class="n amber">5</td><td class="n">900</td><td class="n">90 s</td><td class="up"><span>L2 1,600 &middot; 3 min</span><span>L3 4,000 &middot; 7 min 30 s</span></td><td>Hot meals for 30 people a day.</td></tr>
               <tr class="tier"><td colspan="8">Tier 2 &middot; Trading Hub &middot; 12 min &middot; needs station level 2</td></tr>
-              <tr data-fam="ops"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-comms"/></svg>Comms Relay</td><td class="n">2,200</td><td class="n">&minus;2</td><td class="n amber">15</td><td class="n">2,700</td><td class="n">12 min</td><td class="up"><span>L2 4,400 &middot; 24 min</span><span>L3 11,000 &middot; 1 h</span></td><td>More ships find you (+0.15 traffic each). A second expedition slot.</td></tr>
-              <tr data-fam="trade"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-market"/></svg>Trade Exchange</td><td class="n">1,500</td><td class="n">&minus;2</td><td class="n amber">10</td><td class="n">1,800</td><td class="n">12 min</td><td class="up"><span>L2 3,000 &middot; 24 min</span><span>L3 7,500 &middot; 1 h</span></td><td>+5 points of trade margin each; Buy / Sell policies per good.</td></tr>
-              <tr data-fam="culture"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-rec"/></svg>Rec Deck</td><td class="n">1,200</td><td class="n">&minus;3</td><td class="n amber">8</td><td class="n">1,440</td><td class="n">12 min</td><td class="up"><span>L2 2,400 &middot; 24 min</span><span>L3 6,000 &middot; 1 h</span></td><td>An entertainment venue: crews spend more and rate you higher.</td></tr>
-              <tr data-fam="life"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-hydro"/></svg>Hydroponics</td><td class="n">1,300</td><td class="n">&minus;3</td><td class="n amber">9</td><td class="n">1,620</td><td class="n">12 min</td><td class="up"><span>L2 2,600 &middot; 24 min</span><span>L3 6,500 &middot; 1 h</span></td><td>Feeds 40 and grows 4 grain a day into stock.</td></tr>
-              <tr data-fam="life"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-clinic"/></svg>Med Bay</td><td class="n">1,400</td><td class="n">&minus;2</td><td class="n amber">9</td><td class="n">1,620</td><td class="n">12 min</td><td class="up"><span>L2 2,800 &middot; 24 min</span><span>L3 7,000 &middot; 1 h</span></td><td>Full health care; contains hold fever.</td></tr>
-              <tr data-fam="life"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-habitat"/></svg>Residential Habitat</td><td class="n">2,000</td><td class="n">&minus;3</td><td class="n amber">13</td><td class="n">2,340</td><td class="n">12 min</td><td class="up"><span>L2 4,000 &middot; 24 min</span><span>L3 10,000 &middot; 1 h</span></td><td>Homes for 15 residents (19 / 23 upgraded, rounded in the total).</td></tr>
-              <tr data-fam="power"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-reactor"/></svg>Fusion Reactor</td><td class="n">3,000</td><td class="n ice">+25</td><td class="n amber">20</td><td class="n">3,600</td><td class="n">12 min</td><td class="up"><span>L2 6,000 &middot; 24 min</span><span>L3 15,000 &middot; 1 h</span></td><td>Big power, immune to flares. Upgrades add 25% / 50%.</td></tr>
-              <tr data-fam="ops"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-customs"/></svg>Customs Office</td><td class="n">2,000</td><td class="n">&minus;1</td><td class="n amber">13</td><td class="n">2,340</td><td class="n">12 min</td><td class="up"><span>L2 4,000 &middot; 24 min</span><span>L3 10,000 &middot; 1 h</span></td><td>1.5 credits of tariff on every unit traded, per office. Catches smugglers.</td></tr>
-              <tr data-fam="ops"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-security"/></svg>Security Post</td><td class="n">1,800</td><td class="n">&minus;2</td><td class="n amber">12</td><td class="n">2,160</td><td class="n">12 min</td><td class="up"><span>L2 3,600 &middot; 24 min</span><span>L3 9,000 &middot; 1 h</span></td><td>Cuts raid losses; two posts stop raids outright.</td></tr>
+              <tr data-fam="ops"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/comms.webp" width="40" height="40" alt="" loading="lazy"><span>Comms Relay</span></span></td><td class="n">2,200</td><td class="n">&minus;2</td><td class="n amber">15</td><td class="n">2,700</td><td class="n">12 min</td><td class="up"><span>L2 4,400 &middot; 24 min</span><span>L3 11,000 &middot; 1 h</span></td><td>More ships find you (+0.15 traffic each). A second expedition slot.</td></tr>
+              <tr data-fam="trade"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/market.webp" width="40" height="40" alt="" loading="lazy"><span>Trade Exchange</span></span></td><td class="n">1,500</td><td class="n">&minus;2</td><td class="n amber">10</td><td class="n">1,800</td><td class="n">12 min</td><td class="up"><span>L2 3,000 &middot; 24 min</span><span>L3 7,500 &middot; 1 h</span></td><td>+5 points of trade margin each; Buy / Sell policies per good.</td></tr>
+              <tr data-fam="culture"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/rec.webp" width="40" height="40" alt="" loading="lazy"><span>Rec Deck</span></span></td><td class="n">1,200</td><td class="n">&minus;3</td><td class="n amber">8</td><td class="n">1,440</td><td class="n">12 min</td><td class="up"><span>L2 2,400 &middot; 24 min</span><span>L3 6,000 &middot; 1 h</span></td><td>An entertainment venue: crews spend more and rate you higher.</td></tr>
+              <tr data-fam="life"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/hydro.webp" width="40" height="40" alt="" loading="lazy"><span>Hydroponics</span></span></td><td class="n">1,300</td><td class="n">&minus;3</td><td class="n amber">9</td><td class="n">1,620</td><td class="n">12 min</td><td class="up"><span>L2 2,600 &middot; 24 min</span><span>L3 6,500 &middot; 1 h</span></td><td>Feeds 40 and grows 4 grain a day into stock.</td></tr>
+              <tr data-fam="life"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/clinic.webp" width="40" height="40" alt="" loading="lazy"><span>Med Bay</span></span></td><td class="n">1,400</td><td class="n">&minus;2</td><td class="n amber">9</td><td class="n">1,620</td><td class="n">12 min</td><td class="up"><span>L2 2,800 &middot; 24 min</span><span>L3 7,000 &middot; 1 h</span></td><td>Full health care; contains hold fever.</td></tr>
+              <tr data-fam="life"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/habitat.webp" width="40" height="40" alt="" loading="lazy"><span>Residential Habitat</span></span></td><td class="n">2,000</td><td class="n">&minus;3</td><td class="n amber">13</td><td class="n">2,340</td><td class="n">12 min</td><td class="up"><span>L2 4,000 &middot; 24 min</span><span>L3 10,000 &middot; 1 h</span></td><td>Homes for 15 residents (19 / 23 upgraded, rounded in the total).</td></tr>
+              <tr data-fam="power"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/reactor.webp" width="40" height="40" alt="" loading="lazy"><span>Fusion Reactor</span></span></td><td class="n">3,000</td><td class="n ice">+25</td><td class="n amber">20</td><td class="n">3,600</td><td class="n">12 min</td><td class="up"><span>L2 6,000 &middot; 24 min</span><span>L3 15,000 &middot; 1 h</span></td><td>Big power, immune to flares. Upgrades add 25% / 50%.</td></tr>
+              <tr data-fam="ops"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/customs.webp" width="40" height="40" alt="" loading="lazy"><span>Customs Office</span></span></td><td class="n">2,000</td><td class="n">&minus;1</td><td class="n amber">13</td><td class="n">2,340</td><td class="n">12 min</td><td class="up"><span>L2 4,000 &middot; 24 min</span><span>L3 10,000 &middot; 1 h</span></td><td>1.5 credits of tariff on every unit traded, per office. Catches smugglers.</td></tr>
+              <tr data-fam="ops"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/security.webp" width="40" height="40" alt="" loading="lazy"><span>Security Post</span></span></td><td class="n">1,800</td><td class="n">&minus;2</td><td class="n amber">12</td><td class="n">2,160</td><td class="n">12 min</td><td class="up"><span>L2 3,600 &middot; 24 min</span><span>L3 9,000 &middot; 1 h</span></td><td>Cuts raid losses; two posts stop raids outright.</td></tr>
               <tr class="tier"><td colspan="8">Tier 3 &middot; Town in Space &middot; 1 h &middot; needs station level 3</td></tr>
-              <tr data-fam="life"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-school"/></svg>Academy</td><td class="n">2,500</td><td class="n">&minus;2</td><td class="n amber">17</td><td class="n">3,060</td><td class="n">1 h</td><td class="up"><span>L2 5,000 &middot; 2 h</span><span>L3 12,500 &middot; 5 h</span></td><td>Resident growth doubles.</td></tr>
-              <tr data-fam="trade"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-bank"/></svg>Mercantile Bank</td><td class="n">4,000</td><td class="n">&minus;2</td><td class="n amber">27</td><td class="n">4,860</td><td class="n">1 h</td><td class="up"><span>L2 8,000 &middot; 2 h</span><span>L3 20,000 &middot; 5 h</span></td><td>Lend to the shipping companies at interest.</td></tr>
-              <tr data-fam="culture"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-plaza"/></svg>Promenade</td><td class="n">3,500</td><td class="n">&minus;3</td><td class="n amber">23</td><td class="n">4,140</td><td class="n">1 h</td><td class="up"><span>L2 7,000 &middot; 2 h</span><span>L3 17,500 &middot; 5 h</span></td><td>A venue; every resident earns 3 credits of business a day (doubled in a festival).</td></tr>
-              <tr data-fam="culture"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-menagerie"/></svg>Xeno Menagerie</td><td class="n">2,800</td><td class="n">&minus;4</td><td class="n amber">19</td><td class="n">3,420</td><td class="n">1 h</td><td class="up"><span>L2 5,600 &middot; 2 h</span><span>L3 14,000 &middot; 5 h</span></td><td>A venue; xenofauna in stock (up to 30 per menagerie) draws paying visitors.</td></tr>
-              <tr data-fam="trade"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-refinery"/></svg>Ore Refinery</td><td class="n">3,200</td><td class="n">&minus;6</td><td class="n amber">21</td><td class="n">3,780</td><td class="n">1 h</td><td class="up"><span>L2 6,400 &middot; 2 h</span><span>L3 16,000 &middot; 5 h</span></td><td>Turns 6 ore into 3 alloy every game day.</td></tr>
-              <tr data-fam="ops"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-shipyard"/></svg>Shipyard</td><td class="n">5,000</td><td class="n">&minus;5</td><td class="n amber">33</td><td class="n">5,940</td><td class="n">1 h</td><td class="up"><span>L2 10,000 &middot; 2 h</span><span>L3 25,000 &middot; 5 h</span></td><td>Repair fees; +3 trust per ship instead of +2. A third expedition slot.</td></tr>
+              <tr data-fam="life"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/school.webp" width="40" height="40" alt="" loading="lazy"><span>Academy</span></span></td><td class="n">2,500</td><td class="n">&minus;2</td><td class="n amber">17</td><td class="n">3,060</td><td class="n">1 h</td><td class="up"><span>L2 5,000 &middot; 2 h</span><span>L3 12,500 &middot; 5 h</span></td><td>Resident growth doubles.</td></tr>
+              <tr data-fam="trade"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/bank.webp" width="40" height="40" alt="" loading="lazy"><span>Mercantile Bank</span></span></td><td class="n">4,000</td><td class="n">&minus;2</td><td class="n amber">27</td><td class="n">4,860</td><td class="n">1 h</td><td class="up"><span>L2 8,000 &middot; 2 h</span><span>L3 20,000 &middot; 5 h</span></td><td>Lend to the shipping companies at interest.</td></tr>
+              <tr data-fam="culture"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/plaza.webp" width="40" height="40" alt="" loading="lazy"><span>Promenade</span></span></td><td class="n">3,500</td><td class="n">&minus;3</td><td class="n amber">23</td><td class="n">4,140</td><td class="n">1 h</td><td class="up"><span>L2 7,000 &middot; 2 h</span><span>L3 17,500 &middot; 5 h</span></td><td>A venue; every resident earns 3 credits of business a day (doubled in a festival).</td></tr>
+              <tr data-fam="culture"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/menagerie.webp" width="40" height="40" alt="" loading="lazy"><span>Xeno Menagerie</span></span></td><td class="n">2,800</td><td class="n">&minus;4</td><td class="n amber">19</td><td class="n">3,420</td><td class="n">1 h</td><td class="up"><span>L2 5,600 &middot; 2 h</span><span>L3 14,000 &middot; 5 h</span></td><td>A venue; xenofauna in stock (up to 30 per menagerie) draws paying visitors.</td></tr>
+              <tr data-fam="trade"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/refinery.webp" width="40" height="40" alt="" loading="lazy"><span>Ore Refinery</span></span></td><td class="n">3,200</td><td class="n">&minus;6</td><td class="n amber">21</td><td class="n">3,780</td><td class="n">1 h</td><td class="up"><span>L2 6,400 &middot; 2 h</span><span>L3 16,000 &middot; 5 h</span></td><td>Turns 6 ore into 3 alloy every game day.</td></tr>
+              <tr data-fam="ops"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/shipyard.webp" width="40" height="40" alt="" loading="lazy"><span>Shipyard</span></span></td><td class="n">5,000</td><td class="n">&minus;5</td><td class="n amber">33</td><td class="n">5,940</td><td class="n">1 h</td><td class="up"><span>L2 10,000 &middot; 2 h</span><span>L3 25,000 &middot; 5 h</span></td><td>Repair fees; +3 trust per ship instead of +2. A third expedition slot.</td></tr>
               <tr class="tier"><td colspan="8">Tier 4 &middot; Galactic Gate &middot; 4 h &middot; needs station level 4</td></tr>
-              <tr data-fam="culture"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-observatory"/></svg>Deep Space Observatory</td><td class="n">4,500</td><td class="n">&minus;2</td><td class="n amber">30</td><td class="n">5,400</td><td class="n">4 h</td><td class="up"><span>L2 9,000 &middot; 8 h</span><span>L3 22,500 &middot; 20 h</span></td><td>+0.5 to the reputation target each (up to +1.0).</td></tr>
-              <tr data-fam="culture"><td class="k"><svg class="ic" aria-hidden="true"><use href="#i-gate"/></svg>Jump Gate Beacon</td><td class="n">12,000</td><td class="n">&minus;15</td><td class="n amber">80</td><td class="n">14,400</td><td class="n">4 h</td><td class="up"><span>L2 24,000 &middot; 8 h</span><span>L3 60,000 &middot; 20 h</span></td><td>Calls the Aurelian liners; traffic &times;1.25 (doubled again in Aurelia Gate).</td></tr>
+              <tr data-fam="culture"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/observatory.webp" width="40" height="40" alt="" loading="lazy"><span>Deep Space Observatory</span></span></td><td class="n">4,500</td><td class="n">&minus;2</td><td class="n amber">30</td><td class="n">5,400</td><td class="n">4 h</td><td class="up"><span>L2 9,000 &middot; 8 h</span><span>L3 22,500 &middot; 20 h</span></td><td>+0.5 to the reputation target each (up to +1.0).</td></tr>
+              <tr data-fam="culture"><td class="k"><span class="mod"><img class="r-art" src="../play/assets/art/modules/256/gate.webp" width="40" height="40" alt="" loading="lazy"><span>Jump Gate Beacon</span></span></td><td class="n">12,000</td><td class="n">&minus;15</td><td class="n amber">80</td><td class="n">14,400</td><td class="n">4 h</td><td class="up"><span>L2 24,000 &middot; 8 h</span><span>L3 60,000 &middot; 20 h</span></td><td>Calls the Aurelian liners; traffic &times;1.25 (doubled again in Aurelia Gate).</td></tr>
             </tbody>
           </table>
         </div>
@@ -340,8 +359,8 @@
       <section class="chapter" id="s5" aria-labelledby="h1-5">
         <h2 class="shelf"><span class="idx">05</span><span class="shelf-label" id="h1-5">Banks and income</span><span class="shelf-tag">Hoppers &middot; caps &middot; offline accrual</span></h2>
         <figure class="fig glass">
-          <img src="../assets/manual/fig-bank.webp" width="1440" height="900" alt="Close up on a selected Docking Bay with a full bank: a large amber coin with a halo above the plate, a ready coin above the hub, the Station panel showing the Hopper block with 880 credits banked, a Collect button, the upgrade to level 2 and a Scrap button, and the context bar offering Collect 880" loading="lazy">
-          <figcaption class="micro"><span class="cap">A bank up close. The Docking Bay's hopper is full at 880 of 900 credits, so its coin wears a halo; the hub beside it is a quarter full and shows a plain coin. The Station panel and the context bar both offer <span class="ui">Collect</span>.</span><span class="tag">Figure 4 &middot; Hopper</span></figcaption>
+          <img src="../assets/manual/fig-bank.webp" width="1440" height="900" alt="Close up on a selected Docking Bay miniature with a haloed amber coin floating above it and a plain coin above the Solar Array; the Station panel leads with the bay's large render, then the Hopper block with 880 of 900 credits banked, a Collect button, the upgrade to level 2 and Scrap; the context bar offers Collect 880" loading="lazy">
+          <figcaption class="micro"><span class="cap">A bank up close. The Docking Bay's hopper is full at 880 of 900 credits, so its coin wears a halo above the miniature; the Solar Array beside the hub is a quarter full and shows a plain coin. The Station panel leads with the bay's full picture and offers <span class="ui">Collect</span>, the level-2 upgrade (5 &rarr; 8 a minute, cap 900 &rarr; 1,920) and <span class="ui">Scrap</span>.</span><span class="tag">Figure 4 &middot; Hopper</span></figcaption>
         </figure>
         <div class="prose">
           <p class="intro">Every module with a rate earns credits per <b>real minute</b> into its own bank, which the game also calls a hopper. Banks fill whether or not the game is open, up to a cap. Tapping them is the single most satisfying act on the bridge, and it is where most of your money comes from.</p>
@@ -349,7 +368,7 @@
           <p>At level 1 a module's rate is its cost divided by 150 per minute, rounded: a Docking Bay earns 5, a Reactor 20, a Jump Gate Beacon 80. The Core Hub earns 3. Its cap is <b>180 minutes</b> of rate, so three hours after you last collected, the bank is full and stops. Level 2 multiplies the rate by 1.6 and raises the cap to <b>240 minutes</b> of the new rate; level 3 multiplies the level-1 rate by 2.4 with a cap of <b>360 minutes</b>. The module table in <a href="#s4">Building</a> lists every rate.</p>
           <p>A module under construction banks nothing; a module upgrading keeps banking at its old level until the scaffold closes. Commander rank 5, <b>Admiral of the Reach</b>, adds 5% to every rate and cap.</p>
           <h3>Collecting</h3>
-          <p>At a quarter full a coin appears above the plate and the module counts as <em>ready</em>. At the cap the coin grows and gains a halo: <em>full</em>, nothing more accrues. Click the coin, or select the module and press <span class="ui">Collect</span>. The whole-credit part of the bank flies to your counter, in 8 to 14 glyphs depending on the amount, and you earn 1 rank XP for every 100 credits collected (fractions carry over).</p>
+          <p>At a quarter full a coin appears above the miniature and the module counts as <em>ready</em>. At the cap the coin grows and gains a halo: <em>full</em>, nothing more accrues. Click the coin, or select the module and press <span class="ui">Collect</span>. The whole-credit part of the bank flies to your counter, in 8 to 14 glyphs depending on the amount, and you earn 1 rank XP for every 100 credits collected (fractions carry over).</p>
           <p><kbd>Shift</kbd>-click any cell to collect every ready bank within three cells of it. From Commander rank 3, <b>Harbourmaster</b>, the Station panel's <span class="ui">Collect all</span> button and the <span class="ui">Collect all</span> on the while-you-were-away sheet empty every bank on the station at once, and the Station rail button badges the ready count.</p>
           <h3>While you were away</h3>
           <p>On every load the game settles what happened since you left, in every sector you own:</p>
@@ -420,18 +439,18 @@
           <h3>Loans</h3>
           <p>With a Mercantile Bank, the Fleet panel gains a <span class="ui">Lend</span> button per company. The minimum loan is 500 credits and a company carries one at a time. The rate is 25% minus a tenth of the company's trust: 21% at 40 trust, 17.5% at 75, 15% at 100. Principal plus interest is repaid in ten equal daily parts. Each day there is a chance of default equal to (100 &minus; trust) &times; 0.025%; a default writes off what is left and costs the company 15 trust; a loan repaid in full adds 8. Loans are player money and are never scaled down.</p>
           <h3>The Market</h3>
-          <p>Twelve goods, each with a base price. Every game day a price drifts up to 6% at random and reverts 8% of the way toward base, staying between half and 1.8 times base. The sector's bias multiplies some goods (ore and alloy +40% in Sable Drift, for instance). A <em>Trade Boom</em> triples one good for four days; a <em>Market Glut</em> halves one for four days. The Market panel shows the current price, your stock, a <span class="ui">Buy</span> / <span class="ui">Sell</span> toggle per good and a broker button that sells your whole stock of a good to a passing broker at half price.</p>
+          <p>Twelve goods, each with a base price. Every game day a price drifts up to 6% at random and reverts 8% of the way toward base, staying between half and 1.8 times base. The sector's bias multiplies some goods (ore and alloy +40% in Sable Drift, for instance). A <em>Trade Boom</em> triples one good for four days; a <em>Market Glut</em> halves one for four days. The Market panel shows every good with its picture, the current price, your stock, a <span class="ui">Buy</span> / <span class="ui">Sell</span> toggle and a broker button that sells your whole stock of a good to a passing broker at half price.</p>
           <div class="tscroll">
             <table class="data compact">
               <caption>Goods and base prices (credits per unit)</caption>
               <thead><tr><th>Good</th><th class="n">Base</th><th>Kind</th><th>Good</th><th class="n">Base</th><th>Kind</th></tr></thead>
               <tbody>
-                <tr><td class="k">Raw Ore</td><td class="n">8</td><td class="dim">mineral</td><td class="k">Marrow Spice</td><td class="n">40</td><td class="dim">crop</td></tr>
-                <tr><td class="k">Refined Alloy</td><td class="n">30</td><td class="dim">mineral</td><td class="k">Livestock</td><td class="n">25</td><td class="dim">animal</td></tr>
-                <tr><td class="k">Flux Crystals</td><td class="n">45</td><td class="dim">mineral</td><td class="k">Xenofauna</td><td class="n">70</td><td class="dim">animal</td></tr>
-                <tr><td class="k">Ice Water</td><td class="n">5</td><td class="dim">mineral</td><td class="k">Textiles</td><td class="n">18</td><td class="dim">made</td></tr>
-                <tr><td class="k">Grain</td><td class="n">6</td><td class="dim">crop</td><td class="k">Tech Components</td><td class="n">55</td><td class="dim">made</td></tr>
-                <tr><td class="k">Exotic Fruit</td><td class="n">14</td><td class="dim">crop</td><td class="k">Medicine</td><td class="n">60</td><td class="dim">made</td></tr>
+                <tr><td class="k"><span class="mod tight"><img class="good-img" src="../play/assets/art/goods/128/ore.webp" width="28" height="28" alt="" loading="lazy"><span>Raw Ore</span></span></td><td class="n">8</td><td class="dim">mineral</td><td class="k"><span class="mod tight"><img class="good-img" src="../play/assets/art/goods/128/spice.webp" width="28" height="28" alt="" loading="lazy"><span>Marrow Spice</span></span></td><td class="n">40</td><td class="dim">crop</td></tr>
+                <tr><td class="k"><span class="mod tight"><img class="good-img" src="../play/assets/art/goods/128/alloy.webp" width="28" height="28" alt="" loading="lazy"><span>Refined Alloy</span></span></td><td class="n">30</td><td class="dim">mineral</td><td class="k"><span class="mod tight"><img class="good-img" src="../play/assets/art/goods/128/livestock.webp" width="28" height="28" alt="" loading="lazy"><span>Livestock</span></span></td><td class="n">25</td><td class="dim">animal</td></tr>
+                <tr><td class="k"><span class="mod tight"><img class="good-img" src="../play/assets/art/goods/128/crystals.webp" width="28" height="28" alt="" loading="lazy"><span>Flux Crystals</span></span></td><td class="n">45</td><td class="dim">mineral</td><td class="k"><span class="mod tight"><img class="good-img" src="../play/assets/art/goods/128/xenofauna.webp" width="28" height="28" alt="" loading="lazy"><span>Xenofauna</span></span></td><td class="n">70</td><td class="dim">animal</td></tr>
+                <tr><td class="k"><span class="mod tight"><img class="good-img" src="../play/assets/art/goods/128/water.webp" width="28" height="28" alt="" loading="lazy"><span>Ice Water</span></span></td><td class="n">5</td><td class="dim">mineral</td><td class="k"><span class="mod tight"><img class="good-img" src="../play/assets/art/goods/128/textiles.webp" width="28" height="28" alt="" loading="lazy"><span>Textiles</span></span></td><td class="n">18</td><td class="dim">made</td></tr>
+                <tr><td class="k"><span class="mod tight"><img class="good-img" src="../play/assets/art/goods/128/grain.webp" width="28" height="28" alt="" loading="lazy"><span>Grain</span></span></td><td class="n">6</td><td class="dim">crop</td><td class="k"><span class="mod tight"><img class="good-img" src="../play/assets/art/goods/128/tech.webp" width="28" height="28" alt="" loading="lazy"><span>Tech Components</span></span></td><td class="n">55</td><td class="dim">made</td></tr>
+                <tr><td class="k"><span class="mod tight"><img class="good-img" src="../play/assets/art/goods/128/fruit.webp" width="28" height="28" alt="" loading="lazy"><span>Exotic Fruit</span></span></td><td class="n">14</td><td class="dim">crop</td><td class="k"><span class="mod tight"><img class="good-img" src="../play/assets/art/goods/128/medicine.webp" width="28" height="28" alt="" loading="lazy"><span>Medicine</span></span></td><td class="n">60</td><td class="dim">made</td></tr>
               </tbody>
             </table>
           </div>
@@ -452,7 +471,7 @@
           <h3>Producing and drawing</h3>
           <p>The Core Hub produces 10. A Solar Array produces 6 (7.5 at level 2, 9 at level 3, rounded in the total). A Fusion Reactor produces 25 (31 and 38 upgraded). Every other module draws between 1 and 6, and the Jump Gate Beacon draws 15. A module under construction already draws its power. The Build panel's cards show the draw as pips so you can see the cost before you place.</p>
           <h3>Overdraw</h3>
-          <p>When draw exceeds supply the station runs at an <b>efficiency</b> of supply divided by draw, never below 30%. Efficiency multiplies docking fees, fuel and repair income, resident rent, crew spending and the quality-of-life score, and a shortage knocks 0.6 off the reputation target every day it lasts. The power readout turns red with a down-triangle, the context bar tells you, and the log reminds you every three days. Build a Solar Array or a Reactor.</p>
+          <p>When draw exceeds supply the station runs at an <b>efficiency</b> of supply divided by draw, never below 30%. Efficiency multiplies docking fees, fuel and repair income, resident rent, crew spending and the quality-of-life score, and a shortage knocks 0.6 off the reputation target every day it lasts. The power readout turns red with a down-triangle, the miniatures take on a grey cast, the context bar tells you, and the log reminds you every three days. Build a Solar Array or a Reactor.</p>
           <h3>Solar flares</h3>
           <p>A <em>Solar Flare</em> transmission takes every Solar Array dark for <b>three game days</b>. Reactors are unaffected. The condition strip counts the days down and the power readout goes amber. In Sable Drift flares come twice as often, which is the sector's way of telling you to buy a reactor early.</p>
           <h3>Transmissions</h3>
@@ -527,11 +546,11 @@
               <caption>Station levels</caption>
               <thead><tr><th>Level</th><th>Tier</th><th class="n">Modules</th><th class="n">Reputation</th><th>What it opens</th></tr></thead>
               <tbody>
-                <tr><td class="n">L1</td><td class="k">Way Station</td><td class="n">0</td><td class="n">0.0</td><td>Tier-1 modules. Varro Reach.</td></tr>
-                <tr><td class="n">L2</td><td class="k">Trading Hub</td><td class="n">6</td><td class="n">1.0</td><td>Tier-2 modules. Sable Drift and Kessler Belt become unlockable. Pirate, fever, refugee, explorer, contract and smuggler transmissions begin.</td></tr>
-                <tr><td class="n">L3</td><td class="k">Town in Space</td><td class="n">14</td><td class="n">2.0</td><td>Tier-3 modules. Thessaly Deep, Marrow Verge and Oros Halo. Festivals begin.</td></tr>
-                <tr><td class="n">L4</td><td class="k">Galactic Gate</td><td class="n">24</td><td class="n">3.0</td><td>Tier-4 modules. Keth Meridian and Aurelia Gate.</td></tr>
-                <tr><td class="n">L5</td><td class="k">Galactic Hub</td><td class="n">36</td><td class="n">4.0</td><td>The end of the line. A title, an achievement tier, and the log's congratulations.</td></tr>
+                <tr><td class="n">L1</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/tier_1.webp" width="36" height="36" alt="Level 1 badge" loading="lazy"><span>Way Station</span></span></td><td class="n">0</td><td class="n">0.0</td><td>Tier-1 modules. Varro Reach.</td></tr>
+                <tr><td class="n">L2</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/tier_2.webp" width="36" height="36" alt="Level 2 badge" loading="lazy"><span>Trading Hub</span></span></td><td class="n">6</td><td class="n">1.0</td><td>Tier-2 modules. Sable Drift and Kessler Belt become unlockable. Pirate, fever, refugee, explorer, contract and smuggler transmissions begin.</td></tr>
+                <tr><td class="n">L3</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/tier_3.webp" width="36" height="36" alt="Level 3 badge" loading="lazy"><span>Town in Space</span></span></td><td class="n">14</td><td class="n">2.0</td><td>Tier-3 modules. Thessaly Deep, Marrow Verge and Oros Halo. Festivals begin.</td></tr>
+                <tr><td class="n">L4</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/tier_4.webp" width="36" height="36" alt="Level 4 badge" loading="lazy"><span>Galactic Gate</span></span></td><td class="n">24</td><td class="n">3.0</td><td>Tier-4 modules. Keth Meridian and Aurelia Gate.</td></tr>
+                <tr><td class="n">L5</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/tier_5.webp" width="36" height="36" alt="Level 5 badge" loading="lazy"><span>Galactic Hub</span></span></td><td class="n">36</td><td class="n">4.0</td><td>The end of the line. A title, an achievement tier, and the log's congratulations.</td></tr>
               </tbody>
             </table>
           </div>
@@ -547,8 +566,8 @@
       <section class="chapter" id="s10" aria-labelledby="h1-10">
         <h2 class="shelf"><span class="idx">10</span><span class="shelf-label" id="h1-10">Territory</span><span class="shelf-tag">Rings of unclaimed space</span></h2>
         <figure class="fig glass">
-          <img src="../assets/manual/fig-territory.webp" width="1440" height="900" alt="The territory confirm dialog over a blurred bridge: Territory, ring 4 of 5; Clear ring 4; 18 cells, 42,592 credits, 1 hour 42 minutes; a sentence explaining that crews clear the debris while hoppers and ships carry on; buttons Clear, Clear now for 13 AM, and Cancel" loading="lazy">
-          <figcaption class="micro"><span class="cap">Clicking unclaimed space opens the territory confirm: how many cells the ring adds, what it costs, how long the crews need, and the Antimatter price to have it now.</span><span class="tag">Figure 5 &middot; Territory</span></figcaption>
+          <img src="../assets/manual/fig-territory.webp" width="1440" height="900" alt="The territory confirm dialog over a blurred bridge: Territory, ring 4 of 4; Clear ring 4; 18 cells, 42,592 credits, 1 hour 42 minutes; a sentence explaining that crews clear the debris while hoppers and ships carry on; buttons Clear, Clear now for 13 AM, and Cancel" loading="lazy">
+          <figcaption class="micro"><span class="cap">Clicking unclaimed space opens the territory confirm: how many cells the ring adds, what it costs, how long the crews need, and the Antimatter price to have it now. On a 15&times;9 grid the fourth ring is the last.</span><span class="tag">Figure 5 &middot; Territory</span></figcaption>
         </figure>
         <div class="prose">
           <p class="intro">Every station starts on a <b>7&times;5 plot</b> of 35 cells around its hub. The rest of the sector grid is unclaimed: dim, hatched, with debris drifting through it. You buy it one ring at a time, and crews clear it on a timer.</p>
@@ -569,7 +588,7 @@
               </tbody>
             </table>
           </div>
-          <p class="tnote">Skip prices are for a ring started from scratch; the game charges for the minutes actually left. The game counts the starting plot as ring 0, so a fully cleared home station reads "ring 4 of 5" in the Territory block.</p>
+          <p class="tnote">Skip prices are for a ring started from scratch; the game charges for the minutes actually left. The Territory block in the Station panel reads "Starting plot" before the first ring, then "Ring k of 4" on a 15&times;9 grid (of 5 on 17&times;9, 15&times;11 and 17&times;11; of 6 on 19&times;11).</p>
           <p>Clearing your first ring is a Commissioning mission (<em>Clear Your First Ring</em>, 1,500 credits, 5 AM); ring 4 is a Town mission (<em>Room to Grow</em>, 12,000 credits, 8 AM). The <em>Landholder</em> achievement counts rings cleared across every station you own: 2, 10 and 30.</p>
           <p>When no empty cell inside the plot touches the station, the Build panel's tier heads say <span class="ui">Needs more plot</span>. That is your cue.</p>
         </div>
@@ -579,8 +598,8 @@
       <section class="chapter" id="s11" aria-labelledby="h1-11">
         <h2 class="shelf"><span class="idx">11</span><span class="shelf-label" id="h1-11">The galaxy</span><span class="shelf-tag">Eight sectors &middot; one wallet</span></h2>
         <figure class="fig glass">
-          <img src="../assets/manual/fig-map.webp" width="1440" height="900" alt="The Galaxy panel: eight sector nodes on a curve with faint routes between them, Varro Reach lit as the active sector and the other seven locked, and below it the Varro Reach sector card with its planet, flavour text, balanced lanes, expedition duration and cost, and the station's name, level, modules and banked total" loading="lazy">
-          <figcaption class="micro"><span class="cap">The Galaxy panel. Eight sectors on a curve; click one for its card. Owned sectors show their station's level, module count and banked total with a <span class="ui">Travel</span> button; locked ones show what they need, and <span class="ui">Unlock</span> lights up when you have it.</span><span class="tag">Figure 6 &middot; Map</span></figcaption>
+          <img src="../assets/manual/fig-map.webp" width="1440" height="900" alt="The Galaxy panel: eight sector nodes on a curve, each showing its world, Varro Reach lit and the other seven locked; below, the Sable Drift card with its ochre dust world as a wide hero, a Locked chip, the flavour text, the bias line, the expedition line, the lock text Needs 90,000 credits, and the Unlock and Unlock for 60 AM buttons" loading="lazy">
+          <figcaption class="micro"><span class="cap">The Galaxy panel with Sable Drift's card open. Every node is its sector's world; the card leads with that world as a hero and a status chip, then flavour, bias, the expedition line and exactly what the lock needs. <span class="ui">Unlock</span> lights when you have it; Sable Drift alone also offers <span class="ui">Unlock &middot; 60 AM</span>.</span><span class="tag">Figure 6 &middot; Map</span></figcaption>
         </figure>
         <div class="prose">
           <p class="intro">There are eight sectors, each a star system with its own world, its own economy bias and its own station. You start in Varro Reach. The others are visible from day one on the map, with their locks. Unlocking one is a trip: a warp, and a new hub on a new plot.</p>
@@ -590,6 +609,16 @@
           <h3>Unlocking a sector</h3>
           <p>Each sector asks for three things: a station <b>level</b> you have reached in <em>any</em> sector, a credit <b>price</b>, and for some, <b>charts</b> of that sector brought home by expeditions (<a href="#s12">Expeditions</a>). Sable Drift can also be opened at once for 60 Antimatter, and Aurelia Gate by the Sector Pass; the pass opens every sector. The map's lock text tells you exactly what is missing.</p>
         </div>
+        <ul class="sectors" aria-label="The eight sectors">
+          <li><img src="../play/assets/art/sectors/256/home.webp" width="256" height="256" alt="Varro Reach: temperate amber-ivory world" loading="lazy"><span class="sname">Varro Reach</span><span class="sdesc">Temperate amber-ivory world</span></li>
+          <li><img src="../play/assets/art/sectors/256/sable.webp" width="256" height="256" alt="Sable Drift: ochre dust world, storms" loading="lazy"><span class="sname">Sable Drift</span><span class="sdesc">Ochre dust world, storms</span></li>
+          <li><img src="../play/assets/art/sectors/256/kessler.webp" width="256" height="256" alt="Kessler Belt: no planet; an asteroid field" loading="lazy"><span class="sname">Kessler Belt</span><span class="sdesc">No planet; an asteroid field</span></li>
+          <li><img src="../play/assets/art/sectors/256/thessaly.webp" width="256" height="256" alt="Thessaly Deep: ocean world" loading="lazy"><span class="sname">Thessaly Deep</span><span class="sdesc">Ocean world</span></li>
+          <li><img src="../play/assets/art/sectors/256/marrow.webp" width="256" height="256" alt="Marrow Verge: volcanic world" loading="lazy"><span class="sname">Marrow Verge</span><span class="sdesc">Volcanic world</span></li>
+          <li><img src="../play/assets/art/sectors/256/oros.webp" width="256" height="256" alt="Oros Halo: ringed gas giant" loading="lazy"><span class="sname">Oros Halo</span><span class="sdesc">Ringed gas giant</span></li>
+          <li><img src="../play/assets/art/sectors/256/keth.webp" width="256" height="256" alt="Keth Meridian: garden world" loading="lazy"><span class="sname">Keth Meridian</span><span class="sdesc">Garden world</span></li>
+          <li><img src="../play/assets/art/sectors/256/aurelia.webp" width="256" height="256" alt="Aurelia Gate: violet nebula, white dwarf" loading="lazy"><span class="sname">Aurelia Gate</span><span class="sdesc">Violet nebula, white dwarf</span></li>
+        </ul>
         <div class="tscroll">
           <table class="data">
             <caption>The eight sectors</caption>
@@ -618,8 +647,8 @@
       <section class="chapter" id="s12" aria-labelledby="h1-12">
         <h2 class="shelf"><span class="idx">12</span><span class="shelf-label" id="h1-12">Expeditions</span><span class="shelf-tag">Charts &middot; cargo &middot; discoveries</span></h2>
         <figure class="fig glass">
-          <img src="../assets/manual/fig-expeditions.webp" width="1440" height="900" alt="The Expeditions panel: one of three slots in use with a crew out to Varro Reach, back in 29 minutes, a violet Return for 4 AM button, and the destinations grid with each sector's planet, duration, cost, chart progress out of three and a Launch button" loading="lazy">
-          <figcaption class="micro"><span class="cap">Expeditions. One crew is out to Varro Reach with 29 minutes left and a 4 AM early return; below, the destinations with their durations, costs and charts out of three.</span><span class="tag">Figure 7 &middot; Expeditions</span></figcaption>
+          <img src="../assets/manual/fig-expeditions.webp" width="1440" height="900" alt="The Expeditions panel: one of three slots in use with a crew out to Varro Reach, back in 29 minutes, a violet Return for 4 AM button, and destination tiles each showing the sector's world with its duration, cost, charts out of three and a Launch button" loading="lazy">
+          <figcaption class="micro"><span class="cap">Expeditions. One crew is out to Varro Reach with 29 minutes left and a 4 AM early return; the destination tiles show each sector's world with its duration, cost and charts out of three.</span><span class="tag">Figure 7 &middot; Expeditions</span></figcaption>
         </figure>
         <div class="prose">
           <p class="intro">An expedition is a survey crew sent from your docks to any sector, locked or not. It takes real time, from half an hour to a full day, and comes back with cargo, usually a chart, and sometimes Antimatter, credits or a discovery for the Registry.</p>
@@ -644,6 +673,11 @@
           <p class="tnote">Cost is 400 credits plus 200 per step out from home. <span class="ui">Return</span> brings a crew home early at 1 AM per eight minutes left; the price shown is for a crew that has only just left.</p>
           <h3>The debrief</h3>
           <p>When the crew is back the Expeditions rail badge lights, Next up says <span class="ui">Debrief</span>, and a toast offers it. Pressing <span class="ui">Debrief</span> rolls the loot and plays it as a row of chips:</p>
+          <ul class="gallery three icons" aria-label="Debrief chips">
+            <li><img src="../play/assets/art/icons/128/chart.webp" width="128" height="128" alt="Chart icon" loading="lazy"><span class="gname">Chart</span><span class="gsub">60% &middot; every third run</span></li>
+            <li><img src="../play/assets/art/icons/128/cargo.webp" width="128" height="128" alt="Cargo icon" loading="lazy"><span class="gname">Cargo</span><span class="gsub">always &middot; 20 to 80 units</span></li>
+            <li><img src="../play/assets/art/icons/128/discovery.webp" width="128" height="128" alt="Discovery icon" loading="lazy"><span class="gname">Discovery</span><span class="gsub">45% &middot; for the Registry</span></li>
+          </ul>
           <ul>
             <li><b>Cargo, always</b>: 20 to 80 units split evenly across the sector's three goods, into your current station's stock. Whatever does not fit is brokered at half price.</li>
             <li><b>A chart</b>, 60% of the time, and <b>guaranteed on every third claimed run</b> to that sector (the 3rd, 6th, 9th). Three charts fully chart a sector; Kessler, Marrow, Oros and Aurelia need one, one, two and three to unlock.</li>
@@ -663,8 +697,8 @@
       <section class="chapter" id="s13" aria-labelledby="h1-13">
         <h2 class="shelf"><span class="idx">13</span><span class="shelf-label" id="h1-13">Missions and achievements</span><span class="shelf-tag">50 goals &middot; 24 achievements</span></h2>
         <figure class="fig glass">
-          <img src="../assets/manual/fig-achievements.webp" width="1440" height="900" alt="The Missions panel on its Achievements tab: a Career shelf with achievement rows such as Harbourmaster, Architect and Way Station Keeper, each with a three-segment bronze, silver, gold bar, a progress figure, a 5 AM chip and a Claim button where a tier is ready" loading="lazy">
-          <figcaption class="micro"><span class="cap">Missions with the Achievements tab selected. Each row shows its three tiers as a segmented bar, the progress toward the next one and the Antimatter it pays; a <span class="ui">Claim</span> button appears when a tier is reached.</span><span class="tag">Figure 8 &middot; Missions | Achievements</span></figcaption>
+          <img src="../assets/manual/fig-achievements.webp" width="1440" height="900" alt="The Missions panel on its Achievements tab: a Career shelf of rows such as Harbourmaster, Architect and Way Station Keeper, each with a bronze medallion, a three-segment tier bar, a progress figure, a 5 AM chip and a Claim button where a tier is ready" loading="lazy">
+          <figcaption class="micro"><span class="cap">Missions with the Achievements tab selected. Each row carries the medallion of the tier you are on, its three tiers as a segmented bar, the progress toward the next one and the Antimatter it pays; <span class="ui">Claim</span> appears when a tier is reached.</span><span class="tag">Figure 8 &middot; Missions | Achievements</span></figcaption>
         </figure>
         <div class="prose">
           <p class="intro">Missions are chapter goals for the station you are at; achievements are lifetime milestones across your whole career. Both pay out only when you come back and press <span class="ui">Claim</span>, and the Missions rail button counts everything waiting.</p>
@@ -739,8 +773,13 @@
         <div class="prose">
           <p class="tnote">Build and level goals count the station you are at; sector, chart and Registry goals count your profile. Convoy Season needs the weekly Convoy window: 48 hours every seven days, counted from when your profile was created, starting with the second week.</p>
           <h3>Achievements</h3>
-          <p>Twenty-four lifetime achievements, each with a bronze, silver and gold tier. Bronze pays 5 Antimatter, silver 15, gold 40, and the nine hardest golds pay 60: 1,600 Antimatter in all. They track your whole profile, every sector included, and one tier is claimed per press of <span class="ui">Claim</span>. Reaching a tier toasts you and celebrates with a bronze, silver or gold chip.</p>
+          <p>Twenty-four lifetime achievements, each with a bronze, silver and gold tier. Bronze pays 5 Antimatter, silver 15, gold 40, and the nine hardest golds pay 60: 1,600 Antimatter in all. They track your whole profile, every sector included, and one tier is claimed per press of <span class="ui">Claim</span>. Reaching a tier toasts you and celebrates with the bronze, silver or gold medallion; each row carries the medallion of the tier you are on.</p>
         </div>
+        <ul class="gallery three badges" aria-label="Achievement tiers">
+          <li><img src="../play/assets/art/badges/128/ach_bronze.webp" width="128" height="128" alt="Bronze achievement badge" loading="lazy"><span class="gname">Bronze</span><span class="gsub">5 AM</span></li>
+          <li><img src="../play/assets/art/badges/128/ach_silver.webp" width="128" height="128" alt="Silver achievement badge" loading="lazy"><span class="gname">Silver</span><span class="gsub">15 AM</span></li>
+          <li><img src="../play/assets/art/badges/128/ach_gold.webp" width="128" height="128" alt="Gold achievement badge" loading="lazy"><span class="gname">Gold</span><span class="gsub">40 AM &middot; 60 on nine</span></li>
+        </ul>
         <div class="tscroll">
           <table class="data compact">
             <caption>Achievements and their tiers</caption>
@@ -800,22 +839,22 @@
           <p>Miss a single day and nothing happens: claiming the day after continues the streak. Miss <b>two days or more</b> and the streak is broken; your next claim starts again at day 1, unless you <b>repair</b> it for 5 Antimatter. The repair offer appears on the daily sheet for 48 hours from the moment the streak broke (the start of the second missed day). Daily claims count toward the <em>Regular</em> achievement.</p>
 
           <h3>Commander rank</h3>
-          <p>Rank is experience, earned profile-wide and never lost. You gain 1 XP for every 100 credits collected from banks, 5 for every ship served, 20 for every expedition debriefed, 15 for every first discovery, 100 for every station level reached, and the XP a mission lists. Each promotion pays Antimatter equal to ten times the new rank and celebrates across the screen. The ring in the status bar fills toward the next rank; hover it for the exact figures and the next grant.</p>
+          <p>Rank is experience, earned profile-wide and never lost. You gain 1 XP for every 100 credits collected from banks, 5 for every ship served, 20 for every expedition debriefed, 15 for every first discovery, 100 for every station level reached, and the XP a mission lists. Each promotion pays Antimatter equal to ten times the new rank and celebrates across the screen with the new badge. That badge then sits in the status bar's ring, which fills toward the next rank; hover it for the exact figures and the next grant.</p>
           <div class="tscroll">
             <table class="data compact lastwide">
               <caption>Ranks, thresholds and grants</caption>
               <thead><tr><th class="n">Rank</th><th>Title</th><th class="n">XP</th><th>Grants</th><th class="n">AM on promotion</th></tr></thead>
               <tbody>
-                <tr><td class="n">1</td><td class="k">Ensign</td><td class="n">0</td><td class="dim">Where everyone starts</td><td class="n">&mdash;</td></tr>
-                <tr><td class="n">2</td><td class="k">Lieutenant</td><td class="n">300</td><td class="dim">&mdash;</td><td class="n am">20</td></tr>
-                <tr><td class="n">3</td><td class="k">Harbourmaster</td><td class="n">900</td><td><b>Collect all</b>: every bank on the station in one press</td><td class="n am">30</td></tr>
-                <tr><td class="n">4</td><td class="k">Commodore</td><td class="n">2,000</td><td><b>A fourth mission slot</b></td><td class="n am">40</td></tr>
-                <tr><td class="n">5</td><td class="k">Admiral of the Reach</td><td class="n">4,500</td><td><b>+5% bank rate</b>, and caps, everywhere</td><td class="n am">50</td></tr>
-                <tr><td class="n">6</td><td class="k">Fleet Admiral</td><td class="n">7,500</td><td class="dim">Title</td><td class="n am">60</td></tr>
-                <tr><td class="n">7</td><td class="k">Warden of the Lanes</td><td class="n">10,500</td><td class="dim">Title</td><td class="n am">70</td></tr>
-                <tr><td class="n">8</td><td class="k">Starholder</td><td class="n">13,500</td><td class="dim">Title</td><td class="n am">80</td></tr>
-                <tr><td class="n">9</td><td class="k">Voice of the Reach</td><td class="n">16,500</td><td class="dim">Title</td><td class="n am">90</td></tr>
-                <tr><td class="n">10</td><td class="k">Sovereign of the Expanse</td><td class="n">19,500</td><td class="dim">The top rank</td><td class="n am">100</td></tr>
+                <tr><td class="n">1</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/rank_01.webp" width="36" height="36" alt="Rank 1 badge" loading="lazy"><span>Ensign</span></span></td><td class="n">0</td><td class="dim">Where everyone starts</td><td class="n">&mdash;</td></tr>
+                <tr><td class="n">2</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/rank_02.webp" width="36" height="36" alt="Rank 2 badge" loading="lazy"><span>Lieutenant</span></span></td><td class="n">300</td><td class="dim">&mdash;</td><td class="n am">20</td></tr>
+                <tr><td class="n">3</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/rank_03.webp" width="36" height="36" alt="Rank 3 badge" loading="lazy"><span>Harbourmaster</span></span></td><td class="n">900</td><td><b>Collect all</b>: every bank on the station in one press</td><td class="n am">30</td></tr>
+                <tr><td class="n">4</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/rank_04.webp" width="36" height="36" alt="Rank 4 badge" loading="lazy"><span>Commodore</span></span></td><td class="n">2,000</td><td><b>A fourth mission slot</b></td><td class="n am">40</td></tr>
+                <tr><td class="n">5</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/rank_05.webp" width="36" height="36" alt="Rank 5 badge" loading="lazy"><span>Admiral of the Reach</span></span></td><td class="n">4,500</td><td><b>+5% bank rate</b>, and caps, everywhere</td><td class="n am">50</td></tr>
+                <tr><td class="n">6</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/rank_06.webp" width="36" height="36" alt="Rank 6 badge" loading="lazy"><span>Fleet Admiral</span></span></td><td class="n">7,500</td><td class="dim">Title</td><td class="n am">60</td></tr>
+                <tr><td class="n">7</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/rank_07.webp" width="36" height="36" alt="Rank 7 badge" loading="lazy"><span>Warden of the Lanes</span></span></td><td class="n">10,500</td><td class="dim">Title</td><td class="n am">70</td></tr>
+                <tr><td class="n">8</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/rank_08.webp" width="36" height="36" alt="Rank 8 badge" loading="lazy"><span>Starholder</span></span></td><td class="n">13,500</td><td class="dim">Title</td><td class="n am">80</td></tr>
+                <tr><td class="n">9</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/rank_09.webp" width="36" height="36" alt="Rank 9 badge" loading="lazy"><span>Voice of the Reach</span></span></td><td class="n">16,500</td><td class="dim">Title</td><td class="n am">90</td></tr>
+                <tr><td class="n">10</td><td class="k"><span class="mod"><img class="badge-img" src="../play/assets/art/badges/128/rank_10.webp" width="36" height="36" alt="Rank 10 badge" loading="lazy"><span>Sovereign of the Expanse</span></span></td><td class="n">19,500</td><td class="dim">The top rank</td><td class="n am">100</td></tr>
               </tbody>
             </table>
           </div>
@@ -826,14 +865,40 @@
       <!-- 15 -->
       <section class="chapter" id="s15" aria-labelledby="h1-15">
         <h2 class="shelf"><span class="idx">15</span><span class="shelf-label" id="h1-15">The Registry</span><span class="shelf-tag">24 ships &middot; 12 species &middot; 16 artifacts</span></h2>
+        <figure class="fig glass">
+          <img src="../assets/manual/fig-registry.webp" width="1440" height="900" alt="The Registry panel on its Ships tab: Halvorsen Fleet and Kestrel Fleet shelves with ship renders in colour for the hulls found, dark locked cards labelled Unknown for the rest, rarity labels, and each shelf tag saying how many are held and what the set pays" loading="lazy">
+          <figcaption class="micro"><span class="cap">The Registry's Ships tab. Found hulls show their render in colour with name and rarity; the rest stay dark behind a lock as Unknown. Each company shelf says how many you hold and what the set pays. Click a card for its full picture and lore.</span><span class="tag">Figure 9 &middot; Registry</span></figcaption>
+        </figure>
         <div class="prose">
-          <p class="intro">The Registry (<kbd>R</kbd>) is your collection: fifty-two things to find, each with two lines of lore, shown as dark silhouettes until you log them. Sets pay Antimatter and a title.</p>
+          <p class="intro">The Registry (<kbd>R</kbd>) is your collection: fifty-two things to find, each with two lines of lore, shown dark behind a lock until you log them, then in colour. Click any card for its full picture and lore. Sets pay Antimatter and a title.</p>
           <h3>Ships</h3>
           <p>Twenty-four hulls across the seven companies. The twelve standard liveries are logged the first time you serve a ship of that company and class, from the Halvorsen Bulk Hauler to the Aurelian Liner. Six <em>notable hulls</em> appear when a company's tenth ship docks at the station you are at: the Anvil of Varro, Kestrel Swift, Green Serpent, Harvest Moon, Dune Runner and Deep Tide. The other six come home with expeditions: Ore-Mother from Varro Reach or Sable Drift, Blue Shrike from Sable, Brine Queen from Thessaly, Ember Caravan from Marrow, Keth Plenty from Keth, and the epic Aurelia Ascendant from Aurelia Gate.</p>
+          <ul class="gallery four" aria-label="The four hull classes">
+            <li><img src="../play/assets/art/ships/256/kestrel_courier.webp" width="256" height="256" alt="Courier render" loading="lazy"><span class="gname">Courier</span><span class="gdesc">Kestrel Courier &middot; 30 units</span></li>
+            <li><img src="../play/assets/art/ships/256/halvorsen_freighter.webp" width="256" height="256" alt="Freighter render" loading="lazy"><span class="gname">Freighter</span><span class="gdesc">Halvorsen Freighter &middot; 80 units</span></li>
+            <li><img src="../play/assets/art/ships/256/halvorsen_hauler.webp" width="256" height="256" alt="Bulk Hauler render" loading="lazy"><span class="gname">Bulk Hauler</span><span class="gdesc">Halvorsen Bulk Hauler &middot; 180 units</span></li>
+            <li><img src="../play/assets/art/ships/256/aurelian_liner.webp" width="256" height="256" alt="Galactic Liner render" loading="lazy"><span class="gname">Galactic Liner</span><span class="gdesc">Aurelian Liner &middot; 120 units, 60 passengers</span></li>
+          </ul>
           <h3>Species</h3>
           <p>Twelve visitor peoples. Six are met by serving five ships of a company: Varroan Dustkin (Halvorsen), Kethi Gardeners (Meridian), Sable Foundry-born (Kestrel), Thessalid Swimmers (Tidewater), Marrow Nomads (Red Sand) and Orosian Canopy Folk (Ouroboros). The Aurelian Envoys step off the first liner. Five are found only by expeditions: Lantern Moths in Kessler Belt, Tidesingers in Thessaly Deep, Ashwalkers in Marrow Verge, Ring Drifters in Oros Halo and the epic Gate Wardens in Aurelia Gate.</p>
+          <ul class="gallery six" aria-label="Six of the twelve species">
+            <li><img src="../play/assets/art/species/256/varroan.webp" width="256" height="256" alt="Varroan Dustkin" loading="lazy"><span class="gname">Varroan Dustkin</span><span class="gdesc">Halvorsen &middot; 5 ships</span></li>
+            <li><img src="../play/assets/art/species/256/kethi.webp" width="256" height="256" alt="Kethi Gardeners" loading="lazy"><span class="gname">Kethi Gardeners</span><span class="gdesc">Meridian &middot; 5 ships</span></li>
+            <li><img src="../play/assets/art/species/256/sablite.webp" width="256" height="256" alt="Sable Foundry-born" loading="lazy"><span class="gname">Sable Foundry-born</span><span class="gdesc">Kestrel &middot; 5 ships</span></li>
+            <li><img src="../play/assets/art/species/256/thessalid.webp" width="256" height="256" alt="Thessalid Swimmers" loading="lazy"><span class="gname">Thessalid Swimmers</span><span class="gdesc">Tidewater &middot; 5 ships</span></li>
+            <li><img src="../play/assets/art/species/256/tidesinger.webp" width="256" height="256" alt="Tidesingers" loading="lazy"><span class="gname">Tidesingers</span><span class="gdesc">Expedition &middot; Thessaly Deep</span></li>
+            <li><img src="../play/assets/art/species/256/gate_warden.webp" width="256" height="256" alt="The Gate Wardens" loading="lazy"><span class="gname">The Gate Wardens</span><span class="gdesc">Expedition &middot; Aurelia Gate</span></li>
+          </ul>
           <h3>Artifacts</h3>
           <p>Sixteen relics, two per sector, expeditions only. The second relic of each sector is rarer than the first; the Dead Ship's Log, the Halo Chime and The First Chart are epic. A discovery you already hold counts again on its card but is only drawn when the sector has nothing new left for you.</p>
+          <ul class="gallery six" aria-label="Six of the sixteen artifacts">
+            <li><img src="../play/assets/art/artifacts/256/beacon_shard.webp" width="256" height="256" alt="Founder's Beacon Shard" loading="lazy"><span class="gname">Founder's Beacon Shard</span><span class="gdesc">Varro Reach &middot; common</span></li>
+            <li><img src="../play/assets/art/artifacts/256/storm_glass.webp" width="256" height="256" alt="Storm Glass" loading="lazy"><span class="gname">Storm Glass</span><span class="gdesc">Sable Drift &middot; common</span></li>
+            <li><img src="../play/assets/art/artifacts/256/dead_ship_log.webp" width="256" height="256" alt="Dead Ship's Log" loading="lazy"><span class="gname">Dead Ship's Log</span><span class="gdesc">Kessler Belt &middot; epic</span></li>
+            <li><img src="../play/assets/art/artifacts/256/tide_compass.webp" width="256" height="256" alt="Tidewater Compass" loading="lazy"><span class="gname">Tidewater Compass</span><span class="gdesc">Thessaly Deep &middot; rare</span></li>
+            <li><img src="../play/assets/art/artifacts/256/halo_chime.webp" width="256" height="256" alt="Halo Chime" loading="lazy"><span class="gname">Halo Chime</span><span class="gdesc">Oros Halo &middot; epic</span></li>
+            <li><img src="../play/assets/art/artifacts/256/first_chart.webp" width="256" height="256" alt="The First Chart" loading="lazy"><span class="gname">The First Chart</span><span class="gdesc">Aurelia Gate &middot; epic</span></li>
+          </ul>
           <h3>Sets</h3>
           <p>A set completes the moment its last item is logged; the Antimatter and the title are granted at once and a toast tells you. The <em>Complete Set</em> mission pays a further 25 AM for your first.</p>
           <div class="tscroll">
@@ -860,11 +925,15 @@
       <section class="chapter" id="s16" aria-labelledby="h1-16">
         <h2 class="shelf"><span class="idx">16</span><span class="shelf-label" id="h1-16">Antimatter and the Store</span><span class="shelf-tag">The violet currency &middot; test mode</span></h2>
         <figure class="fig glass">
-          <img src="../assets/manual/fig-store.webp" width="1440" height="900" alt="The Store panel with a Test mode ribbon: an Antimatter hero card with four price tiles of 50, 140, 320 and 900 AM, the 140 tile lifted as Popular and 900 as Best value, then Boosts with Supply Run and Trade Fleet, and Passes and cosmetics with the Sector Pass" loading="lazy">
-          <figcaption class="micro"><span class="cap">The Store in sandbox. Four Antimatter packs, two credit boosts, the Sector Pass and the liveries, with Restore purchases and the legal line below. The ribbon says what the mode means: nothing is charged.</span><span class="tag">Figure 9 &middot; Store</span></figcaption>
+          <img src="../assets/manual/fig-store.webp" width="1440" height="900" alt="The Store panel: the subtitle 20 AM in the vault, secure checkout; an Antimatter hero with four price tiles of 50, 140, 320 and 900 AM each under the violet vial icon, 140 lifted as Popular and 900 as Best value; Boosts with Supply Run, Trade Fleet and a Relief convoy for 10 AM, each with the credit-stack icon; and Passes and cosmetics with the Sector Pass" loading="lazy">
+          <figcaption class="micro"><span class="cap">The Store. Four Antimatter packs under the violet vial, two credit boosts and the Relief convoy under the credit stack, then the Sector Pass and the liveries. The subtitle says how the checkout runs.</span><span class="tag">Figure 10 &middot; Store</span></figcaption>
         </figure>
         <div class="prose">
           <p class="intro"><span class="am">Antimatter</span> is the premium currency. It is violet wherever it appears, you start with 20, and the game pays it out steadily for playing. It buys time, never access: every module, sector, mission and achievement is reachable with credits and patience.</p>
+          <ul class="gallery two icons" aria-label="The two currencies">
+            <li><img src="../play/assets/art/icons/128/antimatter.webp" width="128" height="128" alt="Antimatter: a violet vial in a titanium cage" loading="lazy"><span class="gname">Antimatter</span><span class="gdesc">Premium. Earned in play, sold in the Store. Buys time, never access.</span></li>
+            <li><img src="../play/assets/art/icons/128/credits.webp" width="128" height="128" alt="Credits: an amber coin" loading="lazy"><span class="gname">Credits</span><span class="gdesc">The working currency. One wallet across every sector; banks fill it by the minute.</span></li>
+          </ul>
           <h3>Earning it</h3>
           <ul>
             <li><b>Missions</b>: 2 to 50 each, 411 across all fifty. The tutorial chapter alone pays 35.</li>
@@ -879,6 +948,7 @@
             <li><b>Skip any timer</b>: builds, upgrades, ring clearings and expeditions, at 1 AM per eight minutes left, minimum 1.</li>
             <li><b>Open Sable Drift now</b>: 60 AM instead of level 2 and 90,000 credits.</li>
             <li><b>Repair a daily streak</b>: 5 AM within 48 hours of the break.</li>
+            <li><b>Relief convoy</b>: 10 AM for 30 minutes of your whole station's rate in credits, delivered now, from the Store's Boosts shelf.</li>
           </ul>
           <h3>The Store</h3>
           <div class="tscroll">
@@ -892,18 +962,19 @@
                 <tr><td class="k">Antimatter &middot; 900 <span class="chip am">Best value</span></td><td>900 AM: 500 plus 400 bonus (+80%).</td><td class="n">$24.99</td></tr>
                 <tr><td class="k">Supply Run</td><td>Two hours of your total station rate in credits, at least 10,000.</td><td class="n">$1.99</td></tr>
                 <tr><td class="k">Trade Fleet</td><td>Eight hours of your total station rate, at least 40,000.</td><td class="n">$5.99</td></tr>
+                <tr><td class="k">Relief convoy</td><td>Thirty minutes of your whole station's rate, delivered now. Paid in Antimatter you already hold.</td><td class="n am">10 AM</td></tr>
                 <tr><td class="k">Sector Pass</td><td>Every sector unlocked for this profile. No charts needed.</td><td class="n">$9.99</td></tr>
                 <tr><td class="k">Founder's Livery</td><td>An ivory-amber station strip, the title Founder, and 100 AM.</td><td class="n">$4.99</td></tr>
                 <tr><td class="k">Sector Liveries</td><td>The six sector liveries for your station strip.</td><td class="n">$2.99</td></tr>
               </tbody>
             </table>
           </div>
-          <p>Prices are in US dollars. Antimatter is a game currency with no cash value and cannot be refunded or transferred. Credit boosts are measured against the rate of the station you are at when you buy.</p>
+          <p>Prices are in US dollars. Antimatter is a game currency with no cash value and cannot be refunded or transferred. Credit boosts and the Relief convoy are measured against the rate of the station you are at.</p>
           <h3>Liveries</h3>
           <p>A livery dresses the station: the signal strip on every plate, the glowing seam along the trusses and the hub's rim and core take its colours, while each module's family hue stays on its silhouette so the station still reads at a glance. Choose one under <span class="ui">Settings &rsaquo; Livery</span>: a preview strip shows the active livery and a card for each of the eight. <b>Standard</b> is everyone's. The six <b>sector liveries</b> (Sable Drift, Kessler Belt, Thessaly Deep, Marrow Verge, Oros Halo and Keth Meridian) come as a set from the Store, or one at a time for a <b>livery token</b>, the day-seven daily reward. <b>Founder's Ivory</b> comes with the Founder's Livery. Your choice is saved with the profile, shows on the title screen's resume card and in the Station overview, and nothing about the game changes with it.</p>
           <aside class="callout glass am">
-            <span class="label">Test mode</span>
-            <p>During the preview the Store runs in <b>sandbox</b>: a ribbon says so, purchases are free, and grants are local to your browser. Nothing is charged until a payment provider is connected, at which point the ribbon disappears and <span class="ui">Restore purchases</span> works by the email you used at checkout.</p>
+            <span class="label">Checkout</span>
+            <p><span class="ui">Buy</span> opens a secure checkout page in the same tab and the pack is credited when you come back; the Store's subtitle says <em>secure checkout</em> when this is on. While the game is in preview the checkout runs in the payment provider's <b>test mode</b>: only its test cards are accepted and no real money moves. <span class="ui">Restore purchases</span>, in the Store and under Settings, re-applies past purchases by the email you used at checkout.</p>
           </aside>
           <p>A four-hour tier-4 build skips for 30 AM; at the 140 pack that is about a dollar. That is the whole monetisation: patience is free, haste costs a little, and nobody is locked out.</p>
         </div>
@@ -913,8 +984,8 @@
       <section class="chapter" id="s17" aria-labelledby="h1-17">
         <h2 class="shelf"><span class="idx">17</span><span class="shelf-label" id="h1-17">Saves, accounts and devices</span><span class="shelf-tag">Local save &middot; export &middot; cloud when connected</span></h2>
         <figure class="fig glass">
-          <img src="../assets/manual/fig-settings.webp" width="1440" height="900" alt="The Settings panel: Sound with interface sounds and bridge ambience toggles and volume sliders, Motion and performance with System, Reduced and Full and an effects tier of Auto, High, Medium or Low, a Notifications switch marked Not connected, and Save data with Export save, Import save and Restore purchases" loading="lazy">
-          <figcaption class="micro"><span class="cap">Settings. Sound, motion and effects tier, notifications, and the save-data shelf with export and import. Further down: the danger shelf (scrap this station, reset profile) and About.</span><span class="tag">Figure 10 &middot; Settings</span></figcaption>
+          <img src="../assets/manual/fig-settings.webp" width="1440" height="900" alt="The Settings panel: an Account shelf reading Sign in to save across devices with a Sign in button, the Livery shelf with a preview strip and eight swatch cards with Standard active, then Sound with interface sounds and effects volume" loading="lazy">
+          <figcaption class="micro"><span class="cap">Settings. The Account shelf for cloud saves, the Livery shelf with its preview strip and eight swatches, then sound, motion and effects tier, notifications, save data (export and import), the danger shelf and About, where <span class="ui">Replay the tour</span> and <span class="ui">Open the manual</span> live.</span><span class="tag">Figure 11 &middot; Settings</span></figcaption>
         </figure>
         <div class="prose">
           <h3>Your profile</h3>
@@ -927,17 +998,17 @@
           <h3>Older saves</h3>
           <p>If you played the first version of Waystation in this browser, that station was brought forward on your first visit as your home sector, with its banks started empty and its ships served counted toward rank. The old save is kept under a backup key.</p>
           <h3>Cloud saves</h3>
-          <p>Accounts are designed for this build and switch on when the cloud service is connected; until then your profile lives in this browser only. When they are live:</p>
+          <p>Cloud saves are connected. Sign in from the <span class="ui">Sign in</span> lozenge on the title band or from <span class="ui">Settings &rsaquo; Account</span>:</p>
           <ul>
             <li>You sign in with an <b>email and password</b> (at least ten characters) from the title screen. No third-party sign-in.</li>
-            <li>Creating an account hands you a <b>recovery phrase</b> of ten words, shown once. It is the only way back in without your password, so save it before you dismiss the sheet.</li>
+            <li>Creating an account hands you a <b>recovery phrase</b> of ten words, shown once. Save it before you dismiss the sheet: it is one of two ways back in without your password. The other is <span class="ui">Forgot your password?</span> on the sign-in tab, which emails a link good for 30 minutes to set a new one; either route signs out every other device and issues a fresh phrase.</li>
             <li>Forgot your password? The link under the Sign in form emails you a reset link that is good for thirty minutes; the recovery phrase remains the other way back in.</li>
             <li>One cloud save per account holds the whole profile. The game pushes twenty seconds after any change, at once when you switch sector, buy, or claim a mission or achievement, and when you leave the page.</li>
-            <li>Opening the game on a second device pulls the newer save. If both the browser and the cloud have moved since the last sync, a chooser shows both, with day, level, credits, Antimatter and sectors, and you pick which to keep.</li>
+            <li>Opening the game on a second device pulls the newer save. If both the browser and the cloud have moved since the last sync, or you sign in on a browser that already holds a profile, a chooser shows both, with day, level, credits, Antimatter and sectors, and you pick which to keep.</li>
             <li>A cloud glyph after the rank ring shows the sync state. Signing out leaves the local profile in place.</li>
           </ul>
           <h3>Notifications</h3>
-          <p>The Notifications shelf offers a browser notification when a build, upgrade, expedition or ring clearing finishes, and optionally for the daily reward at nine in the morning. It also needs the service connected; until then the switch reads <span class="ui">Not connected</span>.</p>
+          <p>The Notifications shelf offers a browser notification when a build, upgrade, expedition or ring clearing finishes. Turning <span class="ui">Notify me when something finishes</span> on asks the browser for permission; once it is on, a <span class="ui">Daily reward reminder</span> (nine in the morning, local time) and <span class="ui">Send a test notification</span> appear under it. The chip beside the switch reads On, Off, Connecting, Blocked when the browser refused, Offline when the service cannot be reached, or Unavailable in a browser without push.</p>
           <h3>Devices</h3>
           <p>Waystation is a desktop and tablet game. It needs a screen at least 1,024 pixels wide and WebGL; a phone gets a polite message instead of a broken bridge. The reference layout is 1440&times;900; at 1180 and below the rail collapses to icons and the panel narrows, and at 1024 the notices hide behind a bell. Current Chrome, Edge, Firefox and Safari are supported.</p>
         </div>
@@ -983,7 +1054,6 @@
               </dl>
             </div>
           </div>
-          <p class="tnote" style="margin-top:8px">The keys reference inside the game still lists 1, 2 and 4 for speed; only 1&times; and Pause exist in this version.</p>
           <h3>Pointer</h3>
           <p>A four-pixel threshold separates a drag from a click, so a wobbly tap still counts as a tap. The camera stays inside the sector grid inflated by six cells, slides aside when a panel would cover the station, and drifts gently on the title screen only.</p>
           <h3>Reading the screen</h3>
@@ -1014,20 +1084,22 @@
             <dt>Debrief</dt><dd>Opening a returned expedition's loot. Nothing is rolled until you press it.</dd>
             <dt>Efficiency</dt><dd>Supply over draw when power is short, floored at 30%. It scales fees, rent, spending and quality of life.</dd>
             <dt>Far sector</dt><dd>Marrow Verge, Oros Halo, Keth Meridian and Aurelia Gate, where builds, upgrades and clearings take 1.5&times; as long.</dd>
+            <dt>Gangway</dt><dd>The ramp a docked ship lowers to its bay. Two to five figures walk it: crew, passengers, traders, a security officer, dockworkers with a loader.</dd>
             <dt>Game day</dt><dd>Forty-eight seconds of real time at 1&times;, and only while the bridge is open. Ships, trade, residents, prices, reputation and transmissions run on game days.</dd>
             <dt>Level, tier</dt><dd>A station's rank from L1 Way Station to L5 Galactic Hub, set by module count and reputation together. Module tiers 1 to 4 open at levels 1 to 4.</dd>
             <dt>Live economy</dt><dd>Everything ships, visitors and residents pay in the moment, scaled by a factor of 0.06 so that the banks lead.</dd>
+            <dt>Miniature, pad</dt><dd>Each module in the world is its render standing on a pad, a rounded square in the family hue that keeps the grid legible. Brackets, hover and selection draw on the pad; the coin floats above the miniature.</dd>
             <dt>Next up</dt><dd>The strip under the toasts with the three soonest timers.</dd>
             <dt>Plot, ring</dt><dd>The cells you may build on, starting 7&times;5 around the hub and growing one ring at a time to the whole sector grid.</dd>
             <dt>Quality of life</dt><dd>The weighted coverage of food, beds, entertainment and health care, times efficiency. It drives spending, residents and reputation.</dd>
             <dt>Rate, cap</dt><dd>What a bank earns per real minute and the most it will hold: 180, 240 or 360 minutes of rate by level.</dd>
             <dt>Registry</dt><dd>Your collection of ships, species and artifacts, and also the <span class="mono">WS-</span> number every station carries.</dd>
             <dt>Reputation</dt><dd>Zero to five stars, drifting daily toward a target set by quality of life, variety, residents, observatories and how well ships were served.</dd>
-            <dt>Scaffold</dt><dd>A module still on its build or upgrade timer: a hatched plate, a ring and a countdown.</dd>
+            <dt>Scaffold</dt><dd>A module still on its build or upgrade timer: its miniature dimmed under a hatched frame, a ring and a countdown.</dd>
             <dt>Sector</dt><dd>One of eight star systems, each with its own world, bias and station.</dd>
             <dt>Skip</dt><dd>Finishing any timer now for Antimatter: one AM per eight minutes remaining, rounded up.</dd>
             <dt>Spine</dt><dd>The two-pixel line of light on the leading edge of every panel and card. Amber is the console, ice is operations, violet is premium.</dd>
-            <dt>Tell</dt><dd>A module's one quiet live-state animation: dock lights stepping on approach, a dish sweeping, a reactor breathing.</dd>
+            <dt>Tell</dt><dd>A module's one quiet live-state animation. With the illustrated look most are retired; the Docking Bay keeps its approach lights along the pad's open side and the Fusion Reactor its breathing glow.</dd>
             <dt>Transmission</dt><dd>An event. Most simply happen; two ask you to decide. The simulation waits until you have read it.</dd>
             <dt>Trust</dt><dd>A company's opinion of your station from 0 to 100, starting at 40. It sets how often they come, when they open an office and what they pay to borrow.</dd>
             <dt>Visitors</dt><dd>The crews of docked ships, counted as <em>aboard</em>. They need beds and meals and they spend.</dd>

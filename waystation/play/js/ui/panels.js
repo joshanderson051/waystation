@@ -1001,7 +1001,7 @@ const Panels = {
       const acct = ctx.account, ast = acct ? acct.state() : null;
       let h = shelf('Account', null, { first: true, hue: 'var(--ice)', attrs: ' id="acct-shelf"' });
       if (!acct || !acct.available()) h += `<p class="fine acct-off">${icon('cloud', 14)} Cloud saves are not connected on this build yet. Your profile is saved in this browser; export it from Save data to move it.</p>`;
-      else if (!ast.signedIn) h += `<div class="acct"><div class="acct-main"><span class="setting-lbl">Sign in to save across devices</span><span class="setting-sub">One cloud save per account, newest wins. A recovery phrase instead of email resets.</span></div><button type="button" class="btn primary" data-act="signin">${icon('cloud', 14)}<span>Sign in</span></button></div>`;
+      else if (!ast.signedIn) h += `<div class="acct"><div class="acct-main"><span class="setting-lbl">Sign in to save across devices</span><span class="setting-sub">One cloud save per account, newest wins. Locked out? An emailed link or your recovery phrase gets you back in.</span></div><button type="button" class="btn primary" data-act="signin">${icon('cloud', 14)}<span>Sign in</span></button></div>`;
       else {
         const when = ast.lastSyncAt ? `${Fmt.ago(Date.now() - ast.lastSyncAt)} ago` : 'not yet', line = ast.syncing ? 'Syncing…' : ast.lastError ? `Error: ${ast.lastError}` : ast.dirty ? 'Changes waiting to sync' : 'Synced';
         h += `<div class="acct signed"><div class="acct-main"><span class="setting-lbl">${icon('user', 14)} ${esc(ast.user ? ast.user.email : '')}</span><span class="setting-sub">${esc(line)} ${MID} last synced ${esc(when)}</span></div></div>` +
