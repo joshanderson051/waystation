@@ -144,7 +144,8 @@ const EngineFX = (() => {
   }
 
   // ---------------------------------------------------------------- Engine.fx (0.3)
-  const cellXY = (r, c) => ({ x: (c + 0.5) * CELL, y: (r + 0.5) * CELL });
+  // A7: a cell's effects centre on the module's body, a little above the deck point
+  const cellXY = (r, c) => { const p = ST.ISO.centre(r, c); return { x: p.x, y: p.y - ST.ISO.HH * 0.5 }; };
 
   // Anchor centre in world coordinates (recomputed every frame while coins fly).
   function anchorWorld(el) {

@@ -1,18 +1,20 @@
 // ============================================================
 // WAYSTATION v2 — engine/world.js (Engineer E)
-// The station layer. Since A6 ("the illustrated look") each occupied cell
-// is a miniature: the pack render modules/512/<id>.webp anchored at the
-// bottom centre of its cell in painter's order over a family-hue pad,
-// with an elliptical drop shadow, one soft additive glow for bloom, the
-// dock approach chase and the reactor breathe as pad effects, and the v1
-// procedural plate bake as the fallback that cross-fades out when the
-// render arrives. Also: trusses with the powered seam, scaffolds with
-// progress rings and timers (Meta.build), bank chips (Meta.hopper),
-// upgrade ticks (Meta.upgrade) on the pad rim, hover / selection /
-// placement feedback, floaters hand-off, Engine.thumbnail, liveries (A5:
-// pads, seams and glows) and the plot / territory layer (A1.2).
+// The station layer. Each occupied cell is a miniature (A6): the pack render
+// modules/512/<id>.webp standing on its cell in painter's order, with a drop
+// shadow on the deck, one soft additive glow for bloom, the dock approach
+// chase and the reactor breathe, and the v1 procedural plate bake as the
+// fallback that cross-fades out when the render arrives. Also: the shared
+// deck and its slab, corridors between neighbours, scaffolds with progress
+// rings and timers (Meta.build), bank chips (Meta.hopper), upgrade ticks
+// (Meta.upgrade) on the deck, hover / selection / placement feedback,
+// floaters hand-off, Engine.thumbnail, liveries (A5: the deck rim, corridor
+// lights, cell lines and glows) and the plot / territory layer (A1.2).
 //
-// World units: CSS px at zoom 1; cell (r, c) at (c*CELL, r*CELL).
+// A7 ("one connected station"): the world uses the pack's projection (EngineStage.ISO). Cell (r, c) is a
+// diamond centred at ISO.centre(r, c); flat things (deck, plot field, scaffold frames, hover and selection marks,
+// placement) are drawn in ground coordinates (c*CELL, r*CELL) inside the ground layers, which carry the
+// projection; upright things (renders, corridors, labels, glows) take projected positions and sort by depth.
 // Reads Sim.state and the Meta read helpers every frame; never writes them.
 // Classic script: exports the global `EngineWorld`.
 // ============================================================
@@ -28,10 +30,14 @@ const EngineWorld = (() => {
     bank: 'BA', plaza: 'PL', menagerie: 'ME', refinery: 'RF', shipyard: 'SH', observatory: 'OB', gate: 'GA', hub: 'HB',
   };
   const OFFLINE = { plate: '#2A2F3D', rim: '#55596A', strip: '#55596A', sil: '#6C7284' };
-  // A6 miniature geometry: width 1.0 cell (hub 1.08), feet at cell bottom - 0.02 cell (the render overflows upward a little)
-  const MINI_W = 1.0, MINI_W_HUB = 1.08, MINI_LIFT = 0.02;
-  const miniW = id => (id === 'hub' ? MINI_W_HUB : MINI_W) * CELL;
-  const miniTop = (r, id) => wy(r + 1) - MINI_LIFT * CELL - miniW(id);           // world y of the render's top edge
+  // A7 miniature geometry: a render stands on its cell's diamond. Its footprint (the render's opaque width, and a
+  // diamond RATIO as tall whose lowest point is the render's lowest pixel) is scaled to MINI_K of the cell diamond's
+  // width (the hub a little larger) and centred on the cell centre. The opaque box is measured once per texture.
+  const ISO = ST.ISO, MINI_K = 0.86, MINI_K_HUB = 0.95;
+  const miniW = id => (id === 'hub' ? MINI_K_HUB : MINI_K) * 2 * ISO.HW;
+  const depthZ = d => Math.round(d * 100);                                         // zIndex in world.minis for a depth gx + gy
+  // corridor tube: thickness in world px and how far its crown rides above the deck; the deck slab's thickness
+  const TUBE_T = 0.2 * CELL, TUBE_LIFT = 0.09 * CELL, DECK_T = 6;
   // one soft additive glow per module by family (A6: amber by default, ice for ops, gold for power, rose for culture),
   // sized as light spill (0.5 cell; hub and reactor 0.7) at 0.22–0.30
   const GLOW_FAMILY = { ops: 'ice', power: 'gold', culture: 'rose', trade: 'amber', life: 'amber', hub: 'ivory' };
@@ -45,8 +51,8 @@ const EngineWorld = (() => {
     cells: [], byKey: new Map(), dist: new Map(), tags: new Map(), dockInfo: new Map(), spars: [],
     station: null, gridBox: null,
     band: 1.25, cellDev: 0, pad: 0, k: 1, worldPerDev: 1,
-    trussG: null, seamG: null, trussDirty: true, runLights: [], growCell: null,
-    padsG: null, padsKey: '',
+    trussDirty: true, growCell: null, tubes: new Map(),
+    padsG: null, deckSideG: null, padsKey: '',
     overlay: { hover: null, hoverHalo: null, sel: null, selHalo: null, place: null, ghost: null, reason: null, reasonBg: null, lane: null },
     hoverKey: null, hoverT0: 0, selKey: null, selT0: 0, ghostPos: null,
     pops: new Map(), dockState: new Map(),
@@ -89,6 +95,9 @@ const EngineWorld = (() => {
   }
   function stripColor(id) { const s = livery().strip; return (!s || s === 'family') ? U.famColor(id) : s; }
   function seamColor() { return livery().seam || U.pal('ice'); }
+  // A7: the deck's lit rim and the corridors' crown lights carry the livery's seam colour (Standard: hull edge, cyan)
+  function rimLight() { return liveryId() === 'default' ? U.pal('hull-edge') : seamColor(); }
+  function crownLight() { return liveryId() === 'default' ? '#5EC4FF' : seamColor(); }
   function rimColor() { return livery().rim || U.pal('ivory'); }
   function hubCoreColor() { return livery().hubCore || U.pal('ivory'); }
   // pad hue: the module's strip colour (family by default, the livery strip when dressed); the hub pad takes the livery rim
@@ -112,17 +121,75 @@ const EngineWorld = (() => {
   function setLivery(id) { S.liveryPinned = id || null; return applyLivery(liveryById(wantedLiveryId())); }
 
   // ---------------------------------------------------------------- geometry
+  // wx / wy are GROUND coordinates (inside the ground layers); cellCentre and ISO give world positions
   const wx = c => c * CELL, wy = r => r * CELL;
-  function cellAt(x, y) {
-    const c = Math.floor(x / CELL), r = Math.floor(y / CELL);
+  function groundCell(x, y) {
+    const g = ISO.toGrid(x, y), c = Math.floor(g.gx), r = Math.floor(g.gy);
     return (r >= 0 && r < S.rows && c >= 0 && c < S.cols) ? { r, c } : null;
   }
-  function cellCentre(r, c) { return { x: (c + 0.5) * CELL, y: (r + 0.5) * CELL }; }
-  // World rect of what a cell shows: the render's box when the pack is active, else the cell (for HUD tooltips)
+  // The cell under a world point. Outside placement a module's picture wins, front to back (a tall render rises
+  // into the cells behind it, and that is where a player taps it); the ground diamond otherwise.
+  function cellAt(x, y) {
+    if (!S.placing) { const hit = pickRender(x, y); if (hit) return hit; }
+    return groundCell(x, y);
+  }
+  function pickRender(x, y) {
+    for (let i = S.cells.length - 1; i >= 0; i--) {                 // S.cells is in painter's order
+      const rec = S.cells[i]; if (!rec.mini.visible || !rec.geom) continue;
+      const bx = renderBox(rec); if (x < bx.x0 || x > bx.x1 || y < bx.y0 || y > bx.y1) continue;
+      const g = rec.geom, b = g.b; if (!b.mask) return { r: rec.r, c: rec.c };
+      const p = cellCentre(rec.r, rec.c), tx = (x - (p.x - g.ax * g.w)) / g.k, ty = (y - (p.y - g.ay * g.h)) / g.k;
+      const mx = Math.floor(tx / b.W * b.N), my = Math.floor(ty / b.H * b.N);
+      if (mx >= 0 && my >= 0 && mx < b.N && my < b.N && b.mask[my * b.N + mx]) return { r: rec.r, c: rec.c };
+    }
+    return null;
+  }
+  function cellCentre(r, c) { return ISO.centre(r, c); }
+  // World rect of what a cell shows: the render's opaque box when the pack is active, else the diamond (HUD tooltips)
   function cellBounds(r, c) {
     const rec = S.byKey.get(keyOf(r, c));
-    if (rec && rec.artState !== 'none') { const w = miniW(rec.id); return { x: wx(c + 0.5) - w / 2, y: miniTop(r, rec.id), width: w, height: w }; }
-    return { x: wx(c), y: wy(r), width: CELL, height: CELL };
+    if (rec && rec.artState !== 'none') { const b = renderBox(rec); return { x: b.x0, y: b.y0, width: b.x1 - b.x0, height: b.y1 - b.y0 }; }
+    const p = cellCentre(r, c);
+    return { x: p.x - ISO.HW, y: p.y - ISO.HH, width: 2 * ISO.HW, height: 2 * ISO.HH };
+  }
+
+  // ---------------------------------------------------------------- render footprints (A7)
+  // The opaque box of a texture (texture px) and a 128x128 alpha mask for picking, measured once per texture.
+  const ART_BOX = new Map();
+  function artBox(tex) {
+    if (!tex || !tex.source) return null;
+    let b = ART_BOX.get(tex.source);
+    if (b) return b;
+    const W = tex.width, H = tex.height;
+    b = { x0: 0, y0: 0, x1: W, y1: H, w: W, h: H, W, H, mask: null, N: 0 };
+    try {
+      const N = 128, cv = U.makeCanvas(N, N), g = cv.getContext('2d', { willReadFrequently: true });
+      g.drawImage(tex.source.resource, 0, 0, N, N);
+      const d = g.getImageData(0, 0, N, N).data, mask = new Uint8Array(N * N);
+      let x0 = N, y0 = N, x1 = -1, y1 = -1;
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        if (d[(y * N + x) * 4 + 3] < 96) continue;
+        mask[y * N + x] = 1;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      if (x1 >= 0) b = { x0: x0 / N * W, y0: y0 / N * H, x1: (x1 + 1) / N * W, y1: (y1 + 1) / N * H, W, H, mask, N };
+      b.w = b.x1 - b.x0; b.h = b.y1 - b.y0;
+    } catch (e) { /* not decoded or not readable: the full frame stands in */ }
+    ART_BOX.set(tex.source, b);
+    return b;
+  }
+  // scale and anchor that stand a texture's footprint on a cell (world px per texture px; anchor in 0..1)
+  function standGeom(tex, id) {
+    const b = artBox(tex); if (!b) return null;
+    const k = miniW(id) / Math.max(1, b.w);
+    return { k, ax: (b.x0 + b.w / 2) / b.W, ay: (b.y1 - b.w * ISO.RATIO / 2) / b.H, w: b.W * k, h: b.H * k, b };
+  }
+  // world box of a cell's render (its opaque part)
+  function renderBox(rec) {
+    const g = rec.geom, p = cellCentre(rec.r, rec.c);
+    if (!g) return { x0: p.x - ISO.HW, y0: p.y - ISO.HH * 2.6, x1: p.x + ISO.HW, y1: p.y + ISO.HH };
+    const ox = p.x - g.ax * g.w, oy = p.y - g.ay * g.h;
+    return { x0: ox + g.b.x0 * g.k, y0: oy + g.b.y0 * g.k, x1: ox + g.b.x1 * g.k, y1: oy + g.b.y1 * g.k };
   }
   function occupied(r, c) { const s = simState(); return !!(s && s.grid[r] && s.grid[r][c]); }
   function neighbors(r, c) { return [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]]; }
@@ -140,10 +207,12 @@ const EngineWorld = (() => {
     sp.scale.set(S.worldPerDev * sc);
     sp.position.set(cx - (S.cellDev / 2 + S.pad) * S.worldPerDev * sc, cy - (S.cellDev / 2 + S.pad) * S.worldPerDev * sc);
   }
-  function placeMini(sp, r, c, id, scale) {
-    const w = miniW(id) * (scale || 1);
-    sp.width = w; sp.height = w;
-    sp.position.set(wx(c) + CELL / 2, wy(r + 1) - MINI_LIFT * CELL);
+  function placeMini(rec, scale) {
+    const g = rec.geom || (rec.geom = standGeom(rec.mini.texture, rec.id)); if (!g) return;
+    const p = cellCentre(rec.r, rec.c);
+    rec.mini.anchor.set(g.ax, g.ay);
+    rec.mini.scale.set(g.k * (scale || 1));
+    rec.mini.position.set(p.x, p.y);
   }
 
   // ---------------------------------------------------------------- plate baking (v1 8.0 rules; the loading fallback)
@@ -264,7 +333,8 @@ const EngineWorld = (() => {
     if (!s) {
       for (const rec of S.cells) destroyCell(rec);
       S.cells = []; S.byKey.clear(); S.spars = []; S.trussDirty = true; S.stateRef = null; S.cellCount = 0; S.padsKey = '';
-      if (S.trussG) S.trussG.clear(); if (S.seamG) S.seamG.clear(); if (S.padsG) S.padsG.clear();
+      for (const t of S.tubes.values()) t.destroy(); S.tubes.clear();
+      if (S.padsG) S.padsG.clear(); if (S.deckSideG) S.deckSideG.clear();
       return;
     }
     S.rows = s.grid.length; S.cols = s.grid[0] ? s.grid[0].length : 0;
@@ -341,15 +411,20 @@ const EngineWorld = (() => {
     S.byKey = keep;
     S.cells = cells.map(x => keep.get(keyOf(x.r, x.c)));
     // painter's order: by row then column, so lower rows overlap the rows above (the renders rise into them)
-    S.cells.sort((a, b) => (a.r - b.r) || (a.c - b.c));
-    S.cells.forEach(rec => { L.world.minis.addChild(rec.plate, rec.mini); L.world.shadow.addChild(rec.shadow); });
+    // painter's order: back to front by depth (r + c), then left to right; world.minis sorts by the same zIndex
+    S.cells.sort((a, b) => ((a.r + a.c) - (b.r + b.c)) || (a.c - b.c));
+    S.cells.forEach(rec => { L.world.plates.addChild(rec.plate); L.world.minis.addChild(rec.mini); L.world.shadow.addChild(rec.shadow); });
     S.padsKey = '';
 
-    // station box (occupied cells) and grid box, world px
+    // station box (occupied diamonds, raised by a render's height and a bank chip) and grid box, world px
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const x of cells) { x0 = Math.min(x0, wx(x.c)); y0 = Math.min(y0, wy(x.r)); x1 = Math.max(x1, wx(x.c + 1)); y1 = Math.max(y1, wy(x.r + 1)); }
+    for (const x of cells) {
+      const p = cellCentre(x.r, x.c);
+      x0 = Math.min(x0, p.x - ISO.HW); x1 = Math.max(x1, p.x + ISO.HW); y0 = Math.min(y0, p.y - ISO.HH * 2.8); y1 = Math.max(y1, p.y + ISO.HH + DECK_T);
+    }
     S.station = cells.length ? { x0, y0, x1, y1 } : null;
-    S.gridBox = { x0: 0, y0: 0, x1: S.cols * CELL, y1: S.rows * CELL };
+    const gc = [ISO.toWorld(0, 0), ISO.toWorld(S.cols, 0), ISO.toWorld(S.cols, S.rows), ISO.toWorld(0, S.rows)];
+    S.gridBox = { x0: Math.min(...gc.map(p => p.x)), y0: Math.min(...gc.map(p => p.y)), x1: Math.max(...gc.map(p => p.x)), y1: Math.max(...gc.map(p => p.y)) };
     CAM.setStation(S.station, S.gridBox);
     const stationKey = S.station ? [x0, y0, x1, y1, S.cols, S.rows].join(',') : '';
     if (stationKey !== S.stationKey) { S.stationKey = stationKey; EngineSpace.setStation(); }
@@ -370,15 +445,16 @@ const EngineWorld = (() => {
       bakeKey: '', scaffold: null, bank: null, lvl: 1, building: false,
     };
     rec.plate.eventMode = rec.mini.eventMode = rec.shadow.eventMode = 'none';
-    rec.mini.anchor.set(0.5, 1); rec.mini.visible = false;
-    rec.shadow.anchor.set(0.5); rec.shadow.alpha = 0.27;
-    rec.shadow.position.set(wx(c) + CELL / 2, wy(r) + CELL * 0.64);
-    rec.shadow.scale.set(CELL * 0.69 / 128, CELL * 0.3 / 128);
-    rec.glow.position.set(wx(c) + CELL / 2, wy(r) + CELL * 0.45);
+    rec.mini.visible = false; rec.mini.zIndex = depthZ(r + c + 1);
+    // the shadow lies on the deck (ground coordinates): a soft disc under the footprint, nudged toward the camera
+    rec.shadow.anchor.set(0.5); rec.shadow.alpha = 0.3;
+    rec.shadow.position.set(wx(c) + CELL * 0.56, wy(r) + CELL * 0.56);
+    rec.shadow.scale.set(CELL * 0.95 / 128);
+    const gp = cellCentre(r, c); rec.glow.position.set(gp.x, gp.y - ISO.HH);
     ST.layers.world.emissive.addChild(rec.glow);
     if ((rec.def.docks || 0) > 0 && id !== 'hub') {
       rec.chase = [0, 1, 2].map(() => ST.sprite(ST.glowTexture(CYAN, 6, 'hard'), { blend: 'add', alpha: 0.4 }));
-      for (const d of rec.chase) { d.scale.set(0.5); ST.layers.world.emissive.addChild(d); }
+      for (const d of rec.chase) { d.scale.set(0.3); ST.layers.world.emissive.addChild(d); }
     }
     if (rec.artUrl) ST.assets.load(rec.artUrl);
     return rec;
@@ -408,7 +484,7 @@ const EngineWorld = (() => {
     if (rec.artState !== 'none') return;
     const tex = ST.assets.texture(rec.artUrl);
     if (!tex) return;
-    rec.mini.texture = tex; rec.mini.visible = true;
+    rec.mini.texture = tex; rec.mini.visible = true; rec.geom = standGeom(tex, rec.id);
     rec.artState = 'fading'; rec.fadeT0 = U.nowMs();
   }
 
@@ -419,38 +495,80 @@ const EngineWorld = (() => {
     for (const sh of s.ships) if (sh.dock && (sh.state === 'approach' || sh.state === 'docked')) byDock.set(keyOf(sh.dock.r, sh.dock.c), sh);
   }
 
-  // ---------------------------------------------------------------- pads (A6): rounded squares in the family hue under every miniature
+  // ---------------------------------------------------------------- deck (A7): one plate under the whole station
+  // Occupied cells share a gunmetal deck (ground coordinates): neighbours meet at a faint seam, the outer edge carries
+  // a lit rim, each module's family hue is a thin inset line so the type still reads, and upgrade ticks sit on the
+  // front edge. The deck's two camera-facing sides drop DECK_T px as a slab (upright, in world.truss under the renders),
+  // so the station reads as one built platform rather than tiles.
   function ensurePads() {
     if (S.padsG) return;
     S.padsG = new PIXI.Graphics(); S.padsG.eventMode = 'none';
     ST.layers.world.plates.addChild(S.padsG);
+    S.deckSideG = new PIXI.Graphics(); S.deckSideG.eventMode = 'none';
+    ST.layers.world.truss.addChild(S.deckSideG);
   }
   function drawPads() {
     ensurePads();
     const g = S.padsG; g.clear();
+    const occ = new Set(S.cells.map(r => r.key)), has = (r, c) => occ.has(keyOf(r, c));
+    for (const rec of S.cells) g.rect(wx(rec.c), wy(rec.r), CELL, CELL);
+    if (S.cells.length) g.fill({ color: 0x141922, alpha: 0.9 });
+    // plating: a lighter inner panel per cell, then the seams between neighbours
+    for (const rec of S.cells) g.roundRect(wx(rec.c) + 3, wy(rec.r) + 3, CELL - 6, CELL - 6, 4);
+    if (S.cells.length) g.fill({ color: 0x1D232D, alpha: 0.9 });
     for (const rec of S.cells) {
-      const col = U.int(padColor(rec.id)), x = wx(rec.c) + 5, y = wy(rec.r) + 5, w = CELL - 10;   // 5 px inset: a 2–3 px seam between neighbours
-      // a dark seat under the pad keeps cells apart where the renders close the gaps, then the family fill and rim
-      g.roundRect(x - 1.5, y - 1.5, w + 3, w + 3, 7).fill({ color: 0x03040A, alpha: 0.55 });
-      g.roundRect(x, y, w, w, 6).fill({ color: col, alpha: 0.10 }).roundRect(x, y, w, w, 6).stroke({ width: 1, color: col, alpha: 0.45 });
-      // upgrade level ticks on the pad's lower rim
+      const x = wx(rec.c), y = wy(rec.r);
+      if (has(rec.r, rec.c + 1)) g.moveTo(x + CELL, y + 4).lineTo(x + CELL, y + CELL - 4);
+      if (has(rec.r + 1, rec.c)) g.moveTo(x + 4, y + CELL).lineTo(x + CELL - 4, y + CELL);
+    }
+    g.stroke({ width: 1.2, color: 0x0B0E13, alpha: 0.9 });
+    // outer rim
+    for (const rec of S.cells) {
+      const x = wx(rec.c), y = wy(rec.r);
+      if (!has(rec.r - 1, rec.c)) g.moveTo(x, y).lineTo(x + CELL, y);
+      if (!has(rec.r + 1, rec.c)) g.moveTo(x, y + CELL).lineTo(x + CELL, y + CELL);
+      if (!has(rec.r, rec.c - 1)) g.moveTo(x, y).lineTo(x, y + CELL);
+      if (!has(rec.r, rec.c + 1)) g.moveTo(x + CELL, y).lineTo(x + CELL, y + CELL);
+    }
+    g.stroke({ width: 1.6, color: U.int(rimLight()), alpha: liveryId() === 'default' ? 0.7 : 0.85 });
+    // family hue inset and upgrade ticks along the front-left edge
+    for (const rec of S.cells) {
+      const col = U.int(padColor(rec.id)), x = wx(rec.c) + 6, y = wy(rec.r) + 6, w = CELL - 12;
+      g.roundRect(x, y, w, w, 4).stroke({ width: 1, color: col, alpha: 0.42 });
       if (rec.lvl >= 2) {
         const n = rec.lvl - 1, tw = 6, gap = 4, total = n * tw + (n - 1) * gap;
-        for (let i = 0; i < n; i++) g.rect(wx(rec.c) + CELL / 2 - total / 2 + i * (tw + gap), y + w - 1, tw, 2);
+        for (let i = 0; i < n; i++) g.rect(wx(rec.c) + CELL / 2 - total / 2 + i * (tw + gap), y + w - 1, tw, 2.2);
         g.fill({ color: U.int(U.pal('ivory')), alpha: 0.9 });
       }
     }
+    drawDeckSides(has);
+  }
+  // the slab: below every boundary edge that faces the camera (a cell's lower-left and lower-right edges)
+  function drawDeckSides(has) {
+    const g = S.deckSideG; g.clear();
+    const T = DECK_T, lip = U.int(rimLight());
+    const face = (a, b, col) => { g.poly([a.x, a.y, b.x, b.y, b.x, b.y + T, a.x, a.y + T]).fill({ color: col, alpha: 0.95 }); };
+    const edges = [];
+    for (const rec of S.cells) {
+      const { r, c } = rec;
+      if (!has(r + 1, c)) { const a = ISO.toWorld(c, r + 1), b = ISO.toWorld(c + 1, r + 1); face(a, b, 0x1A2029); edges.push([a, b]); }   // lower-left side
+      if (!has(r, c + 1)) { const a = ISO.toWorld(c + 1, r), b = ISO.toWorld(c + 1, r + 1); face(a, b, 0x0E1117); edges.push([a, b]); }   // lower-right side
+    }
+    for (const [a, b] of edges) g.moveTo(a.x, a.y + 0.5).lineTo(b.x, b.y + 0.5);
+    if (edges.length) g.stroke({ width: 1, color: lip, alpha: 0.55 });
+    for (const [a, b] of edges) g.moveTo(a.x, a.y + T).lineTo(b.x, b.y + T);
+    if (edges.length) g.stroke({ width: 1, color: 0x000000, alpha: 0.5 });
   }
 
   // ---------------------------------------------------------------- dock chase (A6): three cyan dots along the pad's open side
   function updateChase(rec, info, sh) {
-    const open = (info && info.open) || 'e', cx = wx(rec.c) + CELL / 2, cy = wy(rec.r) + CELL / 2, e = CELL / 2 - 7, sp = 9;
+    const open = (info && info.open) || 'e', cx = wx(rec.c) + CELL / 2, cy = wy(rec.r) + CELL / 2, e = CELL / 2 - 4, sp = 9;
     const docked = !!(sh && sh.state === 'docked'), approaching = !!(sh && sh.state === 'approach');
     const step = Math.floor(ST.tellTime * 2) % 3;                   // chase: centre, ends, dark (2 steps / s)
     for (let i = 0; i < 3; i++) {
       const d = rec.chase[i], k = i - 1;
-      if (open === 'e') d.position.set(cx + e, cy + k * sp); else if (open === 'w') d.position.set(cx - e, cy + k * sp);
-      else if (open === 's') d.position.set(cx + k * sp, cy + e); else d.position.set(cx + k * sp, cy - e);
+      const gpt = open === 'e' ? [cx + e, cy + k * sp] : open === 'w' ? [cx - e, cy + k * sp] : open === 's' ? [cx + k * sp, cy + e] : [cx + k * sp, cy - e];
+      const wp = ISO.ground(gpt[0], gpt[1]); d.position.set(wp.x, wp.y);
       let a;
       if (!info || !info.usable) a = 0;
       else if (docked) a = 0.9;
@@ -477,8 +595,9 @@ const EngineWorld = (() => {
         if (sameEdge(p, Math.min(p + dash, per * 2), CELL - 4)) frame.moveTo(a.x, a.y).lineTo(b2.x, b2.y);
       }
       frame.stroke({ width: 1.5, color: ice, alpha: 0.7 });
-      label.position.set(x + CELL / 2, y + CELL - 5);
-      ST.layers.world.scaffold.addChild(frame, ring, back, label);
+      const lp = cellCentre(rec.r, rec.c); label.position.set(lp.x, lp.y + ISO.HH * 0.62);
+      ST.layers.world.groundTop.addChild(frame, ring);
+      ST.layers.world.scaffold.addChild(back, label);
       rec.scaffold = { frame, ring, back, label, lastSpark: ST.time + Math.random(), lastText: '' };
     }
     const sc = rec.scaffold;
@@ -487,7 +606,9 @@ const EngineWorld = (() => {
     sc.ring.clear();
     sc.ring.circle(cx, cy, R).stroke({ width: 2, color: U.int(U.pal('hairline-2')), alpha: 0.9 });
     // moveTo first: a Pixi v8 arc with no current point draws a line from the local origin
-    if (prog > 0) sc.ring.moveTo(cx, cy - R).arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + prog * TAU).stroke({ width: 3, color: U.int(U.pal('ice')), alpha: 1, cap: 'round' });
+    // the ring lies on the deck; -135 degrees in ground space is the top of the screen
+    const a0 = -0.75 * Math.PI;
+    if (prog > 0) sc.ring.moveTo(cx + Math.cos(a0) * R, cy + Math.sin(a0) * R).arc(cx, cy, R, a0, a0 + prog * TAU).stroke({ width: 3, color: U.int(U.pal('ice')), alpha: 1, cap: 'round' });
     const txt = timeText(b.remainingMs);
     if (txt !== sc.lastText) {
       sc.lastText = txt; sc.label.text = txt;
@@ -496,7 +617,8 @@ const EngineWorld = (() => {
     }
     if (ST.time >= sc.lastSpark && ST.tier > 0 && !ST.reduced && !ST.paused) {
       sc.lastSpark = ST.time + 1.5;
-      EngineFX.sparks(wx(rec.c) + CELL * (0.25 + Math.random() * 0.5), wy(rec.r) + CELL * (0.25 + Math.random() * 0.5), U.pal('ice-hi'), 6, 320);
+      const sp2 = ISO.ground(wx(rec.c) + CELL * (0.25 + Math.random() * 0.5), wy(rec.r) + CELL * (0.25 + Math.random() * 0.5));
+      EngineFX.sparks(sp2.x, sp2.y - ISO.HH * Math.random(), U.pal('ice-hi'), 6, 320);
     }
   }
   function timeText(ms) {
@@ -534,7 +656,7 @@ const EngineWorld = (() => {
   // ---------------------------------------------------------------- bank chips (3.4; A6: 0.26 cell wide, capped at 30 screen px, 6 px above the render's top edge)
   function chipRadius() { return Math.min(CHIP_D * CELL, CHIP_MAX_PX / Math.max(0.01, CAM.zoom)) / 2; }
   function chipY(rec) {
-    const top = rec.artState !== 'none' ? miniTop(rec.r, rec.id) : wy(rec.r);
+    const top = rec.artState !== 'none' ? renderBox(rec).y0 : cellCentre(rec.r, rec.c).y - ISO.HH * 1.6;
     return top - 6 - chipRadius();
   }
   function showBank(rec, h) {
@@ -551,7 +673,7 @@ const EngineWorld = (() => {
     }
     const pop = U.easeOutBack(Math.min(1, (ST.time - bk.t0) / 0.35));
     const bob = Math.sin(ST.time * TAU * 0.8 + rec.c * 0.9 + rec.r * 0.4) * 3;
-    const cx = wx(rec.c) + CELL / 2, cy = chipY(rec) + (ST.reduced ? 0 : bob), d = chipRadius() * 2;
+    const cx = cellCentre(rec.r, rec.c).x, cy = chipY(rec) + (ST.reduced ? 0 : bob), d = chipRadius() * 2;
     const sc = (bk.full ? 1.15 : 1) * pop;
     bk.sprite.position.set(cx, cy); bk.sprite.scale.set((d / bankTexture(bk.full).w) * sc);
     bk.halo.position.set(cx, cy);
@@ -576,69 +698,55 @@ const EngineWorld = (() => {
   }
   function isScaffold(r, c) { const rec = S.byKey.get(keyOf(r, c)); return !!(rec && rec.scaffold); }
 
-  // ---------------------------------------------------------------- trusses (3.4 / v1 7.7): spars join the pad edges
-  function ensureTruss() {
-    if (!S.trussG) {
-      S.trussG = new PIXI.Graphics(); S.trussG.eventMode = 'none'; ST.layers.world.truss.addChild(S.trussG);
-      S.seamG = new PIXI.Graphics(); S.seamG.eventMode = 'none'; ST.layers.world.emissive.addChild(S.seamG);
-    }
+  // ---------------------------------------------------------------- corridors (A7): a pressurised tube between every pair of neighbours
+  // One baked tube (horizontal, lit from above: crown highlight, rings, amber windows, cyan crown lights) is laid along
+  // the grid axis from cell centre to cell centre, lifted by TUBE_LIFT, and sorted just behind the module further back
+  // so both renders cover its ends and it shows in the gap between them. A new corridor grows from the hub side over
+  // 250 ms. Rotation keeps the tube's crown up for both axes (A at +angle, B at -angle).
+  function tubeTexture() {
+    const crown = crownLight();
+    return ST.bake('tube|a7|' + crown, 192, 28, g => {
+      const W = 192, H = 28, body = new Path2D(); roundRectPath(body, 0, 2, W, H - 4, 9);
+      const gr = g.createLinearGradient(0, 2, 0, H - 2);
+      gr.addColorStop(0, '#A7B0BF'); gr.addColorStop(0.14, '#6B7482'); gr.addColorStop(0.45, '#3D434F'); gr.addColorStop(0.8, '#1F232B'); gr.addColorStop(1, '#0E1115');
+      g.fillStyle = gr; g.fill(body);
+      g.save(); g.clip(body);
+      for (let x = 10; x < W; x += 24) { g.fillStyle = 'rgba(10,12,16,.85)'; g.fillRect(x, 0, 3, H); g.fillStyle = 'rgba(185,195,210,.35)'; g.fillRect(x + 3, 0, 1, H); }
+      for (let x = 18, i = 0; x < W - 6; x += 24, i++) {
+        if (i % 2 === 0) { g.fillStyle = 'rgba(242,177,87,.92)'; g.fillRect(x, 12, 8, 4); g.fillStyle = 'rgba(255,222,165,.7)'; g.fillRect(x + 1, 12, 6, 1); }
+        else { g.fillStyle = crown; g.globalAlpha = 0.95; g.fillRect(x + 2, 5.5, 4, 2.5); g.globalAlpha = 1; }
+      }
+      g.restore();
+      g.strokeStyle = 'rgba(0,0,0,.65)'; g.lineWidth = 1.2; g.stroke(body);
+    });
   }
   function sparEnds(sp) {
-    const ax = wx(sp.a.c + 0.5), ay = wy(sp.a.r + 0.5), bx = wx(sp.b.c + 0.5), by = wy(sp.b.r + 0.5);
+    const a = cellCentre(sp.a.r, sp.a.c), b = cellCentre(sp.b.r, sp.b.c);
     const age = U.nowMs() - sp.born;
     const p = age < 250 ? U.easeOutCubic(Math.max(0, age) / 250) : 1;
-    return { ax, ay, bx: ax + (bx - ax) * p, by: ay + (by - ay) * p, growing: age < 250 };
+    return { ax: a.x, ay: a.y, bx: a.x + (b.x - a.x) * p, by: a.y + (b.y - a.y) * p, growing: age < 250 };
   }
   function drawTruss() {
-    ensureTruss();
-    const g = S.trussG, sg = S.seamG;
-    g.clear(); sg.clear();
-    const w = 0.16 * CELL, hw = w / 2, inset = CELL / 2 - 4;      // from pad edge to pad edge
-    const truss = U.int(U.pal('truss')), edge = U.int(U.pal('hull-edge')), ice = U.int(seamColor());   // A5: the seam and its end caps take the livery seam colour
+    const tex = tubeTexture(), live = new Set();
     let growing = false;
     for (const sp of S.spars) {
+      live.add(sp.key);
+      let t = S.tubes.get(sp.key);
+      if (!t) { t = new PIXI.Sprite(tex.texture); t.eventMode = 'none'; t.anchor.set(0.5); ST.layers.world.minis.addChild(t); S.tubes.set(sp.key, t); }
+      if (t.texture !== tex.texture) t.texture = tex.texture;          // a livery change rebakes the crown lights
       const e = sparEnds(sp);
       if (e.growing) growing = true;
-      if (e.ay === e.by) {
-        const x0 = Math.min(e.ax, e.bx), x1 = Math.max(e.ax, e.bx);
-        g.rect(x0, e.ay - hw, x1 - x0, w).fill(truss);
-        g.moveTo(x0 + (e.growing ? 0 : inset), e.ay - hw).lineTo(x1 - (e.growing ? 0 : inset), e.ay - hw)
-          .moveTo(x0 + (e.growing ? 0 : inset), e.ay + hw).lineTo(x1 - (e.growing ? 0 : inset), e.ay + hw).stroke({ width: 1, color: edge });
-        if (!e.growing) {
-          g.rect(x0 + inset - 1.5, e.ay - 1.5, 3, 3).rect(x1 - inset - 1.5, e.ay - 1.5, 3, 3).fill(ice);
-          sg.moveTo(x0 + inset, e.ay).lineTo(x1 - inset, e.ay);
-        }
-      } else {
-        const y0 = Math.min(e.ay, e.by), y1 = Math.max(e.ay, e.by);
-        g.rect(e.ax - hw, y0, w, y1 - y0).fill(truss);
-        g.moveTo(e.ax - hw, y0 + (e.growing ? 0 : inset)).lineTo(e.ax - hw, y1 - (e.growing ? 0 : inset))
-          .moveTo(e.ax + hw, y0 + (e.growing ? 0 : inset)).lineTo(e.ax + hw, y1 - (e.growing ? 0 : inset)).stroke({ width: 1, color: edge });
-        if (!e.growing) {
-          g.rect(e.ax - 1.5, y0 + inset - 1.5, 3, 3).rect(e.ax - 1.5, y1 - inset - 1.5, 3, 3).fill(ice);
-          sg.moveTo(e.ax, y0 + inset).lineTo(e.ax, y1 - inset);
-        }
-      }
+      let dx = e.bx - e.ax, dy = e.by - e.ay;
+      const len = Math.hypot(dx, dy);
+      if (dx < 0) { dx = -dx; dy = -dy; }                             // keep the crown up: always point rightwards
+      t.rotation = Math.atan2(dy, dx);
+      t.scale.set(Math.max(0.01, len) / tex.w, TUBE_T / tex.h);
+      t.position.set((e.ax + e.bx) / 2, (e.ay + e.by) / 2 - TUBE_LIFT);
+      t.zIndex = depthZ(Math.min(sp.a.r + sp.a.c, sp.b.r + sp.b.c) + 1) - 1;   // just behind the module further back
+      t.visible = len > 0.5;
     }
-    sg.stroke({ width: 1.5, color: ice, alpha: 1 });
+    for (const [key, t] of S.tubes) if (!live.has(key)) { t.destroy(); S.tubes.delete(key); }
     S.trussDirty = growing;
-  }
-  function updateRunLights() {
-    const em = ST.layers.world.emissive;
-    const want = (ST.tier > 0 && !ST.reduced) ? S.spars.length : 0;
-    while (S.runLights.length < want) { const sp = ST.sprite(ST.glowTexture(U.pal('lamp'), 8, 'hard'), { blend: 'add' }); sp.scale.set(0.6); em.addChild(sp); S.runLights.push(sp); }
-    while (S.runLights.length > want) S.runLights.pop().destroy();
-    const inset = CELL / 2 - 4, t = ST.tellTime;
-    for (let i = 0; i < want; i++) {
-      const sp = S.spars[i], lt = S.runLights[i];
-      const ph = ((t + sp.phase) % 2.5 + 2.5) % 2.5;
-      if (ph >= 1.2 || U.nowMs() - sp.born < 250) { lt.visible = false; continue; }
-      const k = ph / 1.2;
-      const ax = wx(sp.a.c + 0.5), ay = wy(sp.a.r + 0.5), bx = wx(sp.b.c + 0.5), by = wy(sp.b.r + 0.5);
-      const L = Math.hypot(bx - ax, by - ay) || 1, ux = (bx - ax) / L, uy = (by - ay) / L;
-      const sx = ax + ux * inset, sy = ay + uy * inset, tx = bx - ux * inset, ty = by - uy * inset;
-      lt.visible = true; lt.position.set(sx + (tx - sx) * k, sy + (ty - sy) * k);
-      lt.alpha = k < 0.15 ? k / 0.15 : k > 0.8 ? (1 - k) / 0.2 : 1;
-    }
   }
 
   // ---------------------------------------------------------------- overlay: hover, selection, placement (3.4 / v1 10), on the pads
@@ -653,7 +761,11 @@ const EngineWorld = (() => {
     S.dotsG = new PIXI.Graphics(); S.dotsG.alpha = 0;
     for (const x of [O.place, O.lane, O.hover, O.sel, O.reasonBg, S.dotsG]) x.eventMode = 'none';
     O.ghost.eventMode = 'none';
-    L.addChild(S.dotsG, O.place, O.lane, O.hoverHalo, O.hover, O.ghost, O.selHalo, O.sel, O.reasonBg, O.reason);
+    // A7: the placement grid lies on the overlay ground (above the station); hover and selection marks lie on the
+    // deck around the footprint; halos, the ghost render and the reason plate stand upright above everything
+    ST.layers.overlayGroundInner.addChild(S.dotsG, O.place, O.lane);
+    ST.layers.world.groundTop.addChild(O.hover, O.sel);
+    L.addChild(O.hoverHalo, O.ghost, O.selHalo, O.reasonBg, O.reason);
   }
   function buildDots() {
     if (!S.dotsG) return;
@@ -714,8 +826,8 @@ const EngineWorld = (() => {
       const key = keyOf(hv.r, hv.c);
       if (key !== S.hoverKey) { S.hoverKey = key; S.hoverT0 = nowM; }
       const k = Math.min(1, (nowM - S.hoverT0) / 140);
-      O.hover.roundRect(wx(hv.c) + 2.5, wy(hv.r) + 2.5, CELL - 5, CELL - 5, 6).stroke({ width: 1.5, color: ivory, alpha: 0.6 * k });
-      O.hoverHalo.position.set(wx(hv.c) + CELL / 2, wy(hv.r) + CELL / 2); O.hoverHalo.scale.set(CELL * 1.7 / 128); O.hoverHalo.alpha = 0.14 * k;
+      O.hover.roundRect(wx(hv.c) - 2, wy(hv.r) - 2, CELL + 4, CELL + 4, 6).stroke({ width: 2, color: ivory, alpha: 0.7 * k });
+      const hp = cellCentre(hv.r, hv.c); O.hoverHalo.position.set(hp.x, hp.y - ISO.HH * 0.6); O.hoverHalo.scale.set(CELL * 1.7 / 128); O.hoverHalo.alpha = 0.14 * k;
     } else { S.hoverKey = null; O.hoverHalo.alpha = 0; }
 
     // selection: brackets on the pad drawing in over 160 ms, breathing 2 px on a 3 s sine, focus glow
@@ -726,9 +838,9 @@ const EngineWorld = (() => {
       if (key !== S.selKey) { S.selKey = key; S.selT0 = nowM; }
       const k = Math.min(1, (nowM - S.selT0) / 160), len = 10 * U.easeOutCubic(k);
       const breathe = ST.reduced ? 1 : 1 + Math.sin(ST.time * TAU / 3);
-      brackets(O.sel, wx(sel.c) - breathe, wy(sel.r) - breathe, CELL + 2 * breathe, len, 0);
-      O.sel.stroke({ width: 1.5, color: ivory, alpha: 1 });
-      O.selHalo.position.set(wx(sel.c) + CELL / 2, wy(sel.r) + CELL / 2); O.selHalo.scale.set(CELL * 2.2 / 128);
+      brackets(O.sel, wx(sel.c) - 5 - breathe, wy(sel.r) - 5 - breathe, CELL + 10 + 2 * breathe, len * 1.4, 0);
+      O.sel.stroke({ width: 2.2, color: ivory, alpha: 1 });
+      const sp3 = cellCentre(sel.r, sel.c); O.selHalo.position.set(sp3.x, sp3.y - ISO.HH * 0.6); O.selHalo.scale.set(CELL * 2.2 / 128);
       O.selHalo.alpha = (0.16 + 0.05 * Math.sin(ST.time * TAU / 3)) * k;
     } else { S.selKey = null; O.selHalo.alpha = 0; }
 
@@ -780,13 +892,14 @@ const EngineWorld = (() => {
       // ghost: the render at 45% with an ivory tint when the pack has it, else the baked plate
       const art = ST.assets.texture(ST.assets.url('modules', id, 512));
       O.ghost.visible = true; O.ghost.alpha = 0.45;
-      if (art) {
-        O.ghost.texture = art; O.ghost.anchor.set(0.5, 1); O.ghost.tint = U.int(U.mix('#FFFFFF', U.pal('ivory'), 0.6));
-        O.ghost.width = O.ghost.height = miniW(id); O.ghost.position.set(cx, gy + CELL - MINI_LIFT * CELL);
+      const gp = ISO.ground(cx, cy), sg = art ? standGeom(art, id) : null;
+      if (sg) {
+        O.ghost.texture = art; O.ghost.anchor.set(sg.ax, sg.ay); O.ghost.tint = U.int(U.mix('#FFFFFF', U.pal('ivory'), 0.6));
+        O.ghost.scale.set(sg.k); O.ghost.position.set(gp.x, gp.y);
       } else {
-        O.ghost.texture = plateTexture(id, 'normal', previewOpenSide(id, h.r, h.c), '', 1).texture; O.ghost.anchor.set(0, 0);
+        O.ghost.texture = plateTexture(id, 'normal', previewOpenSide(id, h.r, h.c), '', 1).texture; O.ghost.anchor.set(0.5, 0.5);
         O.ghost.tint = U.int(U.mix('#FFFFFF', U.famColor(id), 0.35));
-        O.ghost.scale.set(S.worldPerDev); O.ghost.position.set(gx - S.pad * S.worldPerDev, gy - S.pad * S.worldPerDev);
+        O.ghost.scale.set(S.worldPerDev * 0.8); O.ghost.position.set(gp.x, gp.y);
       }
     } else O.ghost.visible = false;
     const col = chk.ok ? ivory : bad, dash = 5, gap = 3, per = CELL - 2, seg = dash + gap;
@@ -803,9 +916,10 @@ const EngineWorld = (() => {
     O.reasonBg.clear();
     if (text) {
       O.reason.text = text; ST.setTextColor(O.reason, color); O.reason.visible = true;
-      O.reason.position.set(cx, gy + CELL + 12);
+      const rp = ISO.ground(gx + CELL, gy + CELL);                     // the cell's lowest point
+      O.reason.position.set(rp.x, rp.y + 14);
       const bw = O.reason.width + 12, bh = 16;
-      O.reasonBg.rect(cx - bw / 2, gy + CELL + 4, bw, bh).fill({ color: 0x04050A, alpha: 0.85 });
+      O.reasonBg.rect(rp.x - bw / 2, rp.y + 6, bw, bh).fill({ color: 0x04050A, alpha: 0.85 });
     } else O.reason.visible = false;
   }
 
@@ -827,7 +941,7 @@ const EngineWorld = (() => {
           oe.value += e.value; oe.handle.text = (oe.sign < 0 ? '-' : '+') + fmt(Math.abs(oe.value)); merged = true; break;
         }
       }
-      if (!merged) e.handle = EngineFX.floaterWorld(wx(f.x), wy(f.y), f.text, floaterColor(f.color));
+      if (!merged) { const fp = ISO.toWorld(f.x, f.y); e.handle = EngineFX.floaterWorld(fp.x, fp.y - ISO.HH, f.text, floaterColor(f.color)); }
       S.floaters.set(f, e);
     }
   }
@@ -894,7 +1008,8 @@ const EngineWorld = (() => {
     for (const n of [P.fieldG, P.debrisRoot, P.bandG, P.pill]) n.eventMode = 'none';
     ST.layers.world.shadow.addChildAt(P.debrisRoot, 0);
     ST.layers.world.shadow.addChildAt(P.fieldG, 0);
-    ST.layers.world.scaffold.addChild(P.bandG, P.pill, P.label);
+    ST.layers.world.groundTop.addChild(P.bandG);
+    ST.layers.world.scaffold.addChild(P.pill, P.label);
     ST.layers.world.emissive.addChild(P.sweep);
   }
   function perimPoint(x, y, w, h, p) {
@@ -988,12 +1103,14 @@ const EngineWorld = (() => {
       for (let q = 0; q < len; q += step) { const a = perimPoint(x, y, w, h, q), b = perimPoint(x, y, w, h, Math.min(q + step, len)); g.moveTo(a.x, a.y).lineTo(b.x, b.y); }
       if (len > 0) g.stroke({ width: 4, color: ice, alpha: 0.55 });
       const sw = ((ST.time / 4) % 1) * per, sp = perimPoint(x, y, w, h, sw), sq = perimPoint(x, y, w, h, sw - 6);
-      P.sweep.position.set(sp.x, sp.y); P.sweep.rotation = Math.atan2(sp.y - sq.y, sp.x - sq.x);
+      const wp = ISO.ground(sp.x, sp.y), wq = ISO.ground(sq.x, sq.y);
+      P.sweep.position.set(wp.x, wp.y); P.sweep.rotation = Math.atan2(wp.y - wq.y, wp.x - wq.x);
       P.sweep.alpha = ST.tier > 0 && !ST.reduced ? 0.8 : 0.35;
       const b = P.bounds, txt = timeText(cl.endsAt - now);
       if (txt !== P.lastText) { P.lastText = txt; P.label.text = txt; }
       P.label.visible = true;
-      P.label.position.set((wx(b.c0) + wx(b.c1 + 1)) / 2, wy(b.r1 + 1) + 7);
+      const lb = ISO.toWorld(b.c1 + 1, b.r1 + 1);                      // the plot's lowest point
+      P.label.position.set(lb.x, lb.y + 9);
       const pw = P.label.width + 12, ph = P.label.height + 6;
       P.pill.roundRect(P.label.x - pw / 2, P.label.y - 3, pw, ph, 3).fill({ color: 0x04050A, alpha: 0.78 });
       ST.setTextColor(P.label, hi);
@@ -1018,13 +1135,14 @@ const EngineWorld = (() => {
     const rb = d.bounds && d.bounds.r0 != null ? d.bounds : P.rings[d.ring];
     if (!rb) return;
     const prev = P.bounds;
-    const cx = (wx(rb.c0) + wx(rb.c1 + 1)) / 2, cy = (wy(rb.r0) + wy(rb.r1 + 1)) / 2;
+    const ctr = ISO.toWorld((rb.c0 + rb.c1 + 1) / 2, (rb.r0 + rb.r1 + 1) / 2), cx = ctr.x, cy = ctr.y;
     const fresh = [];
-    for (let r = rb.r0; r <= rb.r1; r++) for (let c = rb.c0; c <= rb.c1; c++) if (!inBounds(prev, r, c)) fresh.push({ r, c, a: Math.atan2(wy(r + 0.5) - cy, wx(c + 0.5) - cx) });
+    for (let r = rb.r0; r <= rb.r1; r++) for (let c = rb.c0; c <= rb.c1; c++) if (!inBounds(prev, r, c)) { const q = cellCentre(r, c); fresh.push({ r, c, a: Math.atan2(q.y - cy, q.x - cx) }); }
     if (!ST.reduced) {
       for (const dbr of P.debris) {
         if (!dbr.sp.visible || !inBounds(rb, dbr.r, dbr.c) || inBounds(prev, dbr.r, dbr.c)) continue;
-        EngineFX.blow(dbr.x, dbr.y, Math.atan2(dbr.y - cy, dbr.x - cx), U.pal('ice-hi'), 3, 900);
+        const dp = ISO.ground(dbr.x, dbr.y);
+        EngineFX.blow(dp.x, dp.y, Math.atan2(dp.y - cy, dp.x - cx), U.pal('ice-hi'), 3, 900);
         dbr.sp.visible = false;
       }
     }
@@ -1072,7 +1190,8 @@ const EngineWorld = (() => {
         else scale = pop.kind === 'land' ? 1.15 - 0.15 * U.easeOutBack(k) : 0.7 + 0.3 * U.easeOutBack(k);
       }
       if (rec.plate.visible) placeCellSprite(rec.plate, rec.r, rec.c, scale);
-      if (rec.mini.visible) placeMini(rec.mini, rec.r, rec.c, rec.id, scale);
+      if (rec.mini.visible) placeMini(rec, scale);
+      if (rec.geom) { const gpp = cellCentre(rec.r, rec.c); rec.glow.position.set(gpp.x, gpp.y - rec.geom.h * rec.geom.ay * 0.42); }
       // treatments: construction (35%, desaturated), overdrawn power / flare-dark solar (grey at 70%)
       const powered = !offline && (rec.def.power >= 0 || !short);
       let alpha = 1, tint = 0xFFFFFF;
@@ -1091,9 +1210,7 @@ const EngineWorld = (() => {
       if (h && h.ready) showBank(rec, h); else hideBank(rec);
     }
     if (padsKey !== S.padsKey) { S.padsKey = padsKey; drawPads(); }
-    if (S.trussDirty || !S.trussG) drawTruss();
-    if (S.seamG) S.seamG.alpha = short ? 0.08 : 0.28 + 0.22 * (0.5 + 0.5 * Math.sin(ST.tellTime * TAU / 3));
-    updateRunLights();
+    if (S.trussDirty || S.tubes.size !== S.spars.length) drawTruss();
     drawOverlay(s, dt);
     handFloaters(s);
   }
@@ -1105,7 +1222,7 @@ const EngineWorld = (() => {
     S.growCell = { r: d.r, c: d.c, t: U.nowMs() };
     if (b && b.building) { EngineFX.facade.buildStart(d.r, d.c); return; }
     S.pops.set(keyOf(d.r, d.c), { t0: U.nowMs(), ms: 180, kind: 'pop' });
-    const cx = wx(d.c + 0.5), cy = wy(d.r + 0.5);
+    const bp = cellCentre(d.r, d.c), cx = bp.x, cy = bp.y - ISO.HH * 0.6;
     EngineFX.sparks(cx, cy, U.famColor(d.id), 12, 300);
     EngineFX.ring(cx, cy, 0.5 * CELL, 1.3 * CELL, U.pal('ivory'), 400);
   }
@@ -1139,7 +1256,7 @@ const EngineWorld = (() => {
     }
     if (!found) return null;
     const path = []; let cur = found;
-    while (cur) { path.unshift({ x: wx(cur[1] + 0.5), y: wy(cur[0] + 0.5) }); cur = parent.get(keyOf(cur[0], cur[1])); }
+    while (cur) { const q = cellCentre(cur[0], cur[1]); path.unshift({ x: q.x, y: q.y - TUBE_LIFT }); cur = parent.get(keyOf(cur[0], cur[1])); }
     return path;
   }
   // Nearest module of `id` within `radius` cells (Chebyshev) of a cell; null when none. Used by traffic for the people roles.
@@ -1153,68 +1270,66 @@ const EngineWorld = (() => {
     return best;
   }
 
-  // ---------------------------------------------------------------- thumbnail (A6: the resume card's diorama; state.grid only, no Sim calls)
-  // Framed on the occupied cells (one cell of margin, never tighter than 5x3), each module on its family pad with
-  // its three-quarter render when the texture is in, the flat family square otherwise.
+  // ---------------------------------------------------------------- thumbnail (A7: the resume card's diorama; state.grid only, no Sim calls)
+  // The station in the world's projection, framed on its occupied diamonds: the deck with its slab, the corridors,
+  // then each module's render standing on its cell in painter's order (the flat family diamond while a texture is
+  // missing).
   function thumbnail(state, w, h) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const c = document.createElement('canvas');
-    c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
-    c.style.width = w + 'px'; c.style.height = h + 'px';
-    const g = c.getContext('2d');
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    const g = cv.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = U.pal('space-0'); g.fillRect(0, 0, w, h);
     const grid = state && state.grid;
-    if (!grid || !grid.length) return c;
-    const rows = grid.length, cols = grid[0].length;
-    let r0 = rows, r1 = -1, c0 = cols, c1 = -1;
-    for (let r = 0; r < rows; r++) for (let cc = 0; cc < cols; cc++) if (grid[r][cc]) { r0 = Math.min(r0, r); r1 = Math.max(r1, r); c0 = Math.min(c0, cc); c1 = Math.max(c1, cc); }
-    if (r1 < 0) return c;
-    // frame: the occupied span centred, with 0.6 of a cell of breathing room on every side (a lone hub fills the card)
-    const spanC = c1 - c0 + 1, spanR = r1 - r0 + 1;
-    const cell = Math.max(2, Math.min(56, Math.floor(Math.min(w / Math.max(spanC + 1.2, 3.2), h / Math.max(spanR + 1.2, 2.2)))));
-    const ox = Math.round((w - spanC * cell) / 2) - c0 * cell, oy = Math.round((h - spanR * cell) / 2) - r0 * cell;
-    // a faint plate grid under the station, then the connectors between neighbours
-    g.strokeStyle = U.rgba(U.pal('hull-edge'), 0.18); g.lineWidth = 1; g.beginPath();
-    for (let x = ((ox % cell) + cell) % cell; x <= w; x += cell) { g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, h); }
-    for (let y = ((oy % cell) + cell) % cell; y <= h; y += cell) { g.moveTo(0, y + 0.5); g.lineTo(w, y + 0.5); }
-    g.stroke();
-    g.strokeStyle = U.rgba(U.pal('hull-edge'), 0.8); g.lineWidth = Math.max(1, Math.round(cell / 12)); g.beginPath();
-    for (let r = r0; r <= r1; r++) for (let cc = c0; cc <= c1; cc++) {
-      if (!grid[r][cc]) continue;
-      const x = ox + cc * cell + cell / 2, y = oy + r * cell + cell / 2;
-      if (cc + 1 < cols && grid[r][cc + 1]) { g.moveTo(x, y); g.lineTo(x + cell, y); }
-      if (r + 1 < rows && grid[r + 1][cc]) { g.moveTo(x, y); g.lineTo(x, y + cell); }
+    if (!grid || !grid.length) return cv;
+    const cells = [];
+    for (let r = 0; r < grid.length; r++) for (let c = 0; c < grid[r].length; c++) if (grid[r][c]) cells.push({ r, c, id: grid[r][c].id });
+    if (!cells.length) return cv;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const q of cells) { const p = ISO.centre(q.r, q.c); x0 = Math.min(x0, p.x - ISO.HW); x1 = Math.max(x1, p.x + ISO.HW); y0 = Math.min(y0, p.y - ISO.HH * 2.4); y1 = Math.max(y1, p.y + ISO.HH + DECK_T); }
+    const sc = Math.min(w / ((x1 - x0) * 1.1), h / ((y1 - y0) * 1.12), 1.4);
+    const ox = w / 2 - (x0 + x1) / 2 * sc, oy = h / 2 - (y0 + y1) / 2 * sc;
+    const P = (gx, gy) => { const q = ISO.toWorld(gx, gy); return { x: ox + q.x * sc, y: oy + q.y * sc }; };
+    const occ = new Set(cells.map(q => keyOf(q.r, q.c))), has = (r, c) => occ.has(keyOf(r, c));
+    const diamond = (r, c) => { const a = P(c, r), b = P(c + 1, r), d = P(c + 1, r + 1), e = P(c, r + 1); const p = new Path2D(); p.moveTo(a.x, a.y); p.lineTo(b.x, b.y); p.lineTo(d.x, d.y); p.lineTo(e.x, e.y); p.closePath(); return p; };
+    // slab sides, then the deck
+    const T = DECK_T * sc;
+    for (const q of cells) {
+      if (!has(q.r + 1, q.c)) { const a = P(q.c, q.r + 1), b = P(q.c + 1, q.r + 1); g.fillStyle = '#1A2029'; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.lineTo(b.x, b.y + T); g.lineTo(a.x, a.y + T); g.closePath(); g.fill(); }
+      if (!has(q.r, q.c + 1)) { const a = P(q.c + 1, q.r), b = P(q.c + 1, q.r + 1); g.fillStyle = '#0E1117'; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.lineTo(b.x, b.y + T); g.lineTo(a.x, a.y + T); g.closePath(); g.fill(); }
     }
-    g.stroke();
-    const lv = liveryById(wantedLiveryId()), custom = lv.id !== 'default';
-    const inset = Math.max(1, Math.round(cell * 5 / 54)), rad = Math.max(2, Math.round(cell / 9));
-    const bar = Math.max(1, Math.round(cell / 18));
-    for (let r = r0; r <= r1; r++) for (let cc = c0; cc <= c1; cc++) {
-      const m = grid[r][cc]; if (!m) continue;
-      const x = ox + cc * cell, y = oy + r * cell, px = x + inset, py = y + inset, pw = cell - inset * 2;
-      const col = padColor(m.id);
-      // the pad: dark seat, family fill and rim, exactly as the world draws it
-      let p = new Path2D(); roundRectPath(p, px - 1.5, py - 1.5, pw + 3, pw + 3, rad + 1); g.fillStyle = 'rgba(3,4,10,0.55)'; g.fill(p);
-      p = new Path2D(); roundRectPath(p, px, py, pw, pw, rad);
-      g.fillStyle = U.rgba(col, 0.14); g.fill(p); g.strokeStyle = U.rgba(col, 0.6); g.lineWidth = 1; g.stroke(p);
-      if (custom && m.id !== 'hub' && pw >= 8) { g.fillStyle = stripColor(m.id); g.fillRect(px + 2, py + 1, pw - 4, bar); }   // A5 livery strip
-      // the render (1.0 x cell, the world's miniature scale); the flat family square when the texture is not in
+    for (const q of cells) { g.fillStyle = '#1B212A'; g.fill(diamond(q.r, q.c)); }
+    g.strokeStyle = U.rgba(U.pal('hull-edge'), 0.5); g.lineWidth = 1;
+    for (const q of cells) g.stroke(diamond(q.r, q.c));
+    // corridors as short lit bars between neighbours (they show in the gaps)
+    g.lineCap = 'round';
+    for (const q of cells) for (const [nr, nc] of [[q.r, q.c + 1], [q.r + 1, q.c]]) {
+      if (!has(nr, nc)) continue;
+      const a = P(q.c + 0.5, q.r + 0.5), b = P(nc + 0.5, nr + 0.5);
+      g.strokeStyle = '#4A515D'; g.lineWidth = Math.max(1.5, TUBE_T * sc); g.beginPath(); g.moveTo(a.x, a.y - TUBE_LIFT * sc); g.lineTo(b.x, b.y - TUBE_LIFT * sc); g.stroke();
+    }
+    // modules, back to front
+    const lv = liveryById(wantedLiveryId());
+    cells.sort((a, b) => ((a.r + a.c) - (b.r + b.c)) || (a.c - b.c));
+    for (const q of cells) {
+      const ctr = P(q.c + 0.5, q.r + 0.5);
       let drawn = false;
       try {
-        const tex = ST.assets.texture(ST.assets.url('modules', m.id, 512));
-        const src = tex && tex.source && tex.source.resource;
-        if (src && (src.width || src.naturalWidth)) {
-          g.save(); g.shadowColor = 'rgba(0,0,0,0.6)'; g.shadowBlur = Math.max(2, cell / 10); g.shadowOffsetY = Math.max(1, cell / 24);
-          g.drawImage(src, x, y, cell, cell); g.restore(); drawn = true;
+        const tex = ST.assets.texture(ST.assets.url('modules', q.id, 512)), src = tex && tex.source && tex.source.resource, sg = tex ? standGeom(tex, q.id) : null;
+        if (src && sg) {
+          const dw = sg.w * sc, dh = sg.h * sc;
+          g.save(); g.shadowColor = 'rgba(0,0,0,0.55)'; g.shadowBlur = Math.max(2, 6 * sc); g.shadowOffsetY = Math.max(1, 2 * sc);
+          g.drawImage(src, ctr.x - sg.ax * dw, ctr.y - sg.ay * dh, dw, dh); g.restore(); drawn = true;
         }
       } catch (e) { drawn = false; }
       if (!drawn) {
-        const sq = Math.max(2, pw - 4), p2 = new Path2D(); roundRectPath(p2, px + 2, py + 2, sq, sq, Math.max(1, sq / 4));
-        g.fillStyle = U.rgba(m.id === 'hub' ? (lv.rim || U.pal('ivory')) : U.famColor(m.id), 0.8); g.fill(p2);
+        g.save(); g.translate(ctr.x, ctr.y); g.scale(0.7, 0.7); g.translate(-ctr.x, -ctr.y);
+        g.fillStyle = U.rgba(q.id === 'hub' ? (lv.rim || U.pal('ivory')) : U.famColor(q.id), 0.8); g.fill(diamond(q.r, q.c)); g.restore();
       }
     }
-    return c;
+    return cv;
   }
 
   function init() {
@@ -1225,7 +1340,7 @@ const EngineWorld = (() => {
   }
 
   return {
-    init, update, rebuild, thumbnail,
+    init, update, rebuild, thumbnail, tube: tubeTexture,
     cellAt, cellCentre, cellBounds, occupied, bankAt, readyBanksNear, isScaffold, pathToStorage, nearModule, inPlot, ringOf,
     onBuilt, onDemolished, onBuildDone, onUpgrade, onHopper, onPlot,
     setLivery, get livery() { return livery(); },                      // A5

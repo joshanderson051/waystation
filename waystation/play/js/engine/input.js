@@ -51,13 +51,13 @@ const EngineInput = (() => {
     return null;
   }
   function scaffoldNearScreen(sx, sy, cell) {
-    const CELL = CAM.CELL, half = CELL * CAM.zoom / 2;
+    const half = EngineStage.ISO.EDGE * CAM.zoom / 2;
     let best = null, bd = Infinity;
     for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
       if (!dr && !dc) continue;
       const r = cell.r + dr, c = cell.c + dc;
       if (!EngineWorld.isScaffold(r, c)) continue;
-      const p = CAM.worldToScreen((c + 0.5) * CELL, (r + 0.5) * CELL), d = Math.hypot(p.x - sx, p.y - sy);
+      const q = EngineWorld.cellCentre(r, c), p = CAM.worldToScreen(q.x, q.y), d = Math.hypot(p.x - sx, p.y - sy);
       if (d <= half + TOUCH_SNAP && d < bd) { bd = d; best = { r, c }; }
     }
     return best;

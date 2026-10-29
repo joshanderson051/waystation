@@ -554,15 +554,17 @@ const EngineSpace = (() => {
     const g = new PIXI.Graphics(); g.eventMode = 'none';
     const far = 16 * CELL;
     for (let i = 0; i < n; i++) {
-      const a = rr() * TAU;
-      const sx = hx + Math.cos(a) * far * (1 + rr() * 0.4), sy = hy + Math.sin(a) * far * 0.7 * (1 + rr() * 0.4);
-      // end on the inflated station box boundary along the ray toward the centre
-      const dx = hx - sx, dy = hy - sy, len = Math.hypot(dx, dy) || 1;
+      // A7: lanes run along the grid's diagonals out of the far side, the way the ships fly them
+      const dir = rr() < 0.5 ? ST.ISO.A : ST.ISO.B;
+      const aimX = hx + (rr() - 0.5) * (st.x1 - st.x0) * 0.8, aimY = hy - rr() * (st.y1 - st.y0) * 0.3, L0 = far * (1 + rr() * 0.4);
+      const sx = aimX - dir.x * L0, sy = aimY - dir.y * L0;
+      // end on the inflated station box boundary along the lane
+      const dx = aimX - sx, dy = aimY - sy, len = Math.hypot(dx, dy) || 1;
       const bx0 = st.x0 - CELL * 0.9, by0 = st.y0 - CELL * 0.9, bx1 = st.x1 + CELL * 0.9, by1 = st.y1 + CELL * 0.9;
       let tHit = 1;
       for (let k = 0; k <= 200; k++) { const tt = k / 200, px = sx + dx * tt, py = sy + dy * tt; if (px >= bx0 && px <= bx1 && py >= by0 && py <= by1) { tHit = tt; break; } }
       const ex = sx + dx * tHit, ey = sy + dy * tHit;
-      const perp = (rr() - 0.5) * len * 0.5;
+      const perp = 0;                                          // straight: a lane is an axis
       const cx = (sx + ex) / 2 - dy / len * perp, cy = (sy + ey) / 2 + dx / len * perp;
       const lane = { sx, sy, cx, cy, ex, ey, next: ST.time + 1 + rr() * 6 };
       S.lanes.push(lane);

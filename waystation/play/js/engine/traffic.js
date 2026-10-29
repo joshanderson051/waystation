@@ -18,7 +18,15 @@
 // departure. Tier 2 above zoom 0.9 only, pooled, capped at 24, none
 // under reduced motion.
 //
-// Ship positions come from Sim.state.ships (cells); the engine only reads.
+// A7 ("one connected station"): ships fly the grid's axes. A render can face down-left (as drawn, axis B) or
+// down-right (mirrored, axis A), so every visual path runs nose first DOWN the screen along one axis: the
+// berth's lane (perpendicular to the dock -> berth direction, so a docked ship lies broadside to its dock with a
+// corridor gangway), approached from the far side out of deep space, left onward toward the camera. The Sim's
+// straight lines in grid space only supply progress (its remaining distance is laid out upstream of the park
+// point); queued ships hold above the station's far corners pointing at it. In flight a ship rides ALT px above
+// its ground track with its shadow on the deck; docked it sits at deck level, depth-sorted with the modules.
+//
+// Ship progress comes from Sim.state.ships (cells); the engine only reads.
 // Classic script: exports the global `EngineTraffic`.
 // ============================================================
 'use strict';
@@ -30,7 +38,9 @@ const EngineTraffic = (() => {
   const TRAIL_PTS = 12, TRAIL_STEP = 3.5, FADE_MS = 240;
   // A6 render geometry (unmirrored): nose at the lower-left, stern at the upper-right; fractions of the sprite width
   const ART_W = { courier: 0.95, freighter: 1.25, hauler: 1.45, liner: 1.7 };
-  const PARK_OUT = 1.25;                 // docked ships park this many cells out from the dock's open side (never over a neighbouring pad)
+  const ISO = ST.ISO;
+  const PARK_OUT = 1.2;                  // docked ships park this many cells out from the dock, on the berth side
+  const ALT = 0.55 * CELL, BLEND_MS = 900; // flight altitude above the ground track; glide when a plan changes mid-flight
   const CLASS_FALLBACK = { courier: 'kestrel_courier', freighter: 'halvorsen_freighter', hauler: 'halvorsen_hauler', liner: 'aurelian_liner' };
   const STERN = { x: 0.36, y: -0.27 }, NOSE = { x: -0.38, y: 0.27 };
   const AXIS = (() => { const dx = STERN.x - NOSE.x, dy = STERN.y - NOSE.y, l = Math.hypot(dx, dy); return { x: dx / l, y: dy / l }; })();
@@ -54,7 +64,7 @@ const EngineTraffic = (() => {
   const hasShips = () => typeof Ships !== 'undefined' && Ships && typeof Ships.hullCanvas === 'function';
   const hullDef = cls => (hasShips() && Ships.HULLS && Ships.HULLS[cls]) || { nose: 26, tail: -26, halfW: 13, exhaust: { x: -26, y: 0 }, engines: [{ x: -26, y: 0 }], nav: [{ x: 0, y: -12 }, { x: 0, y: 12 }] };
   const halfLength = cls => ((typeof SHIP_CLASSES !== 'undefined' && SHIP_CLASSES[cls]) ? SHIP_CLASSES[cls].size : 8) * CELL / 14;
-  const wx = x => x * CELL, wy = y => y * CELL;
+  const toW = (x, y) => ISO.toWorld(x, y);                 // Sim position (column, row in cells) to world
   const simState = () => (typeof Sim !== 'undefined' && Sim) ? Sim.state : null;
   const hash = n => (Math.imul(n | 0, 2654435761) >>> 0);
 
@@ -135,7 +145,8 @@ const EngineTraffic = (() => {
       trail: new PIXI.Graphics(), trailPts: [],
       hold: null, hoverRing: new PIXI.Graphics(), vector: new PIXI.Graphics(),
       entry: { x0: ship.x, y0: ship.y, state: ship.state }, vectorKey: '',
-      departAt: 0, band: 0, park: 0, drawX: wx(ship.x), drawY: wy(ship.y),
+      departAt: 0, band: 0, drawX: toW(ship.x, ship.y).x, drawY: toW(ship.x, ship.y).y,
+      lane: null, hold0: null, dep0: null, pose: null, blend: null,
     };
     rec.shadow.anchor.set(0.5); rec.shadow.alpha = 0.35; rec.shadow.tint = 0x000000;
     rec.artShadow.anchor.set(0.5); rec.artShadow.alpha = 0.35; rec.artShadow.tint = 0x000000; rec.artShadow.visible = false;
@@ -189,28 +200,28 @@ const EngineTraffic = (() => {
     for (const ship of s.ships) {
       let rec = S.recs.get(ship);
       if (!rec) { rec = createRec(ship); S.recs.set(ship, rec); }
-      const ang = ship.angle || 0;
       const moving = ship.state === 'approach' || ship.state === 'depart', queued = ship.state === 'queue', docked = ship.state === 'docked';
+      const pose = flightPose(ship, rec), ang = pose.ang;
       // art arrival and cross-fade from the baked hull
       adoptArt(rec);
       let artK = rec.artState === 'art' ? 1 : 0;
       if (rec.artState === 'fading') { artK = U.clamp((nowM - rec.fadeT0) / FADE_MS, 0, 1); if (artK >= 1) rec.artState = 'art'; }
       const useArt = artK > 0;
-      // mirror by heading (never rotate); docked ships settle with the nose toward their dock
-      let mirror = rec.mirror;
-      if (moving || queued) mirror = Math.cos(ang) > 0 ? -1 : 1;
-      else if (docked && ship.dock) { const dx = wx(ship.dock.c + 0.5) - wx(ship.x); if (Math.abs(dx) > 1) mirror = dx > 0 ? -1 : 1; }
+      // the render faces its axis: as drawn for B (nose down-left), mirrored for A (nose down-right); never rotated
+      const mirror = pose.axis === 'A' ? -1 : 1;
       rec.mirror = mirror;
       rec.flip += (mirror - rec.flip) * Math.min(1, dt * 8);
       if (Math.abs(rec.flip - mirror) < 0.02) rec.flip = mirror;
-      // docked: settle 1.25 cells out from the dock's open side (eased over ~400 ms) and bob 1.5 px at 0.4 Hz
-      const pk = parkPoint(ship);
-      rec.park += ((docked && pk ? 1 : 0) - rec.park) * Math.min(1, dt * 6);
-      if (rec.park < 0.01) rec.park = 0;
+      // docked ships bob 1.5 px at 0.4 Hz; in flight a ship rides pose.alt above its ground track
       const bob = docked && !reduced ? Math.sin(t * TAU * 0.4 + (ship.id || 0)) * 1.5 : 0;
-      const x = pk ? U.lerp(wx(ship.x), pk.x, rec.park) : wx(ship.x), y = (pk ? U.lerp(wy(ship.y), pk.y, rec.park) : wy(ship.y)) + bob;
+      const x = pose.x, y = pose.y - pose.alt + bob;
       rec.drawX = x; rec.drawY = y;
       rec.root.position.set(x, y); rec.glow.position.set(x, y);
+      rec.root.alpha = rec.glow.alpha = pose.alpha;
+      // deck level while docked (sorted with the modules by its ground point); in flight above the station
+      const layer = docked ? ST.layers.world.minis : ST.layers.traffic;
+      if (rec.root.parent !== layer) layer.addChild(rec.root);
+      if (docked) rec.root.zIndex = Math.round(ISO.depthAt(pose.x, pose.y) * 100);
       // render sprite (sized by class width, mirrored by flip) and the baked hull (rotated) under it while fading
       if (useArt) {
         const sc = rec.w / Math.max(1, rec.art.texture.width);
@@ -219,11 +230,10 @@ const EngineTraffic = (() => {
         rec.artShadow.scale.set(sc * rec.flip, sc);
       }
       rec.hull.visible = artK < 1; rec.hull.alpha = 1 - artK; rec.hull.rotation = ang;
-      // shadow only over hull (an occupied cell)
-      const cr = Math.floor(ship.y), cc = Math.floor(ship.x);
-      const overHull = !!(grid[cr] && grid[cr][cc]);
-      rec.shadow.visible = overHull && artK < 1; rec.artShadow.visible = overHull && useArt;
-      if (overHull) { rec.shadow.position.set(2, 3); rec.shadow.rotation = ang; rec.shadow.alpha = 0.35 * (1 - artK); rec.artShadow.position.set(3, 4); rec.artShadow.alpha = 0.35 * artK; }
+      // the shadow falls on the deck below: under the hull when docked, dropped by the altitude in flight
+      rec.shadow.visible = artK < 1; rec.artShadow.visible = useArt;
+      rec.shadow.position.set(2, 3 + pose.alt); rec.shadow.rotation = ang; rec.shadow.alpha = 0.3 * (1 - artK);
+      rec.artShadow.position.set(3, 4 + pose.alt); rec.artShadow.alpha = (pose.alt > 1 ? 0.2 : 0.3) * artK;
       // stern (bloom, exhaust, trail origin) and axis angle, in local coordinates
       const st = sternOf(rec, useArt, ang);
       let bloomA = 0, bloomScale = 0;
@@ -261,11 +271,67 @@ const EngineTraffic = (() => {
     updatePeople(dt, s);
   }
 
-  // Where a docked ship rests: PARK_OUT cells from the dock centre along the open side (the Sim's berth point is one cell out).
-  function parkPoint(ship) {
+  // A ship's lane (A7): the Sim's berth is a free neighbour of the dock; the ship parks PARK_OUT cells out on that
+  // side, broadside to the dock, so its axis is the other grid axis (berth along a column step -> axis B).
+  function laneOf(ship) {
     if (!ship.dock || !ship.target) return null;
-    const dx = ship.target.x - (ship.dock.c + 0.5), dy = ship.target.y - (ship.dock.r + 0.5), l = Math.hypot(dx, dy) || 1;
-    return { x: wx(ship.dock.c + 0.5 + dx / l * PARK_OUT), y: wy(ship.dock.r + 0.5 + dy / l * PARK_OUT) };
+    const dx = ship.target.x - (ship.dock.c + 0.5), dy = ship.target.y - (ship.dock.r + 0.5);
+    const alongC = Math.abs(dx) >= Math.abs(dy);
+    const og = alongC ? { gx: Math.sign(dx) || 1, gy: 0 } : { gx: 0, gy: Math.sign(dy) || 1 };
+    const axis = alongC ? 'B' : 'A';
+    // park in open space: step out from the dock until the cell and its two neighbours along the ship's axis are free
+    // (a berth in a notch between modules would bury the hull); the gangway grows into a docking arm to reach it
+    const lat = axis === 'A' ? { dr: 0, dc: 1 } : { dr: 1, dc: 0 }, occ = (r, c) => EngineWorld.occupied(r, c);
+    let out = PARK_OUT;
+    for (let k = 1; k <= 4; k++) {
+      const pr = ship.dock.r + og.gy * k, pc = ship.dock.c + og.gx * k;
+      if (occ(pr, pc)) break;
+      if (!occ(pr + lat.dr, pc + lat.dc) && !occ(pr - lat.dr, pc - lat.dc)) { out = k + PARK_OUT - 1; break; }
+    }
+    return { axis, dir: axis === 'A' ? ISO.A : ISO.B, park: toW(ship.dock.c + 0.5 + og.gx * out, ship.dock.r + 0.5 + og.gy * out), dock: { r: ship.dock.r, c: ship.dock.c } };
+  }
+  // where a queued ship holds: beside the station's upper flanks (odd ids right, even left), stacked outward, nose toward it
+  function holdPoint(ship) {
+    const st = EngineWorld.station || { x0: -120, y0: -120, x1: 120, y1: 120 };
+    const s = simState(), side = hash(ship.id) % 2;
+    const q = s ? s.ships.filter(o => o !== ship && o.state === 'queue' && hash(o.id) % 2 === side && o.id < ship.id).length : 0;
+    const x = side ? st.x1 + 1.1 * CELL + q * 0.7 * CELL : st.x0 - 1.1 * CELL - q * 0.7 * CELL;
+    return { x, y: st.y0 + (st.y1 - st.y0) * 0.2 + q * 0.45 * CELL + ALT, axis: side ? 'B' : 'A' };
+  }
+  // The visual pose of a ship this frame: ground point (x, y), altitude, axis, heading angle and alpha.
+  function flightPose(ship, rec) {
+    const st = ship.state;
+    if (st === 'approach' || st === 'docked') { const ln = laneOf(ship); if (ln) rec.lane = ln; }
+    const ln = rec.lane;
+    let x, y, alt = 0, alpha = 1, axis = 'B';
+    if (st === 'depart') {
+      if (!rec.dep0) rec.dep0 = { x: ship.x, y: ship.y };
+      const tr = Math.hypot(ship.x - rec.dep0.x, ship.y - rec.dep0.y);
+      const fromHold = !ln && rec.hold0, base = ln ? ln.park : (fromHold ? rec.hold0 : { x: rec.drawX, y: rec.drawY });
+      axis = ln ? ln.axis : (fromHold ? rec.hold0.axis : 'B');
+      const dir = axis === 'A' ? ISO.A : ISO.B;
+      x = base.x + dir.x * tr * ISO.EDGE; y = base.y + dir.y * tr * ISO.EDGE;
+      alt = ln ? ALT * Math.min(1, tr / 2) : ALT;
+      alpha = U.clamp(1 - (tr - 7) / 3, 0, 1);
+    } else if (st === 'queue' || !ln) {
+      const h = holdPoint(ship); rec.hold0 = h;
+      x = h.x; y = h.y; axis = h.axis; alt = ALT;
+    } else if (st === 'approach') {
+      const d = Math.hypot(ship.target.x - ship.x, ship.target.y - ship.y);
+      x = ln.park.x - ln.dir.x * d * ISO.EDGE; y = ln.park.y - ln.dir.y * d * ISO.EDGE;
+      alt = ALT * Math.min(1, d / 2.5); axis = ln.axis;
+    } else { x = ln.park.x; y = ln.park.y; axis = ln.axis; }
+    // a ship whose plan changes mid-flight (a queued ship given a berth) glides to its new track
+    const prev = rec.pose, nowM = U.nowMs();
+    if (prev && !rec.blend && Math.hypot(x - prev.x, (y - alt) - (prev.y - prev.alt)) > ISO.EDGE * 1.5) rec.blend = { t0: nowM, x: prev.x, y: prev.y, alt: prev.alt };
+    if (rec.blend) {
+      const k = (nowM - rec.blend.t0) / BLEND_MS;
+      if (k >= 1 || ST.reduced) rec.blend = null;
+      else { const e = U.easeInOutCubic(k); x = U.lerp(rec.blend.x, x, e); y = U.lerp(rec.blend.y, y, e); alt = U.lerp(rec.blend.alt, alt, e); }
+    }
+    const dir = axis === 'A' ? ISO.A : ISO.B;
+    rec.pose = { x, y, alt, axis, ang: Math.atan2(dir.y, dir.x), alpha };
+    return rec.pose;
   }
   // Local stern offset and the direction the exhaust points (away from the nose).
   function sternOf(rec, useArt, ang) {
@@ -319,15 +385,13 @@ const EngineTraffic = (() => {
   }
 
   function updateVector(rec, ship) {
-    const e = rec.entry;
-    if (e.state !== ship.state) { if (ship.state === 'approach' && e.state === 'queue') { e.x0 = ship.x; e.y0 = ship.y; } e.state = ship.state; }
-    const show = ship.state === 'approach' && ship.target && ST.tier > 0;
-    const key = show ? `${e.x0.toFixed(2)},${e.y0.toFixed(2)}-${ship.target.x},${ship.target.y}` : '';
+    const show = ship.state === 'approach' && rec.lane && rec.pose && ST.tier > 0;
+    const key = show ? `${Math.round(rec.pose.x / 6)},${Math.round(rec.pose.y / 6)}` : '';
     if (key === rec.vectorKey) return;
     rec.vectorKey = key;
     const g = rec.vector; g.clear();
     if (!show) return;
-    const ax = wx(e.x0), ay = wy(e.y0), bx = wx(ship.target.x), by = wy(ship.target.y);
+    const ax = rec.pose.x, ay = rec.pose.y, bx = rec.lane.park.x, by = rec.lane.park.y;   // the ground track still to fly
     const L = Math.hypot(bx - ax, by - ay) || 1, ux = (bx - ax) / L, uy = (by - ay) / L;
     const cut = Math.max(0, L - 2 * CELL);
     const ivory = U.int(U.pal('ivory')), ice = U.int(U.pal('ice'));
@@ -371,29 +435,29 @@ const EngineTraffic = (() => {
       f = { sp, spot };
     }
     f.sp.visible = f.spot.visible = false;
-    ST.layers.people.addChild(f.spot, f.sp);
+    ST.layers.world.minis.addChild(f.spot, f.sp);
     return f;
   }
   function releaseFigure(f) { f.sp.removeFromParent(); f.spot.removeFromParent(); f.sp.visible = f.spot.visible = false; if (S.pool.length < 64) S.pool.push(f); }
 
   function startVisit(ship) {
     if (!peopleAllowed() || !ship.dock || S.visits.has(ship)) return;
-    const dock = ship.dock, D = { x: wx(dock.c + 0.5), y: wy(dock.r + 0.5) }, P = parkPoint(ship) || { x: wx(ship.x), y: wy(ship.y) };
+    const dock = ship.dock, D = EngineWorld.cellCentre(dock.r, dock.c), ln = laneOf(ship), P = ln ? ln.park : toW(ship.x, ship.y);
     const dx = D.x - P.x, dy = D.y - P.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
-    const rec = S.recs.get(ship), shipHalf = rec ? rec.w * 0.12 : CELL * 0.2;
-    const from = { x: P.x + ux * shipHalf, y: P.y + uy * shipHalf };            // the ship's side
-    const to = { x: D.x - ux * CELL * 0.2, y: D.y - uy * CELL * 0.2 };          // into the bay, past the pad's edge
+    const from = { x: P.x + ux * CELL * 0.12, y: P.y + uy * CELL * 0.12 };     // the ship's side
+    const to = { x: D.x - ux * ISO.EDGE * 0.42, y: D.y - uy * ISO.EDGE * 0.42 }; // the dock's edge
     const visit = { ship, dock, from, to, pad: D, figures: [], gangway: null, loader: null, ux, uy, left: false };
-    // gangway (props/gangway.webp): the render runs from its box end (upper-left) to the collar (lower-right)
-    const gurl = ST.assets.url('props', 'gangway', 256), gtex = ST.assets.texture(gurl);
-    if (gtex) {
-      const g = ST.sprite(gtex); g.anchor.set(0.5);
-      const span = Math.hypot(to.x - from.x, to.y - from.y) + 14;
-      g.width = g.height = span / 0.95;
-      g.position.set((from.x + to.x) / 2, (from.y + to.y) / 2);
-      g.scale.x *= dx < 0 ? -1 : 1; g.scale.y *= dy < 0 ? -1 : 1;
+    // gangway (A7): the corridor tube, thinner, from the dock to the ship's side, sorted just behind the nearer-back end
+    if (EngineWorld.tube) {
+      const tex = EngineWorld.tube(), g = new PIXI.Sprite(tex.texture); g.eventMode = 'none'; g.anchor.set(0.5);
+      let gx = P.x - D.x, gy = P.y - D.y; const gl = Math.hypot(gx, gy);
+      if (gx < 0) { gx = -gx; gy = -gy; }
+      g.rotation = Math.atan2(gy, gx);
+      g.scale.set(gl / tex.w, 0.15 * CELL / tex.h);
+      g.position.set((P.x + D.x) / 2, (P.y + D.y) / 2 - 0.08 * CELL);
+      g.zIndex = Math.round(Math.min(ISO.depthAt(D.x, D.y), ISO.depthAt(P.x, P.y)) * 100) - 1;
       g.alpha = 0;
-      ST.layers.people.addChildAt(g, 0);
+      ST.layers.world.minis.addChild(g);
       visit.gangway = g;
     }
     const { roles, loader } = rolesFor(ship, dock);
@@ -473,7 +537,8 @@ const EngineTraffic = (() => {
         sp.anchor.set(0.5, (f.info.baseline || f.info.cell.h) / f.info.cell.h);
         sp.scale.set(sc);
         sp.position.set(f.x, f.y);
-        spot.visible = true; spot.position.set(f.x, f.y - 1); spot.scale.set(h * CELL * 0.9 / 32, h * CELL * 0.4 / 32);
+        sp.zIndex = Math.round(ISO.depthAt(f.x, f.y) * 100) + 2;
+        spot.visible = true; spot.position.set(f.x, f.y - 1); spot.scale.set(h * CELL * 0.9 / 32, h * CELL * 0.4 / 32); spot.zIndex = sp.zIndex - 1;
       }
       if (allGone) { for (const f of v.figures) { releaseFigure(f.fx); S.figures--; } v.figures = []; }
     }
@@ -482,7 +547,7 @@ const EngineTraffic = (() => {
   // ---------------------------------------------------------------- choreography (v1 9.3 / 9.5)
   function onDock(ship) {
     if (!ship || !ship.dock) return;
-    const cx = wx(ship.dock.c + 0.5), cy = wy(ship.dock.r + 0.5);
+    const dc = EngineWorld.cellCentre(ship.dock.r, ship.dock.c), cx = dc.x, cy = dc.y - ISO.HH * 0.4;
     EngineFX.ring(cx, cy, 0.2 * CELL, 0.6 * CELL, U.pal('ice'), 300, 1.5);
     const path = EngineWorld.pathToStorage(ship.dock.r, ship.dock.c);
     if (path && path.length > 1) {
@@ -506,7 +571,8 @@ const EngineTraffic = (() => {
       }
     } catch (e) { /* anchor unavailable */ }
     const tw = CAM.screenToWorld(target.x, target.y);
-    EngineFX.motes([{ x: wx(ship.x), y: wy(ship.y) }, tw], U.pal('amber-hi'), 6, 600, 'in');
+    const from = rec ? { x: rec.drawX, y: rec.drawY } : toW(ship.x, ship.y);
+    EngineFX.motes([from, tw], U.pal('amber-hi'), 6, 600, 'in');
   }
   // Create the record at spawn so the approach vector starts exactly at the entry point (and the render fetch starts early).
   function onSpawn(ship) { if (ship && S.vectors && !S.recs.has(ship)) S.recs.set(ship, createRec(ship)); }
@@ -517,7 +583,7 @@ const EngineTraffic = (() => {
     let best = null, bd = Infinity;
     for (const sh of s.ships) {
       const rec = S.recs.get(sh);
-      const d = rec ? Math.hypot(x - rec.drawX, y - rec.drawY) : Math.hypot(x - wx(sh.x), y - wy(sh.y)), R = rec ? hitRadius(rec) : halfLength(sh.cls) + 4;
+      const sw = toW(sh.x, sh.y), d = rec ? Math.hypot(x - rec.drawX, y - rec.drawY) : Math.hypot(x - sw.x, y - sw.y), R = rec ? hitRadius(rec) : halfLength(sh.cls) + 4;
       if (d < R && d < bd) { bd = d; best = sh; }
     }
     return best;

@@ -210,8 +210,32 @@ const EngineUtil = (() => {
 const EngineStage = (() => {
   const U = EngineUtil;
 
-  // World cell size in CSS px at zoom 1 (v1 cell at 1440x900 was 55px).
+  // World cell size in CSS px at zoom 1 (v1 cell at 1440x900 was 55px). Since A7 it is the size unit for
+  // sprites (ships, people, chips) and the side of a cell in the flat "ground" coordinates; positions on screen
+  // come from the projection below.
   const CELL = 56;
+  // A7: the world is laid out in the art pack's projection. Every render in the pack is drawn from one raised
+  // three-quarter camera whose ground lines run along the screen diagonals at about 37 degrees (ship hulls
+  // measure 34-40, median 37.7; the docking bay's corridor 35). A cell is a diamond HW*2 wide and HH*2 tall;
+  // column c runs down-right (axis A), row r runs down-left (axis B), so a module's ports, a corridor and a
+  // ship's hull line up with the grid. World (x, y) of grid point (gx, gy) = ((gx - gy) HW, (gx + gy) HH).
+  const ISO_HW = 33, ISO_RATIO = 0.76, ISO_HH = ISO_HW * ISO_RATIO;
+  const ISO = (() => {
+    const HW = ISO_HW, HH = ISO_HH, EDGE = Math.hypot(HW, HH);
+    const toWorld = (gx, gy) => ({ x: (gx - gy) * HW, y: (gx + gy) * HH });
+    return {
+      HW, HH, EDGE, RATIO: ISO_RATIO,
+      A: { x: HW / EDGE, y: HH / EDGE },                 // unit screen vector of +c (down-right)
+      B: { x: -HW / EDGE, y: HH / EDGE },                // unit screen vector of +r (down-left)
+      toWorld,
+      toGrid: (x, y) => ({ gx: (x / HW + y / HH) / 2, gy: (y / HH - x / HW) / 2 }),
+      centre: (r, c) => toWorld(c + 0.5, r + 0.5),
+      // flat ground coordinates (c * CELL, r * CELL) to world, for things placed in ground space
+      ground: (x, y) => toWorld(x / CELL, y / CELL),
+      // painter's depth of a world point: larger is nearer the camera
+      depthAt: (x, y) => y / HH,
+    };
+  })();
   // Zoom bands: textures are baked at the band's upper bound so art stays crisp (3.1).
   const BANDS = [0.75, 1.25, 2.0, 2.6];
   const TIER_FPS_DOWN = 45, TIER_FPS_UP = 57;
@@ -274,6 +298,13 @@ const EngineStage = (() => {
   // Layer tree (3.1). Space layers move with a fraction of the camera; everything from
   // world.shadow up lives in `cam`. `bloomGroup` wraps emissive + trafficGlow (engine bloom, nav
   // lights, trails) so one filter serves both; hulls sit in `traffic` above it so they stay crisp.
+  // outer squashes y by HH/HW, inner turns the flat grid 45 degrees and scales a cell to the diamond's edge
+  function ground(outer, inner) {
+    outer.scale.set(1, ISO.HH / ISO.HW);
+    inner.rotation = Math.PI / 4;
+    inner.scale.set(Math.SQRT2 * ISO.HW / CELL);
+    outer.addChild(inner);
+  }
   function buildLayers() {
     const C = () => new PIXI.Container();
     const L = {
@@ -283,7 +314,8 @@ const EngineStage = (() => {
       },
       cam: C(),
       lanes: C(),
-      world: { shadow: C(), truss: C(), plates: C(), minis: C(), scaffold: C(), emissive: C() },
+      world: { ground: C(), groundInner: C(), shadow: C(), plates: C(), groundTop: C(), truss: C(), minis: C(), scaffold: C(), emissive: C() },
+      overlayGround: C(), overlayGroundInner: C(),
       bloomGroup: C(),
       trafficGlow: C(),
       traffic: C(),
@@ -295,8 +327,17 @@ const EngineStage = (() => {
     };
     for (const k of ['far', 'mid']) { L.space[k].root.addChild(L.space[k].fixed, L.space[k].moving); L.space[k].root.label = 'space.' + k; }
     L.bloomGroup.addChild(L.world.emissive, L.trafficGlow);
-    // A6: `world.minis` holds the module renders (painter's order) above the pads; `people` walks above the ships
-    L.cam.addChild(L.lanes, L.world.shadow, L.world.truss, L.world.plates, L.world.minis, L.world.scaffold, L.bloomGroup, L.traffic, L.people, L.fx, L.overlay);
+    // A7: `world.ground` carries the projection, so everything that lies flat (plot field, debris, shadows, deck
+    // pads, scaffold frames, hover and selection marks) is drawn in flat ground coordinates (c * CELL, r * CELL)
+    // and lands on the diamond grid. `world.minis` holds what stands up (module renders, corridors, docked ships,
+    // gangways, people), sorted by zIndex = depth. `overlayGround` is the same projection above everything, for
+    // the placement grid.
+    ground(L.world.ground, L.world.groundInner);
+    L.world.groundInner.addChild(L.world.shadow, L.world.plates, L.world.groundTop);
+    L.world.minis.sortableChildren = true;
+    ground(L.overlayGround, L.overlayGroundInner);
+    L.overlay.addChild(L.overlayGround);
+    L.cam.addChild(L.lanes, L.world.ground, L.world.truss, L.world.minis, L.world.scaffold, L.bloomGroup, L.traffic, L.people, L.fx, L.overlay);
     L.cam.label = 'cam'; L.bloomGroup.label = 'bloom'; L.fxScreen.label = 'fxScreen'; L.post.label = 'post';
     for (const k in L.world) L.world[k].label = 'world.' + k;
     L.cam.eventMode = 'none'; L.post.eventMode = 'none'; L.fxScreen.eventMode = 'none';
@@ -541,7 +582,7 @@ const EngineStage = (() => {
 
   // ---------------------------------------------------------------- public
   return {
-    CELL, BANDS,
+    CELL, BANDS, ISO,
     init, resize, onResize, onFrame, onTier, onFonts,
     makeText, setTextColor, bake, glowTexture, textureFromCanvas, updateTexture, destroyTexture, sprite, bandFor,
     setTier, reportError, assets,

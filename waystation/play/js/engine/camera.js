@@ -3,8 +3,8 @@
 // Pan, zoom-to-cursor, inertia, bounds, focus/fit tweens, title drift,
 // shake, panel avoidance, world<->screen (DESIGN2.md 3.2).
 //
-// World units are CSS px at zoom 1; cell (r, c) spans
-// [c*CELL, (c+1)*CELL] x [r*CELL, (r+1)*CELL]. The camera state is the
+// World units are CSS px at zoom 1; since A7 cell (r, c) is a diamond centred at
+// EngineStage.ISO.centre(r, c) (the art pack's projection). The camera state is the
 // world point under the viewport centre (x, y) plus the zoom. Space layers
 // follow with a fraction of the camera (parallax).
 // Classic script: exports the global `EngineCamera`.
@@ -14,7 +14,7 @@
 const EngineCamera = (() => {
   const U = EngineUtil, ST = EngineStage;
   const CELL = ST.CELL;
-  const ZOOM_MIN = 0.55, ZOOM_MAX = 2.6, FIT_ZOOM_MAX = 1.5;   // fit() never frames tighter than 1.5 (3.2)
+  const ZOOM_MIN = 0.55, ZOOM_MAX = 2.6, FIT_ZOOM_MAX = 1.9;   // fit() never frames tighter than 1.9 (3.2; A7: the diamond grid packs modules closer)
   const FRICTION = 0.92;                 // per frame at 60 fps
   const DRIFT_RADIUS = 1.2 * CELL, DRIFT_PERIOD = 90, BREATHE_PERIOD = 16;
 
@@ -27,7 +27,7 @@ const EngineCamera = (() => {
     gridBox: null,                       // whole grid, world px
     drift: false, driftK: 0,             // driftK eases 0..1 so toggling never jumps
     shakeAmp: 0, shakeT0: 0,
-    avoidShift: 0, userMoved: false,
+    avoidShift: 0, avoidZoom: 0, userMoved: false,
     changed: true, listeners: [],
     lastEmit: { zoom: 0, x: 0, y: 0 },
   };
@@ -140,7 +140,8 @@ const EngineCamera = (() => {
   }
   function focusCell(r, c, opts) {
     const o = opts || {};
-    tweenTo((c + 0.5) * CELL, (r + 0.5) * CELL, o.zoom != null ? o.zoom : S.zoom, o.ms != null ? o.ms : 600);
+    const p = ST.ISO.centre(r, c);
+    tweenTo(p.x, p.y - ST.ISO.HH * 0.6, o.zoom != null ? o.zoom : S.zoom, o.ms != null ? o.ms : 600);
     S.userMoved = true;
   }
   // Frame the station with a 15% margin; `extra` is a screen rect to keep clear (panel).
@@ -156,15 +157,15 @@ const EngineCamera = (() => {
   function fit(opts) {
     const o = opts || {}, t = fitTarget();
     tweenTo(t.x, t.y, t.zoom, o.ms != null ? o.ms : 600);
-    S.avoidShift = 0; S.userMoved = false;
+    S.avoidShift = 0; S.avoidZoom = 0; S.userMoved = false;
   }
-  function snapFit() { const t = fitTarget(); S.x = t.x; S.y = t.y; S.zoom = t.zoom; S.tween = null; S.changed = true; S.avoidShift = 0; S.userMoved = false; }
+  function snapFit() { const t = fitTarget(); S.x = t.x; S.y = t.y; S.zoom = t.zoom; S.tween = null; S.changed = true; S.avoidShift = 0; S.avoidZoom = 0; S.userMoved = false; }
 
   // Panel avoidance: shift so the station clears `rect` (host CSS px {x,y,width,height} or a DOMRect).
   function avoid(rect) {
     if (!rect) {
-      if (S.avoidShift && !S.userMoved) tweenTo(S.x - S.avoidShift, S.y, S.zoom, 360);
-      S.avoidShift = 0;
+      if (S.avoidShift && !S.userMoved) tweenTo(S.x - S.avoidShift, S.y, S.avoidZoom || S.zoom, 360);
+      S.avoidShift = 0; S.avoidZoom = 0;
       return;
     }
     // accepts a DOMRect ({x,y,width,height}) or the HUD's short form ({x,y,w,h})
@@ -175,11 +176,16 @@ const EngineCamera = (() => {
     const a = worldToScreen(b.x0, b.y0), bb = worldToScreen(b.x1, b.y1);
     const hit = !(bb.x < rx || a.x > rx + rw || bb.y < ry || a.y > ry + rh);
     if (!hit) return;
-    // pan away from the rect's side: a left panel pushes the view right (camera centre moves left in world)
-    const leftSide = rx + rw / 2 < ST.w / 2;
-    const shiftWorld = (rw / 2) / E.z * (leftSide ? -1 : 1);
-    S.avoidShift += shiftWorld;
-    tweenTo(S.x + shiftWorld, S.y, S.zoom, 360);
+    // A7: centre the station in the free space beside the panel, zooming out when it cannot fit there; closing the
+    // panel restores both the position and the zoom
+    const leftSide = rx + rw / 2 < ST.w / 2, margin = 28;
+    const fx0 = leftSide ? rx + rw + margin : margin, fx1 = leftSide ? ST.w - margin : rx - margin;
+    if (fx1 - fx0 <= 40) return;
+    const z = Math.min(S.zoom, Math.max(ZOOM_MIN, (fx1 - fx0) / Math.max(1, b.x1 - b.x0)));
+    const camX = (b.x0 + b.x1) / 2 - ((fx0 + fx1) / 2 - ST.w / 2) / z;
+    if (!S.avoidZoom) S.avoidZoom = S.zoom;
+    S.avoidShift += camX - S.x;
+    tweenTo(camX, S.y, z, 360);
     S.userMoved = false;
   }
 

@@ -680,3 +680,30 @@ The owner had a complete art pack generated (377 PNGs, one visual language: dark
 ### A6.4 Landing page, manual, link preview (integrator)
 
 Landing hero = the key art in the glass frame (replacing the UI screenshot), with the UI screenshot moved to a second figure under "The bridge"; the feature cards and roster use the module renders; a sector strip shows the eight cards; a Registry teaser shows three species. `assets/og.jpg` = a 1200×630 crop of the key art; `assets/hero.jpg|webp` = the key art. The manual's figures are regenerated after the integration lands.
+
+## Addendum A7 — one connected station: the art's own projection (2026-10-29, owner's brief)
+
+The owner: the buildings and ships should face the right way and look connected, not jumbled; seamless. Cause: every pack render is drawn from one raised three-quarter camera whose ground lines run along the screen diagonals (ship hulls measure 34–40 degrees, median 37.7; the docking bay's corridor 35), while A6 stood them on a flat square grid joined by horizontal and vertical trusses, and ships slid across the screen with their noses on a diagonal. A7 lays the world out in the art's projection, the way Clash of Clans and DragonVale lay out theirs.
+
+### A7.1 Projection (`stage.js`)
+- `EngineStage.ISO`: a cell is a diamond `2·HW` wide and `2·HH` tall (`HW = 33`, `HH = 0.76·HW`); grid point (gx, gy) sits at world `((gx − gy)·HW, (gx + gy)·HH)`. Column c runs down-right (axis A), row r down-left (axis B). Helpers: `toWorld`, `toGrid`, `centre(r, c)`, `ground(x, y)` (flat ground coordinates to world), `depthAt` (= y / HH), unit vectors `A`, `B`, `EDGE`.
+- `CELL` (56) stays the size unit for sprites and the side of a cell in flat ground coordinates `(c·CELL, r·CELL)`.
+- Layers: `world.ground` → `world.groundInner` carry the projection as a transform (squash y by HH/HW, turn 45 degrees, scale √2·HW/CELL), so everything flat is drawn in ground coordinates and lands on the diamond grid: `world.shadow` (plot field, debris, module shadows), `world.plates` (deck), `world.groundTop` (hover and selection marks, scaffold frames and rings, the clearing band). `overlayGround` is the same transform above everything for the placement grid. `world.minis` is sortable: modules, corridors, docked ships, gangways and people take `zIndex = depth · 100`.
+
+### A7.2 Modules and the deck (`world.js`)
+- A render stands on its cell: its footprint (the opaque width, a diamond RATIO as tall whose lowest point is the lowest opaque pixel) is scaled to 0.86 of the cell diamond's width (hub 0.95) and centred on the cell centre. The opaque box and a 128² alpha mask are measured once per texture. Painter's order: r + c, then c.
+- The deck: one gunmetal plate under every occupied cell (ground layer) with inner panels, seams between neighbours, a lit outer rim and a thin family-hue line around each cell; its two camera-facing sides drop 6 px as a slab (upright, in `world.truss`). Upgrade ticks sit on the front edge.
+- Corridors replace the trusses: a baked tube (crown highlight, rings, amber windows, crown lights) laid from cell centre to cell centre along the grid axis, lifted 0.09 cell, sorted just behind the module further back so both renders cover its ends. Liveries colour the deck's rim and the crown lights (Standard: hull edge and cyan).
+- Picking: outside placement `cellAt` tests the renders front to back against their alpha masks (a tall module rises into the cells behind it), then the ground diamond.
+- Bank chips float above the render's opaque top; the scaffold timer and the plot's clearing label stand upright at the cell's and the plot's lowest points; FX centre on the module body (half a cell above the deck point).
+
+### A7.3 Ships (`traffic.js`)
+- A render faces down-left as drawn (axis B) or down-right mirrored (axis A); never rotated. Every visual path runs nose first down the screen along one axis. The Sim's straight lines only supply progress.
+- Lane: the Sim's berth is a free neighbour of the dock; the ship lies broadside to the dock on that side (berth along a column step → axis B, along a row step → axis A), parked 1.2 cells out, or further out (up to 4 cells) until its cell and both neighbours along its axis are free, so it never sits buried in a notch. The gangway is the corridor tube from dock to ship; figures walk it, depth-sorted.
+- Approach: the remaining Sim distance is laid out upstream of the park point along the lane (the ship comes out of deep space on the far side) at an altitude that eases from 0.55 cell to the deck over the last 2.5 cells. Depart: onward along the lane, climbing, fading after 7 cells. Queue: holding points beside the station's upper flanks (stacked outward), nose toward it. A changed plan glides over 0.9 s. In flight a ship draws above the station with its shadow dropped by the altitude; docked it sits at deck level, sorted with the modules.
+
+### A7.4 Elsewhere
+- Camera: `focusCell` aims at the module body; `fit` frames up to zoom 1.9; panel avoidance centres the station in the free space beside a panel (zooming out when it cannot fit) and restores position and zoom on close.
+- Backdrop traffic lanes run along the two diagonals from the far side. `Engine.thumbnail` draws the deck, corridors and renders in the projection. Input, FX and the HUD read positions through `Engine.cellToScreen` / `cellBounds`, unchanged in shape.
+- Manual: "In the world", the ships paragraph, the glossary (Miniature and deck; Corridor) and the livery paragraph describe the deck, corridors and lanes; all eleven figures and the landing page's bridge picture were reshot.
+- Gates: the 40-step journey clean, sim-test 332, phone tap-to-select on a render, liveries visible on the deck rim, the dev engine harness clean.
