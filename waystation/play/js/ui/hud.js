@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — ui/hud.js
+// PORT SOLACE v2 — ui/hud.js
 // Engineer H. Source of truth: DESIGN2.md 0.4 (the UI facade, verbatim),
 // 0.6 (bus events), 0.7 (body attributes), 2.4 (layout), 2.6 (motion),
 // 5.1 (keys), 5.4 (title ids), 8 (accessibility); DESIGN.md 12.2 (hint table).
@@ -97,7 +97,7 @@ const MetaAdapter = {
   exportSave() { return call(Meta, 'export', [], ''); },
   importSave(json) { return call(Meta, 'import', [json], false); },
   scrapStation() { if (has(Meta, 'newStationHere')) { Meta.newStationHere(); return true; } if (has(Sim, 'reset')) { Sim.reset(); return true; } return false; },
-  resetProfile() { if (has(Meta, 'resetProfile')) return Meta.resetProfile(); try { localStorage.removeItem('waystation.profile.v2'); localStorage.removeItem('waystation-save-v1'); } catch (e) { /* ignore */ } location.reload(); return true; },
+  resetProfile() { if (has(Meta, 'resetProfile')) return Meta.resetProfile(); try { localStorage.removeItem('portsolace.profile.v2'); localStorage.removeItem('portsolace-save-v1'); } catch (e) { /* ignore */ } location.reload(); return true; },
 };
 
 // Engine (0.3)
@@ -172,11 +172,15 @@ const AccountAdapter = {
 // ------------------------------------------------------------
 const MID2 = GLYPH.mid;
 const KEY_PANEL = { b: 'build', s: 'station', m: 'market', f: 'fleet', e: 'expeditions', g: 'map', j: 'missions', r: 'registry' };
-const regOf = name => (typeof registryOf === 'function') ? registryOf(name) : 'WS-0000';
+const regOf = name => (typeof registryOf === 'function') ? registryOf(name) : 'PS-0000';
 // A4 phone layout: the same query as style.css section 30b. CSS folds the bridge; the HUD keys the
 // behaviour that CSS cannot express off it (sheet peek and drag, the dock's More sheet, the menu).
 const PHONE_MQ = '(max-width: 760px), ((pointer: coarse) and (max-width: 1023px))';
 const MORE_PANELS = ['market', 'fleet', 'expeditions', 'registry', 'store', 'settings'];
+// M3 (the Port Solace move): the bridge page on the old address reads that origin's waystation… storage and sends it
+// back to play/import.html in the URL fragment. Offered only where the game now lives (and on local test hosts).
+const MOVE_BRIDGE = 'https://joshanderson051.github.io/move/';
+const MOVE_HOSTS = ['portsolace.com', 'www.portsolace.com', 'localhost', '127.0.0.1'];
 // achievement tiers arrive as 1..3 or as a word (TIER_WORDS comes from panels.js)
 const tierName = t => typeof t === 'string' ? t.toLowerCase() : (t >= 1 && t <= 3 ? TIER_WORDS[t - 1] : '');
 
@@ -269,10 +273,12 @@ const UI = {
       const t = e.target.closest && e.target.closest('[data-account]'); if (!t) return;
       const act = t.dataset.account;
       if (act === 'signin') this.openPortal('login'); else if (act === 'notyou') this.accountSignOut(); else if (act === 'settings') this.openAccountSettings();
+      else if (act === 'move') this.moveStation();
     });
     $('#modal').addEventListener('click', e => { const b = e.target.closest('[data-portal]'); if (b) { e.preventDefault(); this.portalAction(b.dataset.portal, b); } });
     $('#modal').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest && e.target.closest('.portal') && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); this.portalAction('submit'); } });
     AccountAdapter.setChooser(req => this.chooseSave(req));
+    const move = $('#title-move'); if (move) move.hidden = !this.canMoveStation();   // M3 on the title (Settings has its own row)
     // arrived through the link in a "Forgot your password?" email: the portal opens on "Set a new password" over the title
     if (AccountAdapter.resetToken()) requestAnimationFrame(() => this.openPortal('reset'));
     if (typeof Tutorial !== 'undefined' && Tutorial) Tutorial.onEnd = () => this.onTourEnd();
@@ -356,7 +362,7 @@ const UI = {
   buildStatusBar() {
     const el = $('#statusbar'); if (!el) return;
     el.innerHTML =
-      `<div class="sb-left"><span class="wordmark" aria-label="Waystation">Waystation</span>` +
+      `<div class="sb-left"><span class="wordmark" aria-label="Port Solace">Port Solace</span>` +
       `<button type="button" id="sb-sector" class="sb-sector" title="Open the galaxy map (G)"><span class="sb-sector-name" id="sb-sector-name">—</span><span class="sb-station micro" id="sb-station">—</span></button></div>` +
       `<div class="sb-center">` +
       `<div class="ro credits" id="ro-credits" data-tip="Credits · shared across every sector"><span class="ro-ic">${Art.img('icons', 'credits', 22, { alt: '', eager: true, fallback: icon('credits', 20) })}</span><div class="ro-main"><div class="ro-top"><span class="ro-lbl">Credits</span><span class="ro-sub" id="v-income-wrap"><i class="tri up" id="v-income-tri"></i><span class="num" id="v-income">+0</span><small>/day</small></span></div><span class="ro-val hero" id="v-credits">0</span></div></div>` +
@@ -1295,6 +1301,14 @@ const UI = {
       });
       $('#sheet .save-cards').addEventListener('click', e => { const c = e.target.closest('.save-card'); if (!c) return; const pick = c.dataset.save; finish(pick); Overlays.closeSheet(); });
     });
+  },
+  // M3: "Bring your station from the old address" (title and Settings); top-level navigation to the bridge
+  canMoveStation() { try { return MOVE_HOSTS.includes(location.hostname); } catch (e) { return false; } },
+  moveStationUrl() { return MOVE_BRIDGE + '?to=' + encodeURIComponent(new URL('import.html', location.href).href); },
+  moveStation() {
+    if (!this.canMoveStation()) return;
+    MetaAdapter.saveSettings();          // saves the profile before the page goes
+    location.assign(this.moveStationUrl());
   },
   openAccountSettings() { this.openPanel('settings'); setTimeout(() => { const el = $('#acct-shelf'); if (el) el.scrollIntoView({ block: 'start', behavior: Motion.reduced() ? 'auto' : 'smooth' }); }, 60); },
   accountSync(btn) {

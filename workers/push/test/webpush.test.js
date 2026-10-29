@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — push worker tests, part 1: the Web Push primitives (src/webpush.js)
+// PORT SOLACE — push worker tests, part 1: the Web Push primitives (src/webpush.js)
 // Run with `npm test` in workers/push (node:test). Checks the aes128gcm construction against the
 // RFC 8291 Appendix A vector, round-trips with fresh browser-style keys, and verifies the VAPID JWT
 // with WebCrypto. Nothing touches the network.
@@ -63,7 +63,7 @@ describe('aes128gcm (RFC 8291)', () => {
   });
   test('round-trips a JSON payload with fresh browser keys and an ephemeral sender key', async () => {
     const ua = await browserKeys();
-    const payload = JSON.stringify({ title: 'Comms Relay online', body: 'Varro Reach is waiting on the bridge.', tag: 'waystation' });
+    const payload = JSON.stringify({ title: 'Comms Relay online', body: 'Varro Reach is waiting on the bridge.', tag: 'portsolace' });
     const a = await encrypt(utf8(payload), { p256dh: ua.p256dh, auth: ua.auth });
     const b = await encrypt(utf8(payload), { p256dh: ua.p256dh, auth: ua.auth });
     assert.notEqual(b64u.encode(a), b64u.encode(b), 'a new salt and sender key every time');
@@ -117,7 +117,7 @@ describe('VAPID (RFC 8292)', () => {
 
   test('caps exp at 24 hours, accepts https subjects and padded keys, rejects other subjects', async () => {
     const now = 1_760_000_000_000;
-    const h = await vapidAuthorization({ endpoint: 'https://updates.push.services.mozilla.com/wpush/v2/x', publicKey: keys.publicKey + '=', privateKey: keys.privateKey, subject: 'https://joshanderson051.github.io/waystation/', now, expiresInS: 99 * 3600 });
+    const h = await vapidAuthorization({ endpoint: 'https://updates.push.services.mozilla.com/wpush/v2/x', publicKey: keys.publicKey + '=', privateKey: keys.privateKey, subject: 'https://portsolace.com/', now, expiresInS: 99 * 3600 });
     const claims = JSON.parse(new TextDecoder().decode(b64u.decode(h.split(' ')[1].slice(2).split('.')[1])));
     assert.equal(claims.exp, Math.floor(now / 1000) + VAPID_MAX_AGE_S);
     assert.equal(claims.aud, 'https://updates.push.services.mozilla.com');
@@ -136,7 +136,7 @@ describe('sendPush', () => {
     const sub = { endpoint: 'https://push.example.com/send/one', keys: { p256dh: ua.p256dh, auth: ua.auth } };
     const calls = [];
     const fetchImpl = async (url, init) => { calls.push({ url, init }); return new Response('', { status: 201 }); };
-    const r = await sendPush(sub, { title: 'Dock online', body: 'x' }, { vapid: vapid(), topic: 'waystation', fetchImpl });
+    const r = await sendPush(sub, { title: 'Dock online', body: 'x' }, { vapid: vapid(), topic: 'portsolace', fetchImpl });
     assert.deepEqual(r, { ok: true, status: 201, gone: false, retry: false, body: '' });
     assert.equal(calls.length, 1);
     assert.equal(calls[0].url, sub.endpoint);
@@ -146,7 +146,7 @@ describe('sendPush', () => {
     assert.equal(h['content-type'], 'application/octet-stream');
     assert.equal(h.ttl, '86400');
     assert.equal(h.urgency, 'normal');
-    assert.equal(h.topic, 'waystation');
+    assert.equal(h.topic, 'portsolace');
     assert.match(h.authorization, /^vapid t=.+, k=.+$/);
     const plain = await decrypt(calls[0].init.body, ua.privateKey, ua.publicRaw, ua.auth);
     assert.deepEqual(JSON.parse(new TextDecoder().decode(plain)), { title: 'Dock online', body: 'x' });

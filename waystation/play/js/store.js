@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — store: catalog, providers (sandbox | stripe), purchase, claim, restore
+// PORT SOLACE — store: catalog, providers (sandbox | stripe), purchase, claim, restore
 // DESIGN2.md section 7 (7.1 catalog, 7.2 client, 7.4 server contract).
 // Classic script; exposes the `Store` global (0.2). No framework, no bundler.
 //
@@ -28,11 +28,11 @@ const Store = (() => {
   const SECTOR_LIVERIES = ['sable', 'kessler', 'thessaly', 'marrow', 'oros', 'keth'];
 
   const KEYS = {
-    config:   'waystation.store',            // JSON override of the <meta> config (local testing)
-    pending:  'waystation.store.pending',    // grants waiting for Meta: [{grantId, sku, mode, at}]
-    grants:   'waystation.store.grants',     // local ledger when Meta is absent: [{grantId, sku, mode, at}]
-    inflight: 'waystation.store.inflight',   // the checkout we left the page for: {sku, sessionId, at, unclaimed}
-    playerId: 'waystation.playerId',         // uuid used until Meta.profile.playerId exists
+    config:   'portsolace.store',            // JSON override of the <meta> config (local testing)
+    pending:  'portsolace.store.pending',    // grants waiting for Meta: [{grantId, sku, mode, at}]
+    grants:   'portsolace.store.grants',     // local ledger when Meta is absent: [{grantId, sku, mode, at}]
+    inflight: 'portsolace.store.inflight',   // the checkout we left the page for: {sku, sessionId, at, unclaimed}
+    playerId: 'portsolace.playerId',         // uuid used until Meta.profile.playerId exists
   };
 
   const DEFAULTS = { mode: 'sandbox', apiBase: '', successPath: '', latencyMs: 600 };
@@ -313,11 +313,11 @@ const Store = (() => {
   // ---------------------------------------------------------- configuration (7.2)
   function readTagConfig() {
     if (!hasDoc() || typeof document.querySelector !== 'function') return {};
-    const tag = document.querySelector('meta[name="waystation-store"]');
+    const tag = document.querySelector('meta[name="portsolace-store"]');
     const content = tag && (typeof tag.getAttribute === 'function' ? tag.getAttribute('content') : tag.content);
     if (!content) return {};
     try { const v = JSON.parse(content); return v && typeof v === 'object' ? v : {}; }
-    catch (e) { warn('The waystation-store meta tag is not valid JSON; using sandbox.'); return {}; }
+    catch (e) { warn('The portsolace-store meta tag is not valid JSON; using sandbox.'); return {}; }
   }
   function readLocalOverride() {
     const v = readJson(KEYS.config, null);
@@ -334,7 +334,7 @@ const Store = (() => {
       if (o.latencyMs !== undefined) next.latencyMs = Math.max(0, Number(o.latencyMs) || 0);
     };
     apply(opts || {});
-    apply(readLocalOverride());          // localStorage['waystation.store'] always wins: local testing against another origin
+    apply(readLocalOverride());          // localStorage['portsolace.store'] always wins: local testing against another origin
     if (!MODES.has(next.mode)) { warn(`Unknown store mode "${next.mode}"; using sandbox.`); next.mode = 'sandbox'; }
     if (next.mode === 'stripe' && !/^https?:\/\/\S+$/.test(next.apiBase)) { warn('Stripe mode needs an http(s) apiBase; using sandbox.'); next.mode = 'sandbox'; }
     Object.assign(config, next);

@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — ui/overlays.js
+// PORT SOLACE v2 — ui/overlays.js
 // Engineer H. Source of truth: DESIGN2.md 2.6 (celebrations), 5.3
 // (overlays), DESIGN.md 6.7 / 6.8 / 6.10 (tooltip, modal, toast grammar).
 //

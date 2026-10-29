@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — store backend: Cloudflare module Worker (DESIGN2.md 7.4)
+// PORT SOLACE — store backend: Cloudflare module Worker (DESIGN2.md 7.4)
 // Plain fetch to the Stripe REST API. No SDK, no npm runtime dependencies.
 //
 // Endpoints

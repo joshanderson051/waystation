@@ -1,8 +1,8 @@
 {
-  "name": "waystation-push-worker",
+  "name": "portsolace-push-worker",
   "version": "1.0.0",
   "private": true,
-  "description": "Waystation push notifications: a Cloudflare Worker that stores Web Push subscriptions and timers in KV and sends VAPID-signed, aes128gcm-encrypted notifications from a 1-minute cron. No runtime dependencies.",
+  "description": "Port Solace push notifications: a Cloudflare Worker that stores Web Push subscriptions and timers in KV and sends VAPID-signed, aes128gcm-encrypted notifications from a 1-minute cron. No runtime dependencies.",
   "type": "module",
   "main": "src/index.js",
   "scripts": {

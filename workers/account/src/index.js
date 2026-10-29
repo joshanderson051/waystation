@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — account backend: Cloudflare module Worker (DESIGN2.md Addendum A2.1)
+// PORT SOLACE — account backend: Cloudflare module Worker (DESIGN2.md Addendum A2.1)
 // Email + password accounts and one cloud save per account. WebCrypto only; no SDK, no npm runtime
 // dependencies. Same house style as workers/store. Constants and pure helpers live in lib.js (a Worker's
 // main module may only export handlers and functions).
@@ -17,6 +17,9 @@
 //                                                            409 {error:'conflict', server:{version, updatedAt, summary}}
 //   DELETE /account   (Bearer) {password}                 -> {ok}
 //   GET    /health                                        -> configuration summary (no secrets)
+//   Port Authority (A9, src/portauthority.js; D1 binding DB): POST /presence, POST /gifts/ack, and the admin API
+//   GET /admin/stats, GET /admin/players, GET /admin/players/:playerId, POST /admin/gifts,
+//   POST /admin/gifts/:id/revoke, GET /admin/log (Bearer token of an account listed in both ADMIN_USER_IDS and ADMIN_EMAILS)
 //
 // Passwords and recovery phrases: PBKDF2-SHA256, 100,000 iterations (the Workers maximum), 16-byte salt, PEPPER appended to the
 // secret. Tokens: 32 random bytes base64url, stored by their SHA-256 with a sliding 30-day TTL and the
@@ -37,7 +40,10 @@
 // Environment (wrangler.toml [vars] / `wrangler secret put`)
 //   ALLOWED_ORIGIN   comma-separated list of site origins allowed to call this worker
 //   PEPPER           secret; a long random string appended to every password and phrase before hashing
-//   EMAIL_PROVIDER, EMAIL_FROM, PLAY_URL and the secret EMAIL_API_KEY: see email.js
+//   EMAIL_PROVIDER, EMAIL_FROM, EMAIL_FROM_FALLBACK, PLAY_URL and the secret EMAIL_API_KEY: see email.js
+//   ADMIN_EMAILS     comma-separated account emails allowed into the Port Authority admin API
+//   ADMIN_USER_IDS   secret; comma-separated account ids (u_...) allowed in. An admin must be on both lists
+//   DB (D1), STORE (the store worker's KV, read only): see portauthority.js
 // ============================================================
 import {
   HttpError, LIMITS, WORDS, PBKDF2_ITER, TOKEN_BYTES, TOKEN_TTL_S, TOKEN_REFRESH_MS, RESET_TOKEN_TTL_S, SAVE_MAX_BYTES, BODY_MAX_BYTES, PASSWORD_MAX, PHRASE_WORDS, TOKEN_RE,
@@ -45,6 +51,10 @@ import {
   readBodyBytes, requireEmail, requirePassword, summarise,
 } from './lib.js';
 import { emailConfig, resetEmail, resetLink, sendEmail, RESET_MINUTES } from './email.js';
+import { portAuthority, adminEmails, adminIds, d1Bound } from './portauthority.js';
+
+// Port Authority (A9): presence, gifts and the admin API, in portauthority.js; it gets this file's helpers.
+const PA = portAuthority({ authenticate, rateLimit, readJsonBody, kv });
 
 const ROUTES = {
   '/health':  { GET: health },
@@ -57,7 +67,27 @@ const ROUTES = {
   '/me':      { GET: me },
   '/save':    { GET: getSave, PUT: putSave },
   '/account': { DELETE: deleteAccount },
+  '/presence':      { POST: PA.presence },
+  '/gifts/ack':     { POST: PA.giftsAck },
+  '/admin/stats':   { GET: PA.adminStats },
+  '/admin/players': { GET: PA.adminPlayers },
+  '/admin/gifts':   { POST: PA.adminCreateGift },
+  '/admin/log':     { GET: PA.adminLog },
 };
+// Routes with one path parameter (handed to the handler as ctx.params), tried only under these prefixes.
+const PARAM_ROUTES = [
+  { prefix: '/admin/players/', re: /^\/admin\/players\/([^/]+)$/, route: { GET: PA.adminPlayer } },
+  { prefix: '/admin/gifts/', re: /^\/admin\/gifts\/([^/]+)\/revoke$/, route: { POST: PA.adminRevokeGift } },
+];
+function findRoute(path) {
+  if (Object.prototype.hasOwnProperty.call(ROUTES, path)) return { route: ROUTES[path], params: [] };
+  for (const r of PARAM_ROUTES) {
+    if (!path.startsWith(r.prefix)) continue;
+    const m = path.match(r.re);
+    if (m) return { route: r.route, params: m.slice(1) };
+  }
+  return null;
+}
 
 export default {
   fetch(request, env, ectx) {
@@ -79,9 +109,11 @@ export async function handle(request, env, opts = {}) {
   };
   try {
     const path = url.pathname.replace(/\/+$/, '') || '/';
-    const route = ROUTES[path];
-    if (!route) throw new HttpError(404, 'not-found', `No route for ${path}.`);
-    const fn = route[request.method];
+    const found = findRoute(path);
+    if (!found) throw new HttpError(404, 'not-found', `No route for ${path}.`);
+    const { route } = found;
+    ctx.params = found.params;
+    const fn = Object.prototype.hasOwnProperty.call(route, request.method) ? route[request.method] : null;
     if (!fn) throw new HttpError(405, 'method-not-allowed', `${request.method} is not allowed on ${path}.`, { allow: Object.keys(route) });
     const result = await fn(request, url, env, ctx);
     return json(result.status || 200, result.data, cors);
@@ -198,13 +230,20 @@ async function health(request, url, env) {
       service: 'waystation-account',
       kv: Boolean(env.ACCOUNTS && typeof env.ACCOUNTS.get === 'function'),
       pepper: Boolean(env.PEPPER && String(env.PEPPER).length >= 16),
-      email: { provider: mail.provider, from: mail.from, playUrl: mail.playUrl, configured: mail.configured, missing: mail.missing, resetMinutes: RESET_MINUTES },
+      emailFrom: mail.from,
+      emailFromFallback: mail.fallback || null,
+      email: { provider: mail.provider, from: mail.from, fromFallback: mail.fallback || null, playUrl: mail.playUrl, configured: mail.configured, missing: mail.missing, resetMinutes: RESET_MINUTES },
       allowedOrigins: allowedOrigins(env),
       limits: LIMITS,
       tokenTtlDays: TOKEN_TTL_S / 86400,
       saveMaxBytes: SAVE_MAX_BYTES,
       pbkdf2Iterations: PBKDF2_ITER,
       words: WORDS.length,
+      presence: true,                                         // A9 Port Authority; never lists the admin emails
+      d1: d1Bound(env),
+      admins: adminEmails(env).length,
+      adminIds: adminIds(env).length,                         // ADMIN_USER_IDS entries (a secret); never the ids
+      storeKv: Boolean(env.STORE && typeof env.STORE.get === 'function'),
     },
   };
 }
@@ -285,7 +324,11 @@ async function forgot(request, url, env, ctx) {
     const link = resetLink(mail.playUrl, token);
     const message = resetEmail({ email, link, playUrl: mail.playUrl, minutes: RESET_MINUTES });
     // the send runs after the response when the runtime allows it, so the answer takes the same time either way
-    const job = sendEmail(env, { to: email, ...message }, ctx.fetch).then(r => { if (!r.ok) console.error('account: reset email not sent', r.error); return r; });
+    const job = sendEmail(env, { to: email, ...message }, ctx.fetch).then(r => {
+      if (!r.ok) console.error('account: reset email not sent', r.error);
+      else if (r.from && r.from !== mail.from) console.warn(`account: ${mail.from} is not verified with the email provider; the reset email went out from ${r.from}`);
+      return r;
+    });
     if (ctx.waitUntil) ctx.waitUntil(job); else await job;
   }
   return { data: { ok: true } };
@@ -342,7 +385,7 @@ async function putSave(request, url, env, ctx) {
   if (!Number.isInteger(base) || base < 0) throw new HttpError(400, 'bad-version', 'baseVersion must be a non-negative integer (0 when there is no cloud save yet).');
   const size = utf8Length(JSON.stringify(profile));
   if (size > SAVE_MAX_BYTES) throw new HttpError(413, 'too-large', `The profile is ${size} bytes; the cloud save limit is ${SAVE_MAX_BYTES} bytes.`, { max: SAVE_MAX_BYTES, size });
-  if (profile.v !== 2 || !profile.sectors || typeof profile.sectors !== 'object') throw new HttpError(400, 'bad-profile', 'Not a Waystation v2 profile.');
+  if (profile.v !== 2 || !profile.sectors || typeof profile.sectors !== 'object') throw new HttpError(400, 'bad-profile', 'Not a Port Solace v2 profile.');
 
   const key = saveKey(user.id);
   const existing = await kv(env).get(key, 'json');

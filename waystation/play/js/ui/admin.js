@@ -1,10 +1,10 @@
 // ============================================================
-// WAYSTATION — ui/admin.js: the Bridge Admin testing console
+// PORT SOLACE — ui/admin.js: the Bridge Admin testing console
 // A passphrase-gated console for the owner: grant Antimatter and credits, finish timers,
 // fill banks, unlock sectors, nudge rank and reputation, make the daily claimable, force
 // the store mode. Opened from Settings ("Bridge admin") or Ctrl+Shift+A.
 //
-// Gate: the SHA-256 of the passphrase lives in <meta name="waystation-admin" content="sha256:…">;
+// Gate: the SHA-256 of the passphrase lives in <meta name="portsolace-admin" content="sha256:…">;
 // the passphrase itself is never in the repository. An unlock lasts for the tab (sessionStorage).
 // Honesty note: the game runs entirely in the browser, so this is a convenience gate, not a
 // security boundary; anyone can open the dev tools and call Meta directly. Every grant made here
@@ -15,13 +15,13 @@
 'use strict';
 
 const Admin = (() => {
-  const KEY = 'waystation.admin';
+  const KEY = 'portsolace.admin';
   const has = (o, f) => !!(o && typeof o[f] === 'function');
   const $ = s => document.querySelector(s);
   const fmtN = n => (typeof fmt === 'function' ? fmt(n) : String(n));
 
   function metaHash() {
-    const m = $('meta[name="waystation-admin"]');
+    const m = $('meta[name="portsolace-admin"]');
     return m ? String(m.getAttribute('content') || '').replace(/^sha256:/i, '').trim().toLowerCase() : '';
   }
   async function sha256(s) {
@@ -140,7 +140,7 @@ const Admin = (() => {
       case 'sectors': { const got = has(Meta, 'unlockAllSectors') ? Meta.unlockAllSectors('admin') : []; toast(`${(got || []).length} sector${(got || []).length === 1 ? '' : 's'} unlocked`, 'good'); break; }
       case 'daily': { const d = p.daily; if (d && d.lastClaimAt) d.lastClaimAt -= 86400e3; Sim.emit('change'); toast('Daily reward is claimable', 'good'); break; }
       case 'store': {
-        try { if (arg === 'clear') localStorage.removeItem('waystation.store'); else localStorage.setItem('waystation.store', JSON.stringify({ mode: arg })); } catch (e) { /* ignore */ }
+        try { if (arg === 'clear') localStorage.removeItem('portsolace.store'); else localStorage.setItem('portsolace.store', JSON.stringify({ mode: arg })); } catch (e) { /* ignore */ }
         toast(`Store set to ${arg === 'clear' ? 'the page setting' : arg}. Reloading…`, 'info');
         if (has(Meta, 'save')) Meta.save();
         setTimeout(() => location.reload(), 700); return;

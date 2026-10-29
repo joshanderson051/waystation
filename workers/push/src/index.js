@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — push backend: Cloudflare module Worker (DESIGN2.md Addendum A3)
+// PORT SOLACE — push backend: Cloudflare module Worker (DESIGN2.md Addendum A3)
 // Keeps one Web Push subscription and one list of pending timers per player in KV; a 1-minute cron sends
 // VAPID-signed, aes128gcm-encrypted notifications for the timers that have come due (src/webpush.js).
 // No SDK, no npm runtime dependencies.
@@ -334,7 +334,7 @@ export function composeNotification(ready, station, now = Date.now()) {
     const body = t.kind === 'test' ? 'Notifications are working. This is the test you asked for in Settings.'
       : t.kind === 'daily' ? (where ? `Your streak at ${where} is waiting.` : 'Your streak is waiting on the bridge.')
       : (where ? `${where} is waiting on the bridge.` : 'Your station is waiting on the bridge.');
-    return { title: t.kind === 'test' ? 'Waystation' : t.title, body, tag: TOPIC, at: t.dueAt, kinds: [t.kind] };
+    return { title: t.kind === 'test' ? 'Port Solace' : t.title, body, tag: TOPIC, at: t.dueAt, kinds: [t.kind] };
   }
   let body = items.map(t => t.title).join(' · ');
   if (body.length > 180) body = `${body.slice(0, 177).replace(/\s+\S*$/, '')}…`;

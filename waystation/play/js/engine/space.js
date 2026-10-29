@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — engine/space.js (Engineer E)
+// PORT SOLACE v2 — engine/space.js (Engineer E)
 // Sector-themed deep space (DESIGN2.md 3.3): far and mid star fields
 // with parallax and twinkle, nebula clouds, the planet (baked band
 // texture scrolling under a circular mask, terminator, atmosphere rim,

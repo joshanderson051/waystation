@@ -1,14 +1,16 @@
-# Waystation store backend — Cloudflare Worker configuration (DESIGN2.md 7.4).
+# Port Solace store backend — Cloudflare Worker configuration (DESIGN2.md 7.4).
 # Follow README.md in this folder step by step; every REPLACE_… below is filled in there.
 #
 # Secrets are NEVER written in this file. Set them with:
 #   npx wrangler secret put STRIPE_SECRET_KEY        (sk_test_… first, sk_live_… when you go live)
 #   npx wrangler secret put STRIPE_WEBHOOK_SECRET    (whsec_… from the webhook endpoint you create in Stripe)
 
-name = "waystation-store"
+name = "waystation-store"      # the old internal name stays on purpose: renaming it would create a new Worker
 main = "src/index.js"
 compatibility_date = "2025-10-01"
-workers_dev = true            # publishes at https://waystation-store.<your-subdomain>.workers.dev
+workers_dev = true            # keeps https://waystation-store.<your-subdomain>.workers.dev (the Stripe webhook points here)
+# The live address, on the portsolace.com zone. Cloudflare creates the DNS record and certificate on deploy.
+routes = [{ pattern = "store.portsolace.com", custom_domain = true }]
 
 [observability]
 enabled = true                # request logs in the Cloudflare dashboard (free tier includes this)
@@ -25,7 +27,7 @@ id = "d3f64a0e3dda4eaa83808326a71471f2"
 [vars]
 # The site origins allowed to call this worker, comma-separated, no trailing slash.
 # Add "http://localhost:8794" (or whatever port you serve the game on) while testing locally.
-ALLOWED_ORIGIN = "https://joshanderson051.github.io"
+ALLOWED_ORIGIN = "https://portsolace.com,https://www.portsolace.com,https://joshanderson051.github.io"
 
 # sku -> Stripe price id. One line per catalog item (DESIGN2.md 7.1). LIVE-mode prices of the
 # Prime Signal Marketing LLC account (since 2026-10-29); the old test ids are in README.md step 1.

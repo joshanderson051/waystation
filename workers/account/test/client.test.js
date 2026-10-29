@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — account client tests (play/js/account.js in a node:vm, DESIGN2.md A2.1)
+// PORT SOLACE — account client tests (play/js/account.js in a node:vm, DESIGN2.md A2.1)
 // A fake document / localStorage / fetch / Sim / Meta / UI; real timers with short debounce and interval
 // settings passed through Account.configure. Run with `npm test` in workers/account.
 // ============================================================
@@ -44,7 +44,7 @@ function fakeMeta(profile, Sim) {
     export() { return JSON.stringify(this.profile); },
     import(json) {
       const p = typeof json === 'string' ? JSON.parse(json) : json;
-      if (!p || p.v !== 2) return { ok: false, why: 'Not a Waystation v2 profile' };
+      if (!p || p.v !== 2) return { ok: false, why: 'Not a Port Solace v2 profile' };
       this.profile = p; this.imports.push(p);
       this.profile.savedAt = Date.now();
       if (Sim) { Sim.emit('sector', { id: p.activeSector, state: 'switched' }); Sim.emit('change'); }
@@ -93,7 +93,7 @@ function load({ meta = META, storage = fakeStorage(), fetch, profile, Meta: meta
     document: {
       readyState: 'complete', hidden: false,
       addEventListener(evt, fn) { if (evt === 'visibilitychange') visibility.push(fn); },
-      querySelector(sel) { return meta != null && sel.includes('waystation-account') ? { getAttribute: n => (n === 'content' ? meta : null) } : null; },   // meta: null = no tag
+      querySelector(sel) { return meta != null && sel.includes('portsolace-account') ? { getAttribute: n => (n === 'content' ? meta : null) } : null; },   // meta: null = no tag
     },
     Sim,
   };
@@ -168,7 +168,7 @@ describe('client: configuration', () => {
     assert.equal(a.Account.available, true); assert.equal(a.Account.config.apiBase, API);
     const b = load({ meta: '{"apiBase":""}' });
     assert.equal(b.Account.available, false);
-    const c = load({ meta: '{"apiBase":""}', storage: fakeStorage({ 'waystation.account.config': { apiBase: 'http://127.0.0.1:8790/' } }) });
+    const c = load({ meta: '{"apiBase":""}', storage: fakeStorage({ 'portsolace.account.config': { apiBase: 'http://127.0.0.1:8790/' } }) });
     assert.equal(c.Account.available, true); assert.equal(c.Account.config.apiBase, 'http://127.0.0.1:8790');
     const d = load({ meta: 'not json' });
     assert.equal(d.Account.available, false);
@@ -197,7 +197,7 @@ describe('client: signup and login', () => {
     assert.equal(put[0].body.baseVersion, 0);
     assert.equal(put[0].body.profile.sectors.home.name, 'Lantern Reach');
     assert.equal('cloud' in put[0].body.profile, false, 'the marker is not uploaded');
-    same(JSON.parse(storage.getItem('waystation.account')), { token: TOKEN, email: 'commander@example.com' });
+    same(JSON.parse(storage.getItem('portsolace.account')), { token: TOKEN, email: 'commander@example.com' });
     const st = Account.state;
     assert.equal(st.signedIn, true); same(st.user, { id: USER.id, email: 'commander@example.com' }); assert.equal(st.dirty, false);
     assert.equal(st.cloud.version, 1); assert.equal(st.conflict, false); assert.ok(st.lastSyncAt);
@@ -257,10 +257,10 @@ describe('client: signup and login', () => {
     const r = await Account.recover('commander@example.com', 'orbit comet nova pulsar quasar nebula planet rocket lunar solar', 'a-new-long-password');
     assert.equal(r.ok, true); assert.equal(r.recovery.split(' ').length, 10); assert.equal(r.status, 'local');
     same(fetch.of('POST /recover')[0].body, { email: 'commander@example.com', recovery: 'orbit comet nova pulsar quasar nebula planet rocket lunar solar', newPassword: 'a-new-long-password' });
-    assert.equal(JSON.parse(storage.getItem('waystation.account')).token, TOKEN + 'r');
+    assert.equal(JSON.parse(storage.getItem('portsolace.account')).token, TOKEN + 'r');
     same(await Account.logout(), { ok: true });
     assert.equal(fetch.of('POST /logout')[0].headers.authorization, `Bearer ${TOKEN}r`);
-    assert.equal(storage.getItem('waystation.account'), null);
+    assert.equal(storage.getItem('portsolace.account'), null);
     assert.equal(Account.state.signedIn, false); assert.equal(Account.state.cloud, null);
     assert.equal(events().at(-1).state, 'signed-out'); assert.equal(events().at(-1).reason, 'user');
   });
@@ -274,7 +274,7 @@ describe('client: signup and login', () => {
     assert.equal(bad.ok, false); assert.equal(bad.code, 'bad-credentials'); assert.equal(Account.state.signedIn, true);
     same(await Account.deleteAccount('orbital-mechanics-42'), { ok: true });
     same(fetch.of('DELETE /account').at(-1).body, { password: 'orbital-mechanics-42' });
-    assert.equal(Account.state.signedIn, false); assert.equal(Meta.profile.cloud, null); assert.equal(storage.getItem('waystation.account'), null);
+    assert.equal(Account.state.signedIn, false); assert.equal(Meta.profile.cloud, null); assert.equal(storage.getItem('portsolace.account'), null);
     assert.equal(events().at(-1).reason, 'deleted');
   });
 });
@@ -282,12 +282,12 @@ describe('client: signup and login', () => {
 // ============================================================ password reset by email
 describe('client: forgot and reset', () => {
   const RESET_TOKEN = 'r'.repeat(43);
-  const PLAY = 'https://joshanderson051.github.io/waystation/play/';
+  const PLAY = 'https://portsolace.com/play/';
 
   test('forgot validates the address, posts it lower-cased without auth and reports the backend plainly', async () => {
     const answers = [{ ok: true }];
     const fetch = fakeFetch({ 'POST /forgot': () => answers.shift() || { ok: true } });
-    const { Account, storage } = load({ fetch, storage: fakeStorage({ 'waystation.account': { token: TOKEN, email: 'x@example.com' } }), config: FAST });
+    const { Account, storage } = load({ fetch, storage: fakeStorage({ 'portsolace.account': { token: TOKEN, email: 'x@example.com' } }), config: FAST });
     same(await Account.forgot('nope'), { ok: false, why: 'Enter a valid email address', code: 'bad-email' });
     same(await Account.forgot(' Commander@Example.com '), { ok: true });
     const c = fetch.of('POST /forgot')[0];
@@ -299,7 +299,7 @@ describe('client: forgot and reset', () => {
     answers.push({ status: 503, data: { error: 'email-not-configured', message: 'Password reset by email is not set up on this build yet. Use your recovery phrase instead.' } });
     const off = await Account.forgot('commander@example.com');
     assert.equal(off.ok, false); assert.equal(off.code, 'email-not-configured'); assert.match(off.why, /recovery phrase/);
-    assert.equal(JSON.parse(storage.getItem('waystation.account')).token, TOKEN, 'asking for a link touches no session');
+    assert.equal(JSON.parse(storage.getItem('portsolace.account')).token, TOKEN, 'asking for a link touches no session');
     const none = load({ meta: null }).Account;
     same(await none.forgot('commander@example.com'), { ok: false, why: NOT, code: 'unavailable' });
   });
@@ -307,13 +307,13 @@ describe('client: forgot and reset', () => {
   test('?reset=<token> is captured at load and taken out of the address bar; other queries and hashes survive', () => {
     const t = load({ location: `${PLAY}?lang=en&reset=${RESET_TOKEN}#top` });
     assert.equal(t.Account.resetToken, RESET_TOKEN);
-    assert.deepEqual(t.replaced, ['/waystation/play/?lang=en#top']);
+    assert.deepEqual(t.replaced, ['/play/?lang=en#top']);
     assert.equal(t.ctx.location.search, '?lang=en');
     const plain = load({ location: PLAY });
     assert.equal(plain.Account.resetToken, null); assert.deepEqual(plain.replaced, []);
     const junk = load({ location: `${PLAY}?reset=not%20a%20token` });
     assert.equal(junk.Account.resetToken, null, 'a malformed token is dropped');
-    assert.deepEqual(junk.replaced, ['/waystation/play/'], 'but still removed from the URL');
+    assert.deepEqual(junk.replaced, ['/play/'], 'but still removed from the URL');
     const noLoc = load();
     assert.equal(noLoc.Account.resetToken, null);
     t.Account.clearResetToken();
@@ -338,7 +338,7 @@ describe('client: forgot and reset', () => {
     same(fetch.of('POST /reset').at(-1).body, { token: RESET_TOKEN, newPassword: 'a-new-long-password' });
     assert.equal(fetch.of('POST /reset').at(-1).headers.authorization, undefined);
     assert.equal(Account.resetToken, null, 'used');
-    assert.equal(JSON.parse(storage.getItem('waystation.account')).token, TOKEN + 'r');
+    assert.equal(JSON.parse(storage.getItem('portsolace.account')).token, TOKEN + 'r');
     assert.equal(Account.state.signedIn, true);
     assert.equal(fetch.of('GET /me').length, 1, 'reconciled after signing in');
     assert.equal(fetch.of('GET /me')[0].headers.authorization, `Bearer ${TOKEN}r`);
@@ -351,15 +351,15 @@ describe('client: forgot and reset', () => {
 
 // ============================================================ boot
 describe('client: boot', () => {
-  const session = () => fakeStorage({ 'waystation.account': { token: TOKEN, email: USER.email } });
+  const session = () => fakeStorage({ 'portsolace.account': { token: TOKEN, email: USER.email } });
   const marker = (version, syncedAt) => ({ version, syncedAt, userId: USER.id });
 
   test('no stored session -> none; expired token -> none + signed-out; offline -> offline and a later retry', async () => {
     same(await load({ fetch: backend(), config: FAST }).Account.boot(), { status: 'none' });
 
-    const expired = load({ fetch: backend(), storage: fakeStorage({ 'waystation.account': { token: 'stale', email: USER.email } }), config: FAST });
+    const expired = load({ fetch: backend(), storage: fakeStorage({ 'portsolace.account': { token: 'stale', email: USER.email } }), config: FAST });
     same(await expired.Account.boot(), { status: 'none', why: 'expired' });
-    assert.equal(expired.storage.getItem('waystation.account'), null);
+    assert.equal(expired.storage.getItem('portsolace.account'), null);
     same(expired.events(), [{ state: 'signed-out', reason: 'expired' }]);
 
     let down = true;
@@ -530,7 +530,7 @@ describe('client: push policy', () => {
     t.fetch.failNextPut({ status: 401, data: { error: 'unauthorised', message: 'expired' } });
     const r = await t.Account.push();
     assert.equal(r.ok, false); assert.equal(r.code, 'signed-out');
-    assert.equal(t.Account.state.signedIn, false); assert.equal(t.storage.getItem('waystation.account'), null);
+    assert.equal(t.Account.state.signedIn, false); assert.equal(t.storage.getItem('portsolace.account'), null);
     assert.equal(toasts.length, 1); assert.equal(toasts[0][1], 'warn');
     assert.equal(t.events().at(-1).state, 'signed-out'); assert.equal(t.events().at(-1).reason, 'expired');
     t.Sim.emit('change'); await sleep(50);

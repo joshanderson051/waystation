@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — account backend: constants and pure helpers (DESIGN2.md Addendum A2.1)
+// PORT SOLACE — account backend: constants and pure helpers (DESIGN2.md Addendum A2.1)
 // Kept apart from index.js because a module Worker's main file may only export handlers and functions
 // (workerd rejects exported constants at start-up). Everything here is side-effect free and unit-tested.
 // ============================================================
@@ -25,6 +25,10 @@ export const LIMITS = {                               // A2.1: per-IP rate limit
   forgot:      { max: 3,  windowS: 3600 },
   forgotEmail: { max: 3,  windowS: 3600 },
   reset:       { max: 10, windowS: 3600 },
+  presence:    { max: 120, windowS: 600 },              // A9 Port Authority: a game reports every 10 minutes; generous for shared IPs
+  giftsAck:    { max: 120, windowS: 600 },
+  admin:       { max: 300, windowS: 600 },              // every admin call
+  adminAuth:   { max: 10,  windowS: 600 },              // failed admin calls (401/403); once full the IP is blocked for the window
 };
 export const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,189}\.[^\s@]{2,}$/;
 export const TOKEN_RE = /^[A-Za-z0-9_-]{32,128}$/;

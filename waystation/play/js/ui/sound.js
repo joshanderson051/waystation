@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — ui/sound.js
+// PORT SOLACE v2 — ui/sound.js
 // Engineer H. Source of truth: DESIGN2.md section 9.
 //
 // Procedural WebAudio: no files. Sound.init() runs on the first user

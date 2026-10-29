@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — engine/input.js (Engineer E)
+// PORT SOLACE v2 — engine/input.js (Engineer E)
 // Pointer, wheel, pinch and keyboard on the world canvas (DESIGN2.md 3.8,
 // 3.2 keyboard). A 4-px drag threshold separates pans from clicks;
 // right-click emits `context`; hover is resolved once per frame (the

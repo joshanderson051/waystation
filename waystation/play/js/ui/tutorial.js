@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — ui/tutorial.js
+// PORT SOLACE v2 — ui/tutorial.js
 // Engineer H. Source of truth: DESIGN2.md Addendum A2.2.
 //
 // A guided tour of coach marks: a full-screen dim with a spotlight cut

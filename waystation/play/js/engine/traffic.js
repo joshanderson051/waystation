@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — engine/traffic.js (Engineer E)
+// PORT SOLACE v2 — engine/traffic.js (Engineer E)
 // Ships and the people who come off them (DESIGN2.md 3.5, A6.2).
 //
 // Since A6 a ship is its pack render (ships/512/<id>.webp): picked by

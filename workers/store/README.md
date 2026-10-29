@@ -1,4 +1,4 @@
-# Waystation store backend
+# Port Solace store backend
 
 This folder is the small server that lets the game sell Antimatter packs, boosts, the Sector Pass and
 cosmetics for real money. It runs as a **Cloudflare Worker** (free tier is plenty) and talks to **Stripe
@@ -23,6 +23,15 @@ in `waystation/play/index.html` (step 9).
 > (`acct_1USITjFL8R957E3x`, webhook `we_1USIelFL8R957E3xfYBBXiGp`); its test price ids are in the table in
 > step 1. To try changes with test cards, run the worker locally with that sandbox's `sk_test_…` key in
 > `.dev.vars` and the test price ids (see "Local testing" below) instead of switching the deployed worker back.
+>
+> **Port Solace domain.** The game is at <https://portsolace.com/play/> and calls this worker at
+> <https://store.portsolace.com> (a Cloudflare custom domain, the `routes` line in `wrangler.toml`). The
+> `workers.dev` address above keeps working, and the live Stripe webhook stays pointed at it
+> (`…workers.dev/webhook`): do not move it.
+
+The old internal names (the Worker script `waystation-store`, its `waystation-store-worker` workers.dev
+subdomain, the `service` that `/health` reports and the repository folders) stay on purpose: renaming them
+would create a new Worker and break the live Stripe webhook.
 
 ---
 
@@ -55,7 +64,8 @@ How a purchase works once everything is connected:
 - A **Stripe account**: <https://dashboard.stripe.com/register>. For test mode you do not need to finish
   business verification.
 - A **Cloudflare account** (free): <https://dash.cloudflare.com/sign-up>. No domain is required; the
-  worker gets a free `*.workers.dev` address.
+  worker gets a free `*.workers.dev` address. The live address `store.portsolace.com` needs the
+  `portsolace.com` zone on the same Cloudflare account (it is: the domain was bought through Cloudflare).
 - A terminal. On Windows use PowerShell or Git Bash; on macOS use Terminal.
 
 Open a terminal in this folder and install the one developer tool (Cloudflare's `wrangler`):
@@ -83,17 +93,17 @@ npm test
 
 | sku | Product name | Description | Price | Test-mode Price ID (done 19 Oct 2026) |
 |---|---|---|---|---|
-| `am_50` | Antimatter · 50 | A vial of violet light. | $1.99 | `price_1USIUoFL8R957E3xoCDdGRhG` |
-| `am_140` | Antimatter · 140 | 125 plus 15 bonus. | $4.99 | `price_1USIVmFL8R957E3xY727d9Tq` |
-| `am_320` | Antimatter · 320 | 250 plus 70 bonus. | $9.99 | `price_1USIWiFL8R957E3xHHfCmtXA` |
-| `am_900` | Antimatter · 900 | 500 plus 400 bonus. | $24.99 | `price_1USIYfFL8R957E3xPbSgJbd4` |
-| `credits_s` | Supply Run | Two hours of your total station rate, at least 10,000 credits. | $1.99 | `price_1USIYuFL8R957E3xAkDJSeI7` |
-| `credits_l` | Trade Fleet | Eight hours of your total station rate, at least 40,000 credits. | $5.99 | `price_1USIZ9FL8R957E3x6XXal2Iw` |
-| `sector_pass` | Sector Pass | Every sector unlocked for this profile. No charts needed. | $9.99 | `price_1USIZNFL8R957E3xOORrW8Kr` |
-| `founder` | Founder's Livery | Ivory-amber station strip, the title Founder, and 100 Antimatter. | $4.99 | `price_1USIZcFL8R957E3xlP8au1s6` |
-| `liveries` | Sector Liveries | The six sector liveries for your station strip. | $2.99 | `price_1USIZsFL8R957E3xfXhXhx1o` |
+| `am_50` | Port Solace · 50 Antimatter | A vial of violet light. | $1.99 | `price_1USIUoFL8R957E3xoCDdGRhG` |
+| `am_140` | Port Solace · 140 Antimatter | 125 plus 15 bonus. | $4.99 | `price_1USIVmFL8R957E3xY727d9Tq` |
+| `am_320` | Port Solace · 320 Antimatter | 250 plus 70 bonus. | $9.99 | `price_1USIWiFL8R957E3xHHfCmtXA` |
+| `am_900` | Port Solace · 900 Antimatter | 500 plus 400 bonus. | $24.99 | `price_1USIYfFL8R957E3xPbSgJbd4` |
+| `credits_s` | Port Solace · Supply Run | Two hours of your total station rate, at least 10,000 credits. | $1.99 | `price_1USIYuFL8R957E3xAkDJSeI7` |
+| `credits_l` | Port Solace · Trade Fleet | Eight hours of your total station rate, at least 40,000 credits. | $5.99 | `price_1USIZ9FL8R957E3x6XXal2Iw` |
+| `sector_pass` | Port Solace · Sector Pass | Every sector unlocked for this profile. No charts needed. | $9.99 | `price_1USIZNFL8R957E3xOORrW8Kr` |
+| `founder` | Port Solace · Founder's Livery | Ivory-amber station strip, the title Founder, and 100 Antimatter. | $4.99 | `price_1USIZcFL8R957E3xlP8au1s6` |
+| `liveries` | Port Solace · Sector Liveries | The six sector liveries for your station strip. | $2.99 | `price_1USIZsFL8R957E3xfXhXhx1o` |
 
-The sku on the left is fixed: it is how the game names each item. Names, descriptions and prices match
+Product names start with "Port Solace · " so checkout pages, receipts and the Stripe dashboard name the game (renamed 29 Oct 2026; the game itself shows the short names from data2.js). The sku on the left is fixed: it is how the game names each item. Names, descriptions and prices match
 `STORE_CATALOG` in `waystation/play/js/data2.js`; if you change them in Stripe, change them there too.
 The Price IDs above are **test-mode** ids; live mode gets its own set (step 10).
 
@@ -109,9 +119,10 @@ Open `workers/store/wrangler.toml` in any text editor.
 
 - In the `PRICES` block replace each `price_REPLACE_…` with the Price ID you copied. Keep the quotes and
   commas exactly as they are. The block must stay valid JSON (no trailing comma after the last line).
-- `ALLOWED_ORIGIN` already contains the GitHub Pages site, `https://joshanderson051.github.io`. If the game
-  is served from another domain, put that here instead; separate several origins with commas and never add a
-  trailing slash or a path.
+- `ALLOWED_ORIGIN` already contains the live site, `https://portsolace.com` and `https://www.portsolace.com`,
+  and the old GitHub Pages origin `https://joshanderson051.github.io`, kept while players move over. If the
+  game is served from another domain, add it; separate several origins with commas and never add a trailing
+  slash or a path.
 
 ---
 
@@ -160,6 +171,12 @@ Open `https://waystation-store.<your-subdomain>.workers.dev/health` in a browser
 with `"stripe": "missing"` (we add the key next), `"kv": true` and `"prices": {"count": 9, …}`. If the
 count is not 9, a Price ID in `wrangler.toml` is misspelled (they must start with `price_`).
 
+The same deploy attaches the custom domain from the `routes` line in `wrangler.toml`: Cloudflare creates the
+DNS record and the certificate for `store.portsolace.com` (the first time can take a few minutes). Check it
+at <https://store.portsolace.com/health>. If the deploy says the zone was not found, `portsolace.com` is not
+on the Cloudflare account you are logged in to (`npx wrangler whoami`). Use the `workers.dev` address for the
+webhook in step 6 either way.
+
 ---
 
 ## 5. Add the Stripe secret key
@@ -206,7 +223,7 @@ purchase is still recorded and "Restore purchases" will apply it.
 curl "https://waystation-store.<your-subdomain>.workers.dev/health"
 curl -X POST "https://waystation-store.<your-subdomain>.workers.dev/checkout" \
      -H "content-type: application/json" \
-     -d "{\"sku\":\"am_50\",\"playerId\":\"test-player-0001\",\"returnUrl\":\"https://joshanderson051.github.io/waystation/play/\"}"
+     -d "{\"sku\":\"am_50\",\"playerId\":\"test-player-0001\",\"returnUrl\":\"https://portsolace.com/play/\"}"
 ```
 
 The second command answers with `{"id":"cs_test_…","url":"https://checkout.stripe.com/…","sku":"am_50"}`.
@@ -219,11 +236,11 @@ Opening that `url` shows the Stripe test checkout page. (`returnUrl` must be on 
 
 You can do this before changing the live site by using the override the game client offers:
 
-1. Open the game at <https://joshanderson051.github.io/waystation/play/>.
+1. Open the game at <https://portsolace.com/play/>.
 2. Open the browser console (F12 → Console) and paste, with your worker address:
 
    ```js
-   localStorage.setItem('waystation.store', JSON.stringify({ mode: 'stripe', apiBase: 'https://waystation-store.<your-subdomain>.workers.dev' }));
+   localStorage.setItem('portsolace.store', JSON.stringify({ mode: 'stripe', apiBase: 'https://waystation-store.<your-subdomain>.workers.dev' }));
    location.reload();
    ```
 
@@ -231,7 +248,7 @@ You can do this before changing the live site by using the override the game cli
    **4242 4242 4242 4242**, any future expiry, any CVC, any postcode, any email.
 4. You are sent back to the game; the Antimatter arrives and the purchase shows in Stripe under
    **Payments**.
-5. Remove the override when you are done: `localStorage.removeItem('waystation.store'); location.reload();`
+5. Remove the override when you are done: `localStorage.removeItem('portsolace.store'); location.reload();`
 
 The override only affects your own browser. Everyone else is still in sandbox mode until step 9.
 
@@ -242,14 +259,16 @@ The override only affects your own browser. Everyone else is still in sandbox mo
 In `waystation/play/index.html` the `<head>` holds one line that tells the game which mode to use:
 
 ```html
-<meta name="waystation-store" content='{"mode":"sandbox"}'>
+<meta name="portsolace-store" content='{"mode":"sandbox"}'>
 ```
 
 Change it to (keep the single quotes around the JSON and the double quotes inside):
 
 ```html
-<meta name="waystation-store" content='{"mode":"stripe","apiBase":"https://waystation-store.<your-subdomain>.workers.dev"}'>
+<meta name="portsolace-store" content='{"mode":"stripe","apiBase":"https://store.portsolace.com"}'>
 ```
+
+(The `*.workers.dev` address works there too, for example before the custom domain is attached.)
 
 Also update the sentence under **Antimatter** on the landing page (`waystation/index.html`, the
 `<p class="fine">` line) so it describes the real state of the store.
@@ -338,7 +357,7 @@ serve the game (`node waystation/serve.js --port 8794 --base waystation` from th
 Bash prefix it with `MSYS_NO_PATHCONV=1`) and set the override in the game's browser console:
 
 ```js
-localStorage.setItem('waystation.store', JSON.stringify({ mode: 'stripe', apiBase: 'http://127.0.0.1:8788' }));
+localStorage.setItem('portsolace.store', JSON.stringify({ mode: 'stripe', apiBase: 'http://127.0.0.1:8788' }));
 ```
 
 The game's own local server also defaults to port 8787, which is Wrangler's default too; that is why

@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — main.js (integrator)
+// PORT SOLACE v2 — main.js (integrator)
 // Boot order (DESIGN2.md 0.1; S §5; E §2; H §6):
 //   PAL.load() -> Meta.init() (create or resume the profile, migrate a v1 save, offline pass,
 //   bind Sim.state) -> Store.flush() -> await Engine.init(#world) (the engine reads Sim.state
@@ -28,12 +28,12 @@
     el: $('#title'), resume: $('#title-resume'), form: $('#title-form'),
     name: $('#title-name'), registry: $('#title-registry'), confirm: $('#title-confirm'),
   };
-  const regOf = typeof registryOf === 'function' ? registryOf : (() => 'WS-0000');
+  const regOf = typeof registryOf === 'function' ? registryOf : (() => 'PS-0000');
 
   function sectorNames(id) {
     const def = sectorDef(id);
     if (def.names && def.names.length) return def.names;
-    return typeof STATION_NAMES !== 'undefined' ? STATION_NAMES : ['Waystation'];
+    return typeof STATION_NAMES !== 'undefined' ? STATION_NAMES : ['Port Solace'];
   }
   function randomName(not) {
     const list = sectorNames(Sim.state ? Sim.state.sector : 'home');
@@ -179,7 +179,7 @@
   async function boot() {
     if (typeof PAL !== 'undefined' && has(PAL, 'load')) { try { PAL.load(); } catch (e) { /* fallbacks stay */ } }
 
-    const had = !!(safeGet('waystation.profile.v2') || safeGet('waystation-save-v1'));
+    const had = !!(safeGet('portsolace.profile.v2') || safeGet('portsolace-save-v1'));
     const r = Meta.init() || {};
     call(Store, 'flush');
     if (typeof Notify !== 'undefined') call(Notify, 'boot');   // A3: re-attaches push notifications only when the player opted in earlier
@@ -208,17 +208,30 @@
 
     showTitle('boot', had && (r.resumed || r.migrated || true));
     if (r.migrated) setTimeout(() => call(UI, 'toast', 'Your station was brought forward to the new bridge.', 'good'), 1200);
+    if (takeMovedFlag()) setTimeout(() => call(UI, 'toast', 'Station moved to portsolace.com', 'good'), 900);   // M5: back from play/import.html
 
     requestAnimationFrame(frame);
+    // A9 Port Authority: presence check-ins and gifts; after Meta, Store, Account and the HUD (its modal waits for the title to close)
+    if (typeof Gifts !== 'undefined') { try { call(Gifts, 'init'); } catch (e) { /* presence never disturbs play */ } }
     if (has(Store, 'resume')) Store.resume().catch(() => {});
   }
 
   function on(sel, evt, fn) { const el = $(sel); if (el) el.addEventListener(evt, fn); }
   function safeGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  // ?moved=1 (play/import.html sends the player here after the move): read once, then dropped from the address bar
+  function takeMovedFlag() {
+    try {
+      const u = new URL(location.href);
+      if (u.searchParams.get('moved') !== '1') return false;
+      u.searchParams.delete('moved');
+      if (typeof history !== 'undefined' && history && typeof history.replaceState === 'function') history.replaceState(history.state ?? null, '', u.pathname + u.search + u.hash);
+      return true;
+    } catch (e) { return false; }
+  }
   function showEngineFailure(e) {
     const el = document.createElement('div');
     el.className = 'engine-failure';
-    el.innerHTML = '<div class="box"><h2>The bridge display could not start</h2><p>Waystation needs WebGL. Try a current Chrome, Edge, Firefox or Safari with hardware acceleration on.</p><p class="micro"></p></div>';
+    el.innerHTML = '<div class="box"><h2>The bridge display could not start</h2><p>Port Solace needs WebGL. Try a current Chrome, Edge, Firefox or Safari with hardware acceleration on.</p><p class="micro"></p></div>';
     el.querySelector('.micro').textContent = String((e && e.message) || e);
     body.appendChild(el);
   }

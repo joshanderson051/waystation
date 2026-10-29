@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — engine/stage.js (Engineer E)
+// PORT SOLACE v2 — engine/stage.js (Engineer E)
 // Pixi application, layer tree, resize/DPR, ticker, texture baking,
 // fonts, perf tiers (DESIGN2.md 3.1, 3.7 tiers, 0.3 Engine.perf).
 //

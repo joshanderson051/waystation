@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — account worker tests (DESIGN2.md A2.1)
+// PORT SOLACE — account worker tests (DESIGN2.md A2.1)
 // Run with `npm test` in workers/account (node --test test/). Exercises handle(request, env, {now}) with an
 // in-memory KV stub. Real PBKDF2 at 100,000 iterations (about 12 ms per derivation in Node).
 // ============================================================
@@ -12,7 +12,7 @@ import {
   WORDS, PBKDF2_ITER, WORKERS_PBKDF2_MAX, TOKEN_TTL_S, TOKEN_REFRESH_MS, SAVE_MAX_BYTES, LIMITS, PHRASE_WORDS,
 } from '../src/lib.js';
 
-const ORIGIN = 'https://joshanderson051.github.io';
+const ORIGIN = 'https://portsolace.com';
 const PEPPER = 'unit-test-pepper-that-is-long-enough';
 const EMAIL = 'Commander@Example.com';
 const PASSWORD = 'orbital-mechanics-42';

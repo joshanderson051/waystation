@@ -39,4 +39,4 @@ http.createServer((req, res) => {
     }
     fs.access(file, e => e ? send(res, 404, path.join(root, '404.html')) : send(res, 200, file));
   });
-}).listen(port, () => console.log(`Waystation running at http://localhost:${port}${base}`));
+}).listen(port, () => console.log(`Port Solace running at http://localhost:${port}${base}`));

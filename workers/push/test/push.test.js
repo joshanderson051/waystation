@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — push worker tests, part 2: the handlers and the cron (src/index.js)
+// PORT SOLACE — push worker tests, part 2: the handlers and the cron (src/index.js)
 // Run with `npm test` in workers/push. Exercises handle(request, env) and runCron(env, now) with an
 // in-memory KV stub (get/put/delete/list with op counters) and a scripted push service behind fetchImpl.
 // Notification bodies are decrypted with the fake browser's keys to check what a player would see.
@@ -14,7 +14,7 @@ import { MAX_TIMERS, STALE_MS, PAST_GRACE_MS, MAX_SENDS_PER_RUN, HEAL_EVERY_MIN,
 import { generateVapidKeys, decrypt, b64u } from '../src/webpush.js';
 import { browserKeys } from './helpers.js';
 
-const ORIGIN = 'https://joshanderson051.github.io';
+const ORIGIN = 'https://portsolace.com';
 const PLAYER = 'pm2k4f9a1xyz';
 const OTHER = '7f0c1c2e-6d4a-4a7b-9b7e-1f2d3c4b5a69';
 const MIN = 60e3, HOUR = 3600e3;
@@ -114,7 +114,7 @@ describe('worker: configuration and CORS', () => {
     assert.equal(data.scheduledPlayers, null);
     ({ data } = await readJson(await handle(req('/health'), makeEnv({ VAPID_PUBLIC_KEY: 'AQID', VAPID_SUBJECT: 'owner@example.com' }))));
     assert.equal(data.vapid.publicKey, 'invalid');
-    assert.equal(data.vapid.subject, 'https://joshanderson051.github.io/waystation/', 'an invalid subject falls back to the site');
+    assert.equal(data.vapid.subject, 'https://portsolace.com/', 'an invalid subject falls back to the site');
   });
   test('/key hands out the VAPID public key, normalised', async () => {
     const { data } = await readJson(await handle(req('/key'), makeEnv({ VAPID_PUBLIC_KEY: VAPID.publicKey + '=' })));
@@ -300,11 +300,11 @@ describe('POST /unsubscribe', () => {
 describe('composeNotification', () => {
   test('one timer: its title, the station in the body', () => {
     const n = composeNotification([timer('a', 5, 'build', 'Comms Relay online')], 'Harrow Point', 10);
-    assert.deepEqual(n, { title: 'Comms Relay online', body: 'Harrow Point is waiting on the bridge.', tag: 'waystation', at: 5, kinds: ['build'] });
+    assert.deepEqual(n, { title: 'Comms Relay online', body: 'Harrow Point is waiting on the bridge.', tag: 'portsolace', at: 5, kinds: ['build'] });
     assert.equal(composeNotification([timer('a', 5)], '', 10).body, 'Your station is waiting on the bridge.');
     assert.equal(composeNotification([timer('d', 5, 'daily', 'Daily reward ready')], 'Harrow Point', 10).body, 'Your streak at Harrow Point is waiting.');
     const t = composeNotification([timer('test', 5, 'test', 'Test notification')], 'Harrow Point', 10);
-    assert.equal(t.title, 'Waystation');
+    assert.equal(t.title, 'Port Solace');
     assert.match(t.body, /Notifications are working/);
   });
   test('several timers: a count, the titles joined, the kinds de-duplicated, long bodies trimmed', () => {
@@ -348,9 +348,9 @@ describe('cron', () => {
     assert.equal(call.url, me.subscription.endpoint);
     assert.equal(call.init.headers['content-encoding'], 'aes128gcm');
     assert.equal(call.init.headers.ttl, String(24 * 3600));
-    assert.equal(call.init.headers.topic, 'waystation');
+    assert.equal(call.init.headers.topic, 'portsolace');
     assert.match(call.init.headers.authorization, new RegExp(`^vapid t=.+, k=${VAPID.publicKey}$`));
-    assert.deepEqual(call.payload, { title: 'Comms Relay online', body: 'Harrow Point is waiting on the bridge.', tag: 'waystation', at: t0, kinds: ['build'] });
+    assert.deepEqual(call.payload, { title: 'Comms Relay online', body: 'Harrow Point is waiting on the bridge.', tag: 'portsolace', at: t0, kinds: ['build'] });
     const rec = env.PUSH.json(`timers:${PLAYER}`);
     assert.deepEqual(rec.timers.map(t => t.id), ['expedition:1']);
     assert.equal(rec.station, 'Harrow Point');

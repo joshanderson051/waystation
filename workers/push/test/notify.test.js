@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — push worker tests, part 3: the game client (waystation/play/js/notify.js)
+// PORT SOLACE — push worker tests, part 3: the game client (waystation/play/js/notify.js)
 // Loads notify.js into a node:vm context with a fake browser (document with the <meta> tag, localStorage,
 // navigator.serviceWorker, PushManager, Notification, fetch, a controllable setTimeout) and a fake Sim / Meta,
 // then walks the opt-in, the schedule computation, the debounce, the failure paths and the opt-out.
@@ -65,7 +65,7 @@ async function makeWorld({ meta = `{"apiBase":"${API}"}`, serviceWorker = true, 
       return subscription;
     },
   };
-  const registration = { pushManager, active: { postMessage: m => log.sw.messages.push(m) }, async unregister() { log.sw.unregistered++; return true; }, scope: 'https://joshanderson051.github.io/waystation/play/' };
+  const registration = { pushManager, active: { postMessage: m => log.sw.messages.push(m) }, async unregister() { log.sw.unregistered++; return true; }, scope: 'https://portsolace.com/play/' };
   const navigator = { userAgent: 'test' };
   if (serviceWorker) {
     navigator.serviceWorker = {
@@ -102,7 +102,7 @@ async function makeWorld({ meta = `{"apiBase":"${API}"}`, serviceWorker = true, 
   const docListeners = {};
   const document = {
     visibilityState: visibility, get hidden() { return this.visibilityState !== 'visible'; },
-    querySelector: sel => (sel.includes('waystation-push') && meta != null ? { getAttribute: () => meta } : null),
+    querySelector: sel => (sel.includes('portsolace-push') && meta != null ? { getAttribute: () => meta } : null),
     addEventListener: (ev, fn) => { (docListeners[ev] ||= []).push(fn); },
   };
   const winListeners = {};
@@ -157,7 +157,7 @@ describe('notify: sandbox and support detection', () => {
     assert.equal(w.log.fetch.length, 0);
   });
   test('the localStorage override wins over the meta tag', async () => {
-    const w = await makeWorld({ meta: '{"apiBase":""}', storage: { 'waystation.push': { apiBase: 'http://127.0.0.1:8789/' } } });
+    const w = await makeWorld({ meta: '{"apiBase":""}', storage: { 'portsolace.push': { apiBase: 'http://127.0.0.1:8789/' } } });
     await w.Notify.boot();
     assert.equal(w.Notify.state().status, 'off');
     assert.equal(w.Notify.state().apiBase, 'http://127.0.0.1:8789');
@@ -223,9 +223,9 @@ describe('notify: opting in', () => {
     assert.ok(w.log.saves >= 1);
     assert.equal(w.Notify.state().status, 'on');
     assert.equal(w.Notify.state().subscribed, true);
-    const local = JSON.parse(w.store.get('waystation.push.sub'));
+    const local = JSON.parse(w.store.get('portsolace.push.sub'));
     assert.deepEqual(local, { apiBase: API, playerId: 'pm2k4f9a1xyz', endpoint: 'https://push.example.com/send/1', token: w.token() });
-    assert.equal(w.log.sw.messages[0].type, 'waystation-push-config');
+    assert.equal(w.log.sw.messages[0].type, 'portsolace-push-config');
     assert.equal(w.log.sw.messages[0].apiBase, API);
     await tick();
     const posts = w.schedules();
@@ -318,7 +318,7 @@ describe('notify: keeping the schedule current', () => {
     assert.equal(posts.at(-1).body.token, w.token());
     assert.equal(posts.at(-1).status, undefined);
     assert.equal(w.Notify.state().status, 'on');
-    assert.equal(JSON.parse(w.store.get('waystation.push.sub')).token, w.token());
+    assert.equal(JSON.parse(w.store.get('portsolace.push.sub')).token, w.token());
   });
   test('three failed posts in a row show Offline; the next success clears it', async () => {
     let fail = true;
@@ -350,9 +350,9 @@ describe('notify: boot and opting out', () => {
   test('boot() re-attaches silently when the player opted in earlier and permission is granted', async () => {
     const first = await makeWorld();
     await first.Notify.enable(); await tick();
-    const saved = JSON.parse(first.store.get('waystation.push.sub'));
+    const saved = JSON.parse(first.store.get('portsolace.push.sub'));
     // the push service handed out a new endpoint since: boot registers it
-    const w = await makeWorld({ permission: 'granted', settings: { notify: true }, storage: { 'waystation.push.sub': { ...saved, endpoint: 'https://push.example.com/send/old' } } });
+    const w = await makeWorld({ permission: 'granted', settings: { notify: true }, storage: { 'portsolace.push.sub': { ...saved, endpoint: 'https://push.example.com/send/old' } } });
     assert.equal(await w.Notify.boot(), true);
     assert.equal(w.Notify.state().status, 'on');
     assert.deepEqual(w.log.sw.registered, ['sw.js']);
@@ -362,7 +362,7 @@ describe('notify: boot and opting out', () => {
     assert.equal(w.schedules().length, 1);
     assert.equal(w.Notification.permission, 'granted', 'never prompts on boot');
     // the same endpoint as last time: nothing to register, straight to the schedule
-    const same = await makeWorld({ permission: 'granted', settings: { notify: true }, storage: { 'waystation.push.sub': saved } });
+    const same = await makeWorld({ permission: 'granted', settings: { notify: true }, storage: { 'portsolace.push.sub': saved } });
     assert.equal(await same.Notify.boot(), true);
     assert.equal(same.calls('/subscribe').length, 0);
     await tick();
@@ -389,8 +389,8 @@ describe('notify: boot and opting out', () => {
     assert.deepEqual(w.calls('/unsubscribe')[0].body, { playerId: 'pm2k4f9a1xyz', token: tok });
     assert.equal(w.log.unsubscribed, 1);
     assert.equal(w.log.sw.unregistered, 1);
-    assert.equal(w.store.has('waystation.push.sub'), false);
-    assert.deepEqual(plain(w.log.sw.messages.at(-1)), { type: 'waystation-push-config' }, 'the worker forgets the backend');
+    assert.equal(w.store.has('portsolace.push.sub'), false);
+    assert.deepEqual(plain(w.log.sw.messages.at(-1)), { type: 'portsolace-push-config' }, 'the worker forgets the backend');
     w.Sim.emit('change'); await w.advance(5000);
     assert.equal(w.schedules().length, 1, 'no more posts');
   });

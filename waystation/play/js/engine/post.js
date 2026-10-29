@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — engine/post.js (Engineer E)
+// PORT SOLACE v2 — engine/post.js (Engineer E)
 // Post layer (DESIGN2.md 3.7): bloom on the emissive + traffic group
 // only (never on plates or text), a vignette, full-screen flashes.
 // The pixi-filters namespace is resolved at runtime (PIXI.filters, then

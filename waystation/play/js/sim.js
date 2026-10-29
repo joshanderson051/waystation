@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION — simulation: state, economy, ships, residents
+// PORT SOLACE — simulation: state, economy, ships, residents
 // v2 (DESIGN2.md section 6): sector-sized grids, cell meta for banks and
 // build timers, upgrade multipliers, sector bias, offline catch-up, and
 // save/load as thin wrappers over Meta. Every v1 method and event stays.
@@ -11,7 +11,7 @@ const DAY_SECONDS = (typeof TIMERS !== 'undefined' && TIMERS.DAY_MS) ? TIMERS.DA
 const SHIP_SPEED = (typeof ECON !== 'undefined' && ECON.shipSpeed) ? ECON.shipSpeed : 22;   // cells per game day
 const LIVE = (typeof ECON !== 'undefined' && ECON.live != null) ? ECON.live : 1;             // live-economy multiplier (6 / tuning record 1)
 const MAX_WAIT_DAYS = 3;
-const SAVE_KEY = 'waystation-save-v1';          // v1 save; v2 reads it only to migrate (4.12)
+const SAVE_KEY = 'portsolace-save-v1';          // v1 save; v2 reads it only to migrate (4.12). Was waystation-save-v1 (migrate.js copies it)
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const irnd = (a, b) => Math.floor(rnd(a, b + 1));

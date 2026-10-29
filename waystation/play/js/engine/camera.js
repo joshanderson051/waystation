@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — engine/camera.js (Engineer E)
+// PORT SOLACE v2 — engine/camera.js (Engineer E)
 // Pan, zoom-to-cursor, inertia, bounds, focus/fit tweens, title drift,
 // shake, panel avoidance, world<->screen (DESIGN2.md 3.2).
 //

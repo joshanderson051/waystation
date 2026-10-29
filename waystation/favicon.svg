@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <!-- Waystation mark: the Core Hub icon from js/art.js ICONS (hexagon plate, inner ring, lamp core), amber on void -->
+  <!-- Port Solace mark: the Core Hub icon from js/art.js ICONS (hexagon plate, inner ring, lamp core), amber on void -->
   <rect width="32" height="32" rx="6" fill="#04050A"/>
   <g transform="translate(4 4)" fill="none" stroke="#E9A23B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12 2.5 20.23 7.25v9.5L12 21.5l-8.23-4.75v-9.5Z"/>

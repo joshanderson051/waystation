@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================
-// WAYSTATION — local end-to-end check for the push worker, no browser needed.
+// PORT SOLACE — local end-to-end check for the push worker, no browser needed.
 //   1. npm run keys -- --dev-vars      (once; writes .dev.vars with a throwaway pair and DEV_ALLOW_LOCAL_ENDPOINT=1)
 //   2. npm run dev                      (wrangler dev on 8789 with /__scheduled exposed)
 //   3. node test/e2e-local.mjs          (this file; PUSH_API and FAKE_PORT override the defaults)

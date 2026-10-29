@@ -1,5 +1,5 @@
 // ============================================================
-// WAYSTATION v2 — ui/format.js
+// PORT SOLACE v2 — ui/format.js
 // Engineer H. Source of truth: DESIGN2.md 2.3 (type roles), 2.6 (counters),
 // DESIGN.md 6.0 (icon library), 6.2 (tickers).
 //

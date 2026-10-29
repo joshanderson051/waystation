@@ -1,6 +1,6 @@
 {
-  "name": "Waystation",
-  "short_name": "Waystation",
+  "name": "Port Solace",
+  "short_name": "Port Solace",
   "description": "A space station builder for the browser. Dock freighters, trade cargo, keep the power on and grow one docking collar into a galactic gate.",
   "start_url": "play/",
   "scope": "./",
