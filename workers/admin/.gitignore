@@ -1,0 +1,6 @@
+# Local secrets for `wrangler dev` (SESSION_SECRET=...). Never commit.
+.dev.vars
+.dev.vars.*
+# Wrangler's local state
+.wrangler/
+node_modules/

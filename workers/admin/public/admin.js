@@ -1,23 +1,19 @@
 // ============================================================
 // PORT SOLACE — Port Authority: the owner's player portal (DESIGN2.md Addendum A9)
-// Classic script, vanilla JS, no dependencies. Talks to the account worker (workers/account):
-//   POST /login, POST /logout, GET /me                      sign-in (the portal token lives in sessionStorage only)
-//   GET  /admin/stats                                       overview tiles
-//   GET  /admin/players?q=&active=&sort=&limit=&offset=     players table
-//   GET  /admin/players/:playerId                           the player panel
-//   POST /admin/gifts {playerId, credits, am, note}         Send a gift
-//   POST /admin/gifts/:id/revoke                            Revoke
-//   GET  /admin/log?limit=50                                admin log tab
-// 401 on any admin call -> back to the sign-in form; 403 -> "This account is not a Port Authority admin."
-//
-// Configuration: <meta name="portsolace-account" content='{"apiBase":"..."}'> in this page's head. Only on a local
-// development host (localhost, 127.0.0.1, [::1], *.localhost, *.test) does localStorage "portsolace.account.config"
-// ({"apiBase":"http://localhost:8790"}) override it, as play/js/account.js does, so the portal can be pointed at a
-// local worker. On the live origin the override is ignored: the game shares this origin, and a planted override
-// would otherwise send the admin's password to another host.
-// Framing: the page refuses to run inside a frame (index.html hides it and busts out; boot() returns early), because
-// GitHub Pages cannot send X-Frame-Options or frame-ancestors and the console is click-driven. "Continue as <email>" reads the game's account session from
-// localStorage "portsolace.account" ({token, email}) on this origin and validates it with /me before offering it.
+// Classic script, vanilla JS, no dependencies. Served by workers/admin at https://admin.portsolace.com/, which only
+// hands this page out after sign-in (login.html) and keeps the session in an HttpOnly cookie this script never sees.
+// Every call goes to this origin; the worker adds the admin's Bearer token and proxies /api/admin/* to the account
+// worker (workers/account) at /admin/*:
+//   GET  /api/session                                       the signed-in email (top rail)
+//   GET  /api/admin/stats                                   overview tiles
+//   GET  /api/admin/players?q=&active=&sort=&limit=&offset= players table
+//   GET  /api/admin/players/:playerId                       the player panel
+//   POST /api/admin/gifts {playerId, credits, am, note, requestId}   Send a gift
+//   POST /api/admin/gifts/:id/revoke                        Revoke
+//   GET  /api/admin/log?limit=50                            admin log tab
+//   POST /logout                                            Sign out (the worker revokes the token and clears the cookie)
+// 401 anywhere -> /login ("Your sign-in expired"); 403 not-admin -> /login ("This account is not a Port Authority admin.").
+// Framing is refused by the worker (frame-ancestors 'none', X-Frame-Options DENY).
 //
 // Every string that came from a player or the server (station names, notes, emails, ids, messages) is rendered
 // through textContent (the h() helper below never parses HTML). No innerHTML anywhere.
@@ -25,12 +21,8 @@
 'use strict';
 
 (() => {
-  const KEYS = {
-    session: 'portsolace.authority',        // sessionStorage: {token, email, source:'login'|'game'}
-    game: 'portsolace.account',             // localStorage, written by the game's account.js: {token, email}
-    config: 'portsolace.account.config',    // localStorage, the same apiBase override account.js honours
-  };
-  const PROD_API = 'https://account.portsolace.com';
+  const API = '/api';                       // same origin; workers/admin proxies /api/admin/* to the account worker
+  const LOGIN = '/login';
   const PAGE = 50;
   const REFRESH_MS = 60000;
   const TIMEOUT_MS = 15000;
@@ -38,7 +30,6 @@
   const MODAL_SETTLE_MS = 400;              // the confirmation box's 280 ms reveal plus slack (backdrop clicks ignored)
   const ONLINE_MS = 12 * 60000;             // presence comes every 10 minutes while a game is visible
   const MAX_CREDITS = 10000000, MAX_AM = 100000, NOTE_MAX = 140;
-  const TOKEN_RE = /^[A-Za-z0-9_-]{32,128}$/;
   const PLAYER_RE = /^[A-Za-z0-9_-]{8,64}$/;
   // sort key -> the worker's default direction (the worker sorts text ascending, numbers and dates descending)
   const SORT_DEFAULT = { last_seen: 'desc', first_seen: 'desc', level: 'desc', credits: 'desc', am: 'desc', rank: 'desc', station: 'asc', email: 'asc', platform: 'asc' };
@@ -189,56 +180,13 @@
   }
   const listOf = (data, ...keys) => { if (Array.isArray(data)) return data; for (const k of keys) if (data && Array.isArray(data[k])) return data[k]; return []; };
 
-  // ---------------------------------------------------------- storage
-  function store(kind) { try { return kind === 'session' ? window.sessionStorage : window.localStorage; } catch (e) { return null; } }
-  function readJson(kind, key) {
-    const s = store(kind); if (!s) return null;
-    try { const raw = s.getItem(key); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
-  }
-  function writeJson(kind, key, value) {
-    const s = store(kind); if (!s) return;
-    try { if (value == null) s.removeItem(key); else s.setItem(key, JSON.stringify(value)); } catch (e) { /* private mode */ }
-  }
-  function loadSession() {
-    const s = readJson('session', KEYS.session);
-    if (!s || typeof s !== 'object' || typeof s.token !== 'string' || !TOKEN_RE.test(s.token)) return null;
-    return { token: s.token, email: str(s.email), source: s.source === 'game' ? 'game' : 'login' };
-  }
-  function saveSession(s) { writeJson('session', KEYS.session, s ? { token: s.token, email: s.email, source: s.source } : null); }
-  function gameSession() {
-    const s = readJson('local', KEYS.game);
-    return s && typeof s === 'object' && typeof s.token === 'string' && TOKEN_RE.test(s.token) ? { token: s.token, email: str(s.email) } : null;
-  }
-
-  // ---------------------------------------------------------- configuration (same rules as account.js)
-  function readConfig() {
-    let base = '';
-    try {
-      const tag = document.querySelector('meta[name="portsolace-account"]');
-      const v = tag ? JSON.parse(tag.getAttribute('content') || '{}') : null;
-      if (v && typeof v === 'object' && v.apiBase !== undefined) base = str(v.apiBase);
-    } catch (e) { /* malformed tag: unconfigured */ }
-    if (localHost()) {
-      const o = readJson('local', KEYS.config);
-      if (o && typeof o === 'object' && o.apiBase !== undefined) base = str(o.apiBase);
-    }
-    base = base.trim().replace(/\/+$/, '');
-    return /^https?:\/\/\S+$/.test(base) ? base : '';
-  }
-  function localHost() {
-    const h = String((window.location && window.location.hostname) || '').toLowerCase();
-    return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h === '::1' || h.endsWith('.localhost') || h.endsWith('.test');
-  }
-  const framed = () => { try { return window.top !== window.self; } catch (e) { return true; } };
-  const apiHost = () => { try { return new URL(state.apiBase).host; } catch (e) { return state.apiBase || 'not set'; } };
-
   // ---------------------------------------------------------- state
   const state = {
-    apiBase: '', session: null, view: 'boot', tab: 'players',
+    email: '', view: 'boot', tab: 'players', leaving: false,
     q: '', active: 'all', sort: 'last_seen', dir: '', offset: 0, total: 0, players: [], seenMap: new Map(),
     listSeq: 0, statsSeq: 0, panelSeq: 0, logSeq: 0,
     open: null, panel: null, lastRefresh: 0, timer: null, refreshing: false,
-    gameOffer: null, gameRejected: null, modal: null, returnFocus: null, searchTimer: null,
+    modal: null, returnFocus: null, searchTimer: null,
     limitedUntil: 0, limitTimer: null,
   };
 
@@ -254,47 +202,54 @@
     if (status >= 500) return `The account service hit an error (${status}).`;
     return `The account service answered ${status}.`;
   }
+  // Same-origin JSON call (the session cookie rides along; there is no Authorization header to send). A 401 means the
+  // session is gone and a 403 not-admin that the account is no longer an admin: both leave for the sign-in page.
   async function api(path, o = {}) {
-    if (!state.apiBase) throw new ApiError('unconfigured', 'The account API address is not set for this page.', 0);
-    const headers = {};
-    const token = o.token !== undefined ? o.token : state.session && state.session.token;
-    if (token) headers.authorization = `Bearer ${token}`;
+    const headers = { accept: 'application/json' };
     if (o.body !== undefined) headers['content-type'] = 'application/json';
     const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctrl ? setTimeout(() => ctrl.abort(), TIMEOUT_MS) : null;
     let res;
     try {
-      res = await fetch(state.apiBase + path, {
+      res = await fetch(path, {
         method: o.method || 'GET', headers, body: o.body !== undefined ? JSON.stringify(o.body) : undefined,
-        mode: 'cors', credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer', signal: ctrl ? ctrl.signal : undefined,
+        credentials: 'same-origin', cache: 'no-store', signal: ctrl ? ctrl.signal : undefined,
       });
     } catch (err) {
-      if (err && err.name === 'AbortError') throw new ApiError('timeout', 'The account service took too long to answer. Try again.', 0);
-      throw new ApiError('offline', `Could not reach the account service at ${apiHost()}. Check the connection and try again.`, 0);
+      if (err && err.name === 'AbortError') throw new ApiError('timeout', 'Port Authority took too long to answer. Try again.', 0);
+      throw new ApiError('offline', 'Could not reach Port Authority. Check the connection and try again.', 0);
     } finally { if (timer) clearTimeout(timer); }
     let data = null;
     try { data = await res.json(); } catch (e) { data = null; }
     if (!res.ok) {
       const msg = data && typeof data.message === 'string' && data.message ? data.message : statusMessage(res.status);
-      throw new ApiError((data && data.error) || `http-${res.status}`, msg, res.status, data);
+      const err = new ApiError((data && data.error) || `http-${res.status}`, msg, res.status, data);
+      if (res.status === 401) { err.handled = true; toLogin('expired'); }
+      else if (res.status === 403 && err.code === 'not-admin') { err.handled = true; toLogin('not-admin'); }
+      throw err;
     }
     return data || {};
   }
-  // Admin calls: a 401 or 403 ends the console session wherever it happens; a 429 pauses the console until the
-  // worker's retryAfter has passed (every call before then would be refused too) and shows one notice.
+  // Admin calls (path under /admin, sent to /api/admin/...): a 429 pauses the console until the worker's retryAfter
+  // has passed (every call before then would be refused too) and shows one notice.
   async function adminApi(path, o) {
     if (state.limitedUntil > Date.now()) {
       const err = new ApiError('rate-limited', limitText(), 429, null);
       err.handled = true;
       throw err;
     }
-    try { return await api(path, o); }
+    try { return await api(API + path, o); }
     catch (err) {
-      if (err.status === 401) { err.handled = true; authLost('expired'); }
-      else if (err.status === 403) { err.handled = true; authLost('not-admin'); }
-      else if (err.status === 429) { err.handled = true; rateLimited(err); }
+      if (err.status === 429) { err.handled = true; rateLimited(err); }
       throw err;
     }
+  }
+  // Leave for the sign-in page (once), which shows the matching fixed message.
+  function toLogin(reason) {
+    if (state.leaving) return;
+    state.leaving = true;
+    stopRefresh();
+    window.location.replace(reason ? `${LOGIN}?e=${encodeURIComponent(reason)}` : LOGIN);
   }
   function retryAfterOf(err) {
     const n = Number(err && err.data && err.data.retryAfter);
@@ -325,159 +280,59 @@
     state.view = v;
     document.body.dataset.view = v;
     show($('view-boot'), v === 'boot');
-    show($('view-signin'), v === 'signin');
     show($('view-console'), v === 'console');
     show($('rail-session'), v === 'console');
     if (v === 'console') requestAnimationFrame(placeIndicator);
   }
-  function renderApiChip() {
-    const chip = $('api-chip');
-    const custom = state.apiBase && state.apiBase !== PROD_API;
-    show(chip, !!custom || !state.apiBase);
-    setText(chip, state.apiBase ? `API ${apiHost()}` : 'API not set');
-    chip.title = state.apiBase ? `This portal talks to ${state.apiBase} (localStorage ${KEYS.config})` : 'No account API configured';
-    setText($('signin-api'), state.apiBase ? `Account API · ${apiHost()}` : '');
-    setText($('foot-api'), state.apiBase ? `Account API ${apiHost()}` : 'Account API not set');
-  }
 
-  // ---------------------------------------------------------- sign in
-  function setSigninAlert(text, opts = {}) {
-    const box = $('signin-alert');
-    box.replaceChildren();
-    if (!text) { show(box, false); return; }
-    box.className = 'notice ' + (opts.kind || 'bad');
-    append(box, [h('span', { class: 'n-text' }, opts.word ? h('span', { class: 'n-word', text: opts.word }) : null, text)]);
-    if (opts.retry) box.appendChild(h('button', { class: 'btn small', type: 'button', text: 'Try again', onclick: opts.retry }));
-    show(box, true);
-  }
-  function setSigninError(text) { setText($('signin-error'), text || ''); show($('signin-error'), !!text); }
-
-  async function showSignin(alert) {
-    stopRefresh();
-    closePanel(true);
-    closeModal();
-    showView('signin');
-    if (alert) setSigninAlert(alert.text, alert); else setSigninAlert('');
-    setSigninError('');
-    $('signin-submit').classList.remove('busy');
-    $('signin-submit').disabled = false;
-    offerGameSession();
-    const email = $('signin-email');
-    if (!email.value && state.session && state.session.email) email.value = state.session.email;
-    setTimeout(() => { if (state.view === 'signin' && !$('continue').hidden) return; if (state.view === 'signin') (email.value ? $('signin-password') : email).focus(); }, 30);
-  }
-
-  // "Continue as <email>": only when the game's token on this origin passes /me.
-  async function offerGameSession() {
-    const box = $('continue');
-    show(box, false);
-    state.gameOffer = null;
-    const g = gameSession();
-    if (!g || !state.apiBase || g.token === state.gameRejected) return;
-    let me;
-    try { me = await api('/me', { token: g.token }); } catch (e) { return; }
-    if (state.view !== 'signin' || !me || !me.user) return;
-    state.gameOffer = { token: g.token, email: str(me.user.email || g.email) };
-    setText($('continue-email'), state.gameOffer.email);
-    $('continue-btn').title = `Use the account this browser's game is signed in to (${state.gameOffer.email})`;
-    show(box, true);
-    if (document.activeElement === document.body || document.activeElement === $('main')) $('continue-btn').focus();
-  }
-
-  async function continueAsGame() {
-    const offer = state.gameOffer;
-    if (!offer) return;
-    const btn = $('continue-btn');
-    btn.classList.add('busy'); btn.disabled = true;
-    state.session = { token: offer.token, email: offer.email, source: 'game' };
-    try { await enterConsole(); } finally { btn.classList.remove('busy'); btn.disabled = false; }
-  }
-
-  async function submitSignin(ev) {
-    ev.preventDefault();
-    const email = $('signin-email').value.trim().toLowerCase();
-    const password = $('signin-password').value;
-    if (!/^[^\s@]{1,64}@[^\s@]{1,189}\.[^\s@]{2,}$/.test(email)) { setSigninError('Enter the email address of your Port Solace account.'); $('signin-email').focus(); return; }
-    if (!password) { setSigninError('Enter your password.'); $('signin-password').focus(); return; }
-    setSigninError(''); setSigninAlert('');
-    const btn = $('signin-submit');
-    btn.classList.add('busy'); btn.disabled = true;
-    try {
-      let data;
-      try { data = await api('/login', { method: 'POST', body: { email, password }, token: null }); }
-      catch (err) { setSigninError(err.message); return; }
-      if (!data || typeof data.token !== 'string') { setSigninError('The account service gave an unexpected answer.'); return; }
-      $('signin-password').value = '';
-      state.session = { token: data.token, email: str(data.user && data.user.email) || email, source: 'login' };
-      await enterConsole({ fresh: true });
-    } finally { btn.classList.remove('busy'); btn.disabled = false; }
-  }
-
-  // Confirms the session is an admin one (GET /admin/stats) and opens the console.
-  async function enterConsole(o = {}) {
-    const s = state.session;
-    if (!s) return showSignin();
-    if (!o.fresh) {                                           // a stored or borrowed token: /me first
-      let me;
-      try { me = await api('/me'); }
-      catch (err) {
-        if (err.status === 401) { forgetSession(); return showSignin({ text: s.source === 'game' ? 'The game\'s sign-in on this browser has expired. Sign in here instead.' : 'Your sign-in expired. Sign in again.', word: 'Signed out', kind: 'warn' }); }
-        if (state.view !== 'signin') showView('signin');
-        setSigninAlert(err.message, { word: 'Offline', retry: () => { setSigninAlert(''); enterConsole(); } });
-        return;
-      }
-      if (me && me.user && me.user.email) s.email = str(me.user.email);
-    }
-    let stats = null, statsErr = null;
-    try { stats = await api('/admin/stats'); }
+  // ---------------------------------------------------------- session (the worker let this page load, so one exists)
+  // GET /api/session names the admin; GET /api/admin/stats fills the tiles. Network trouble on the first call keeps
+  // the boot view with a Retry; any later trouble opens the console and shows it there.
+  async function enterConsole() {
+    show($('boot-error'), false);
+    show($('boot-line'), true);
+    let who;
+    try { who = await api(`${API}/session`); }
     catch (err) {
-      if (err.status === 401) { forgetSession(); return showSignin({ text: 'Your sign-in expired. Sign in again.', word: 'Signed out', kind: 'warn' }); }
-      if (err.status === 403) {
-        if (s.source === 'game') state.gameRejected = s.token;
-        else api('/logout', { method: 'POST', token: s.token }).catch(() => {});
-        forgetSession();
-        return showSignin({ text: NOT_ADMIN, word: 'Denied' });
-      }
-      if (err.status === 429) {                                // the console would open empty: stay on the sign-in view
-        if (state.view !== 'signin') await showSignin();
-        setSigninAlert(`Port Authority is rate-limited for ${waitText(retryAfterOf(err))}. Try again then.`, { word: 'Rate-limited', kind: 'warn' });
-        return;
-      }
-      statsErr = err;                                         // config or network trouble: open the console and show it there
+      if (err.handled) return;
+      show($('boot-line'), false);
+      errorNotice($('boot-error'), err.message, () => enterConsole());
+      return;
     }
-    saveSession(s);
+    state.email = str(who && who.email);
+    let stats = null, statsErr = null;
+    try { stats = await adminApi('/admin/stats'); }
+    catch (err) {
+      if (err.handled && err.status !== 429) return;          // on its way to the sign-in page
+      statsErr = err;                                         // rate limit, config or network trouble: shown in the console
+    }
     openConsole(stats, statsErr);
   }
 
-  function forgetSession() { state.session = null; saveSession(null); }
-
-  function authLost(reason) {
-    const s = state.session;
-    if (!s) return;
-    if (reason === 'not-admin') {
-      if (s.source === 'game') state.gameRejected = s.token;
-      else api('/logout', { method: 'POST', token: s.token }).catch(() => {});
-    }
-    forgetSession();
-    showSignin(reason === 'not-admin' ? { text: NOT_ADMIN, word: 'Denied' } : { text: 'Your sign-in expired. Sign in again.', word: 'Signed out', kind: 'warn' });
-  }
-
+  // Sign out: the worker revokes the account token and clears the session cookie.
   async function signOut() {
-    const s = state.session;
-    // A portal sign-in is revoked on the server; a borrowed game token is only forgotten here (revoking it would sign the game out).
-    if (s && s.source === 'login') api('/logout', { method: 'POST', token: s.token }).catch(() => {});
-    forgetSession();
-    state.players = []; state.total = 0; state.seenMap.clear(); state.offset = 0;
-    $('players-body').replaceChildren();
-    showSignin({ text: 'Signed out of Port Authority.', word: 'Done', kind: 'good' });
+    const btn = $('signout');
+    btn.classList.add('busy'); btn.disabled = true;
+    stopRefresh();
+    let ok = false;
+    try {
+      const res = await fetch('/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { accept: 'application/json' } });
+      ok = res.ok;
+    } catch (e) { ok = false; }
+    if (ok) { state.leaving = true; window.location.replace(`${LOGIN}?e=signed-out`); return; }
+    btn.classList.remove('busy'); btn.disabled = false;
+    scheduleRefresh();
+    toast('Could not sign out. Check the connection and try again.', 'bad');
   }
 
   // ---------------------------------------------------------- console
   function openConsole(stats, statsErr) {
     showView('console');
-    setText($('who'), state.session.email);
-    $('who').title = state.session.source === 'game' ? `${state.session.email} (the game's sign-in on this browser)` : state.session.email;
-    if (stats) renderStats(stats); else if (statsErr) showStatsError(statsErr);
+    setText($('who'), state.email);
+    $('who').title = state.email;
+    if (stats) renderStats(stats);
+    else if (statsErr && statsErr.status === 429) rateLimited(statsErr);
+    else if (statsErr) showStatsError(statsErr);
     state.lastRefresh = Date.now();
     loadPlayers();
     if (state.tab === 'log') loadLog();
@@ -1177,8 +1032,6 @@
 
   // ---------------------------------------------------------- wiring
   function bind() {
-    $('signin-form').addEventListener('submit', submitSignin);
-    $('continue-btn').addEventListener('click', continueAsGame);
     $('signout').addEventListener('click', signOut);
     $('refresh').addEventListener('click', () => refreshAll(false));
 
@@ -1275,8 +1128,6 @@
       if (document.hidden) { stopRefresh(); setLive('paused'); return; }
       if (Date.now() - state.lastRefresh >= REFRESH_MS) refreshAll(true); else scheduleRefresh();
     });
-    // another tab signed the game in or out: refresh the "Continue as" offer
-    window.addEventListener('storage', ev => { if (ev.key === KEYS.game && state.view === 'signin') offerGameSession(); });
   }
   function scrollToTable() {
     const top = $('tabs').getBoundingClientRect().top + window.scrollY - 70;
@@ -1285,19 +1136,9 @@
 
   // ---------------------------------------------------------- boot
   async function boot() {
-    if (framed()) return;                                     // index.html hides the page and busts out; nothing loads here
-    state.apiBase = readConfig();
-    renderApiChip();
     bind();
-    if (!state.apiBase) {
-      showView('signin');
-      setSigninAlert('The account API address is missing from this page (<meta name="portsolace-account">).', { word: 'Not configured' });
-      $('signin-submit').disabled = true;
-      return;
-    }
-    state.session = loadSession();
-    if (state.session) { await enterConsole(); return; }
-    showSignin();
+    showView('boot');
+    await enterConsole();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });

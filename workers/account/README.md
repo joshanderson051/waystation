@@ -230,8 +230,14 @@ That override affects only your browser. Remove it with
 
 ## Port Authority (the owner's player portal)
 
-Port Authority is the private page at <https://portsolace.com/admin/> where the owner sees every active
-player and sends them gifts of credits or Antimatter (DESIGN2.md Addendum A9). This worker is its backend:
+Port Authority is the private page at <https://admin.portsolace.com/> where the owner sees every active
+player and sends them gifts of credits or Antimatter (DESIGN2.md Addendum A9). The page is served by its own
+worker, `portsolace-admin` (`workers/admin`, custom domain `admin.portsolace.com`), and nothing of it loads
+before a login: that worker signs the owner in through this worker's `/login` over a service binding
+(`ACCOUNT` -> `waystation-account`, forwarding the client's `CF-Connecting-IP`), keeps the account token in a
+signed `HttpOnly` cookie, refuses (and revokes) any account that this worker answers 403 `not-admin`, and proxies
+the portal's `/api/admin/*` calls here as `/admin/*` with that token (DESIGN2.md A9.7, `workers/admin/README.md`).
+The old address `https://portsolace.com/admin/` only redirects there. This worker is its backend:
 the code is `src/portauthority.js`, the storage a **D1 database** called `portsolace` (binding `DB`).
 
 **Who shows up.** Every running game reports **presence** every 10 minutes, keyed by its random player id
@@ -316,8 +322,8 @@ Add an `EMAIL_API_KEY=…` line to `.dev.vars` to send real reset emails from th
 To try Port Authority locally, apply the migrations with `--local`, sign up a local admin account, read its
 id from `/me`, and start the worker with both lists, for example
 `npx wrangler dev --port 8790 --var ADMIN_EMAILS:admin@example.test --var ADMIN_USER_IDS:u_…` (or put
-`ADMIN_USER_IDS=u_…` in `.dev.vars`). The portal honours the `portsolace.account.config` override only when it
-is itself served from localhost, 127.0.0.1, `*.localhost` or `*.test`.
+`ADMIN_USER_IDS=u_…` in `.dev.vars`). The portal no longer takes an API override: run the admin worker locally
+against this one as `workers/admin/README.md` describes.
 
 Add the game's local origin (for example `http://localhost:8794`) to `ALLOWED_ORIGIN` while testing, serve
 the game from the repository root with `node waystation/serve.js --port 8794 --base waystation` (in Git

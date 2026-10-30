@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sign in · Port Authority · Port Solace</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#04050A">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Port Authority: the Port Solace operator console. Private.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/login.css">
+<script src="/login.js" defer></script>
+</head>
+<body>
+<main class="gate" id="main">
+  <section class="card keel" aria-labelledby="title">
+    <header class="card-head">
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 20.23 7.25v9.5L12 21.5l-8.23-4.75v-9.5Z M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z"/><circle cx="12" cy="12" r="1.2"/></svg>
+        <span class="brand-sub">Port Solace</span>
+      </div>
+      <h1 class="wordmark-big" id="title">Port Authority</h1>
+      <p class="micro tag-amber">Restricted · Owner only</p>
+      <p class="lede">The Port Solace player registry. Sign in with your Port Solace account.</p>
+    </header>
+
+    <div class="notice" id="alert" role="alert" hidden></div>
+
+    <form class="form" id="form" method="post" action="/login" novalidate>
+      <div class="shelf"><span class="shelf-label">Sign in</span><span class="shelf-tag">Port Solace account</span></div>
+      <label class="field">
+        <span class="label">Email</span>
+        <input class="input" id="email" name="email" type="email" autocomplete="username" inputmode="email" spellcheck="false" autocapitalize="off" maxlength="254" required>
+      </label>
+      <label class="field">
+        <span class="label">Password</span>
+        <input class="input" id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required>
+      </label>
+      <p class="form-error" id="error" role="alert" hidden></p>
+      <button class="btn primary big" type="submit" id="submit">Sign in</button>
+    </form>
+
+    <p class="fine forgot">Forgot your password? Reset it from the game's sign-in at <a href="https://portsolace.com/play/" rel="noopener noreferrer">portsolace.com/play/</a>.</p>
+  </section>
+  <noscript><p class="noscript">Port Authority needs JavaScript.</p></noscript>
+</main>
+</body>
+</html>

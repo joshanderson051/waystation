@@ -1,0 +1,36 @@
+# Port Solace — Port Authority front door: Cloudflare Worker configuration (DESIGN2.md Addendum A9.7).
+# Follow README.md in this folder. The portal lives at https://admin.portsolace.com/ and nowhere else.
+#
+# Secrets are NEVER written in this file. Set the one secret, right after the first deploy, with:
+#   npx wrangler secret put SESSION_SECRET   (at least 32 random bytes; `npm run secret` prints one)
+# Until it is set, every request answers 503 "not configured" (the worker fails closed).
+
+name = "portsolace-admin"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+workers_dev = false           # no *.workers.dev address: the portal is reachable only at its custom domain
+preview_urls = false          # and no per-version preview URLs (Wrangler before 4.34 turned them on by default)
+# The live address, on the portsolace.com zone. Cloudflare creates the DNS record and certificate on deploy.
+routes = [{ pattern = "admin.portsolace.com", custom_domain = true }]
+
+# ---------------------------------------------------------------- the portal's files (public/)
+# run_worker_first: every request, static files included, passes through src/index.js, which serves nothing but
+# the sign-in page without a signed session cookie.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+# ---------------------------------------------------------------- the account Worker (sign-in and the admin API)
+# A service binding: Worker-to-Worker inside Cloudflare, no public hop. The account Worker keeps its old script name.
+[[services]]
+binding = "ACCOUNT"
+service = "waystation-account"
+
+# ---------------------------------------------------------------- plain variables (not secret)
+[vars]
+# The portal's own origin. POST /login, POST /logout and every non-GET /api call must carry this Origin.
+SITE_ORIGIN = "https://admin.portsolace.com"
+
+[observability]
+enabled = true                # request logs in the Cloudflare dashboard (free tier includes this)

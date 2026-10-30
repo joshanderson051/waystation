@@ -54,6 +54,7 @@ button { cursor: pointer; }
 [hidden] { display: none !important; }
 :focus-visible { outline: 2px solid var(--ivory); outline-offset: 2px; }
 :focus:not(:focus-visible) { outline: none; }
+#main:focus { outline: none; } /* a tabindex=-1 target for the skip link and programmatic focus, not a control */
 .sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .skip { position: absolute; left: -999px; top: 8px; z-index: 100; padding: 6px 10px; background: var(--amber); color: var(--on-accent); border-radius: 3px; text-decoration: none; }
 .skip:focus { left: 8px; }
@@ -183,7 +184,6 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
 .mark circle { fill: #FFE9B8; stroke: none; }
 .brand-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .brand-sub { font: 600 11px/1 var(--font-cond); letter-spacing: .22em; text-transform: uppercase; color: var(--amber); text-shadow: var(--glow-amber); }
-.api-chip { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; }
 .rail-right { margin-left: auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .who { font: 500 12px/1 var(--font-mono); color: var(--ink-2); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; }
 .live { display: inline-flex; align-items: center; gap: 6px; font: 500 11px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); padding-right: 6px; white-space: nowrap; }
@@ -198,25 +198,7 @@ main { display: block; outline: none; }
 .view { max-width: 1480px; margin: 0 auto; padding: 20px calc(var(--gutter) + var(--safe-r)) calc(32px + var(--safe-b)) calc(var(--gutter) + var(--safe-l)); }
 .boot { display: grid; place-items: center; min-height: calc(100vh - var(--rail-h) - 40px); }
 .boot-line { display: flex; align-items: center; gap: 10px; }
-
-/* ---- sign in ---- */
-.signin { display: grid; place-items: center; min-height: calc(100vh - var(--rail-h)); min-height: calc(100dvh - var(--rail-h)); padding-top: 32px; padding-bottom: 48px; }
-.signin-box { width: min(440px, 100%); padding: 26px 26px 22px 32px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 18px; }
-.signin-head { display: flex; flex-direction: column; gap: 10px; }
-.lede { color: var(--ink-2); font-size: 14px; line-height: 1.5; }
-.signin-box .notice { margin: 0; }
-.continue { display: flex; flex-direction: column; gap: 0; }
-.continue .shelf { margin-bottom: 10px; }
-.continue-btn { width: 100%; justify-content: space-between; text-transform: none; letter-spacing: 0; font: 500 15px/1.2 var(--font-body); padding: 0 14px 0 18px; min-height: 48px;
-                border-color: var(--amber-dim); background: var(--amber-ghost); }
-.continue-btn:hover { border-color: var(--amber); background: rgba(233,162,59,.2); }
-.continue-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-.continue-lead { font: 600 13px/1 var(--font-cond); letter-spacing: .1em; text-transform: uppercase; color: var(--amber); margin-right: 4px; }
-.continue-email { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
-.continue-btn .ic { color: var(--amber); }
-.or { display: flex; align-items: center; gap: 10px; margin-top: 16px; color: var(--ink-3); font: 500 12px/1 var(--font-cond); letter-spacing: .1em; text-transform: uppercase; }
-.or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--hairline); }
-.api-line { text-align: right; overflow-wrap: anywhere; }
+.boot-error { width: min(520px, 100%); }
 
 /* ==========================================================================
    console: overview tiles
@@ -494,7 +476,6 @@ th[aria-sort="ascending"] .sort-btn::after { border-top: 0; border-bottom: 5px s
   .view { padding-top: 14px; }
   .brand-text .wordmark { font-size: 15px; letter-spacing: .26em; }
   .btn-text { display: none; }
-  .api-chip { max-width: 30vw; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .tile[data-stat="players"] { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: baseline; min-height: 0; gap: 4px 12px; }
   .tile[data-stat="players"] .label { flex: 1 1 100%; }
@@ -506,7 +487,6 @@ th[aria-sort="ascending"] .sort-btn::after { border-top: 0; border-bottom: 5px s
   .mark { width: 22px; height: 22px; }
   .rail-in { gap: 8px; }
   .live { display: none; }
-  .api-chip { max-width: 24vw; padding: 0 5px; }
   .rail-right { gap: 4px; }
   #signout { padding: 0 8px 0 12px; font-size: 12px; }
   .panel { padding: 14px 12px 14px 16px; }
@@ -571,7 +551,6 @@ th[aria-sort="ascending"] .sort-btn::after { border-top: 0; border-bottom: 5px s
   .form-actions .btn.primary { flex: 1 1 100%; min-height: 44px; }
   .form-actions .fine { flex: 1 1 100%; }
   .m-actions .btn { flex: 1; min-height: 44px; }
-  .signin-box { padding: 22px 18px 18px 24px; }
   .btn.big { min-height: 46px; }
   .display { font-size: 28px; }
 }

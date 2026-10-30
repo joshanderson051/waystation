@@ -1,0 +1,140 @@
+/* ==========================================================================
+   PORT SOLACE — login.css   (Port Authority sign-in page; DESIGN2.md Addendum A9.7)
+   The only stylesheet served without a session, so it is standalone: the same tokens as admin.css (site.css /
+   DESIGN.md section 2) and the few console pieces the sign-in card needs (keel, shelf, lozenge buttons, inputs,
+   notices). Void black, an amber keel, the ivory wordmark.
+   ========================================================================== */
+:root{
+  --void:#04050A; --bg:#090B12; --surface-1:#0F1119; --surface-2:#161A25; --surface-3:#1E2432;
+  --space-1:#070B18;
+  --hairline:#262C3A; --hairline-2:#343B4C;
+  --glass:rgba(14,17,22,.82); --edge:rgba(94,196,255,.22); --edge-2:rgba(94,196,255,.42);
+  --amber:#E9A23B; --amber-hi:#FFC46A; --amber-dim:rgba(233,162,59,.55); --amber-ghost:rgba(233,162,59,.14);
+  --ice:#8FD3E8;   --ice-hi:#BFE8F4;   --ice-dim:rgba(143,211,232,.55);  --ice-ghost:rgba(143,211,232,.14);
+  --sage:#A8C8A0;  --sage-hi:#CBE2C4;  --sage-dim:rgba(168,200,160,.55); --sage-ghost:rgba(168,200,160,.14);
+  --rose:#E58BB8;  --rose-ghost:rgba(229,139,184,.14);
+  --ivory:#F3E9D6; --ivory-dim:rgba(243,233,214,.6); --ivory-ghost:rgba(243,233,214,.14);
+  --am:#C084FF; --am-hi:#DDB8FF; --am-ghost:rgba(192,132,255,.16); --am-dim:rgba(192,132,255,.55);
+  --good:#6FD3A3; --warn:#FF8F3D; --bad:#FF4F5E;
+  --good-ghost:rgba(111,211,163,.14); --warn-ghost:rgba(255,143,61,.14); --bad-ghost:rgba(255,79,94,.14);
+  --good-dim:rgba(111,211,163,.55); --bad-dim:rgba(255,79,94,.55);
+  --ink:#E6E8EC; --ink-2:#A3A7B0; --ink-3:#6B707C; --on-accent:#140C00;
+  --glow-amber:0 0 8px rgba(233,162,59,.35);
+  --glow-amber-2:0 0 18px rgba(233,162,59,.45), 0 0 2px rgba(255,196,106,.8);
+  --shadow:0 24px 60px rgba(0,0,0,.6);
+  --ease:cubic-bezier(.2,.7,.2,1); --ease-out:cubic-bezier(.16,1,.3,1); --dur-micro:140ms; --dur-state:280ms;
+  --font-cond:'Barlow Condensed','Bahnschrift Condensed','Arial Narrow',sans-serif;
+  --font-body:'Barlow','Segoe UI',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono','Cascadia Mono',Consolas,monospace;
+  --safe-l:env(safe-area-inset-left, 0px); --safe-r:env(safe-area-inset-right, 0px);
+  --safe-t:env(safe-area-inset-top, 0px); --safe-b:env(safe-area-inset-bottom, 0px);
+}
+
+/* ---- base ---- */
+*, *::before, *::after { box-sizing: border-box; }
+html { background: var(--void); -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0; min-height: 100vh; min-height: 100dvh; color: var(--ink); font: 400 14px/1.45 var(--font-body);
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  background:
+    radial-gradient(1100px 560px at 85% -10%, rgba(143,211,232,.07), transparent 70%),
+    radial-gradient(900px 640px at 0% 110%, rgba(233,162,59,.06), transparent 70%),
+    var(--void);
+  background-attachment: fixed;
+}
+h1, p { margin: 0; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--ivory); outline-offset: 2px; }
+:focus:not(:focus-visible) { outline: none; }
+a { color: var(--amber); text-underline-offset: 2px; }
+a:hover { color: var(--amber-hi); }
+
+/* type roles (DESIGN.md 3) */
+.label { font: 500 12px/14px var(--font-cond); letter-spacing: .10em; text-transform: uppercase; color: var(--ink-2); }
+.micro { font: 500 11px/13px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+.tag-amber { color: var(--amber); }
+.fine { font: 400 13px/1.5 var(--font-body); color: var(--ink-2); }
+
+/* ---- layout: one card, centred, safe areas honoured ---- */
+.gate {
+  display: grid; place-items: center; min-height: 100vh; min-height: 100dvh;
+  padding: calc(24px + var(--safe-t)) calc(16px + var(--safe-r)) calc(32px + var(--safe-b)) calc(16px + var(--safe-l));
+}
+.card {
+  width: min(420px, 100%); background: var(--surface-1); box-shadow: var(--shadow);
+  padding: 28px 26px 24px 32px; display: flex; flex-direction: column; gap: 20px;
+  animation: rise var(--dur-state) var(--ease-out) both;
+}
+.card-head { display: flex; flex-direction: column; gap: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.mark { width: 26px; height: 26px; fill: none; stroke: var(--amber); stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(0 0 6px rgba(233,162,59,.4)); flex: none; }
+.mark circle { fill: #FFE9B8; stroke: none; }
+.brand-sub { font: 600 12px/1 var(--font-cond); letter-spacing: .26em; text-transform: uppercase; color: var(--amber); text-shadow: var(--glow-amber); }
+.wordmark-big { font: 700 30px/1.05 var(--font-cond); letter-spacing: .16em; text-transform: uppercase; color: var(--ivory); overflow-wrap: anywhere; }
+.lede { color: var(--ink-2); font-size: 14px; }
+
+/* ---- keel (5.1): a 4px amber rail with 45deg ends, inset from top and bottom ---- */
+.keel { position: relative; }
+.keel::before {
+  content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 4px; z-index: 1; pointer-events: none;
+  background: var(--amber); box-shadow: 0 0 12px var(--amber-dim);
+  clip-path: polygon(0 4px, 100% 0, 100% calc(100% - 4px), 0 100%);
+}
+
+/* ---- shelf (5.4) ---- */
+.shelf { position: relative; display: flex; align-items: center; gap: 8px; min-height: 28px; border-top: 1px solid var(--hairline);
+         font: 600 13px/1 var(--font-cond); letter-spacing: .14em; text-transform: uppercase; color: var(--ink); min-width: 0; }
+.shelf::before { content: ''; position: absolute; left: 0; top: -1px; width: 24px; height: 2px; background: var(--amber); box-shadow: var(--glow-amber); }
+.shelf-label { flex: none; padding-top: 2px; }
+.shelf-tag { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-top: 2px;
+             font: 500 11px/13px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+
+/* ---- form ---- */
+.form { display: flex; flex-direction: column; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.input { width: 100%; min-height: 44px; padding: 0 12px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--hairline); color: var(--ink);
+         font: 500 15px/1.2 var(--font-mono); transition: border-color var(--dur-micro) var(--ease); }
+.input:hover { border-color: var(--hairline-2); }
+.input:focus { border-color: var(--hairline-2); outline: 2px solid var(--ivory); outline-offset: 1px; }
+.input[aria-invalid="true"] { border-color: var(--bad); }
+.form-error { color: var(--bad); font-size: 13px; }
+.form-error::before { content: '\25BC'; font-size: 9px; margin-right: 6px; vertical-align: 1px; }
+
+/* ---- lozenge (5.5) ---- */
+.btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; padding: 0 22px; border-radius: 3px;
+       background: var(--amber); border: 1px solid var(--amber); color: var(--on-accent); box-shadow: var(--glow-amber); white-space: nowrap;
+       font: 600 14px/1 var(--font-cond); letter-spacing: .10em; text-transform: uppercase; width: 100%; margin-top: 4px;
+       transition: background-color var(--dur-micro) var(--ease), border-color var(--dur-micro) var(--ease), box-shadow var(--dur-micro) var(--ease); }
+.btn:hover { background: var(--amber-hi); border-color: var(--amber-hi); box-shadow: var(--glow-amber-2); }
+.btn:disabled { opacity: .55; cursor: progress; }
+.btn.busy { color: transparent !important; }
+.btn.busy::after { content: ''; position: absolute; inset: 0; margin: auto; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--on-accent); border-right-color: transparent; animation: spin .8s linear infinite; }
+
+/* ---- notices: a keeled strip with a status word ---- */
+.notice { position: relative; padding: 10px 12px 10px 18px; background: var(--surface-2); color: var(--ink); font-size: 13px; line-height: 1.45; display: flex; gap: 8px; flex-wrap: wrap; }
+.notice::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 4px; background: var(--amber); clip-path: polygon(0 4px, 100% 0, 100% calc(100% - 4px), 0 100%); }
+.notice.bad::before { background: var(--bad); }
+.notice.good::before { background: var(--good); }
+.notice.warn::before { background: var(--warn); }
+.notice .n-word { font: 600 12px/18px var(--font-cond); letter-spacing: .12em; text-transform: uppercase; }
+.notice.bad .n-word { color: var(--bad); }
+.notice.good .n-word { color: var(--good); }
+.notice.warn .n-word { color: var(--warn); }
+.notice .n-text { flex: 1 1 200px; min-width: 0; }
+
+.forgot { border-top: 1px solid var(--hairline); padding-top: 14px; }
+.noscript { margin-top: 16px; color: var(--ink-2); text-align: center; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes rise { from { transform: translateY(12px); opacity: 0; } }
+
+@media (max-width: 480px) {
+  .card { padding: 24px 18px 20px 24px; gap: 18px; }
+  .wordmark-big { font-size: 27px; letter-spacing: .12em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+  .btn.busy::after { animation-duration: 1.6s !important; }
+}
