@@ -217,7 +217,8 @@ const Tutorial = {
     else {
       const order = st.place === 'below' ? ['below', 'above', 'right', 'left'] : st.place === 'above' ? ['above', 'below', 'right', 'left'] : ['right', 'left', 'below', 'above'];
       const fits = { right: r2.x + r2.w + gap + cw <= W - m, left: r2.x - gap - cw >= m, below: r2.y + r2.h + gap + ch <= H - m, above: r2.y - gap - ch >= m };
-      side = order.find(s => fits[s]) || order[0];
+      // A4: on a phone with no side free, the roomier of above / below: clamped to the screen it overlaps the target's edge, never its centre
+      side = order.find(s => fits[s]) || (phoneLayout() ? (r2.y > H - (r2.y + r2.h) ? 'above' : 'below') : order[0]);
       if (side === 'right') { x = r2.x + r2.w + gap; y = r2.y + r2.h / 2 - ch / 2; }
       else if (side === 'left') { x = r2.x - gap - cw; y = r2.y + r2.h / 2 - ch / 2; }
       else if (side === 'below') { x = r2.x + r2.w / 2 - cw / 2; y = r2.y + r2.h + gap; }
