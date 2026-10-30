@@ -200,6 +200,9 @@ const Tutorial = {
     const st = this.steps[this.step] || {}, rect = this.targetRect();
     const dim = el.querySelector('.tour-dim'), ring = el.querySelector('.tour-ring'), call = el.querySelector('.tour-callout');
     const W = window.innerWidth, H = window.innerHeight;
+    // A4: on a short landscape phone the world band is ~190 px while the sheet peeks: the card collapses to a slim bar
+    // over the dock so it never covers the cells it asks the player to tap (the placing strip carries the instruction)
+    call.classList.toggle('compact', phoneLayout() && !!document.querySelector('#panel-host[data-peek]') && matchMedia('(max-height: 500px) and (orientation: landscape)').matches);
     if (fresh && rect && rect.el && typeof rect.el.scrollIntoView === 'function' && rect.el.closest('.panel-body')) { rect.el.scrollIntoView({ block: 'nearest' }); }
     const r2 = fresh && rect && rect.el ? this.targetRect() : rect;
     if (r2) {

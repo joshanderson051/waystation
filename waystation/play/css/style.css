@@ -1249,7 +1249,8 @@ body[data-boot] #statusbar > .spine, body[data-boot] #contextbar > .spine { anim
 .tour-ring { position: absolute; left: 0; top: 0; border: 1px solid var(--ivory); border-radius: 6px; box-shadow: var(--glow-ivory), inset 0 0 12px rgba(243,233,214,.12); transition: transform 320ms var(--ease-out), width 320ms var(--ease-out), height 320ms var(--ease-out); }
 .tour-callout { position: absolute; left: 0; top: 0; width: 380px; max-width: calc(100vw - 24px); padding: 16px 18px 14px 22px; pointer-events: auto; background-color: var(--glass-3); --spine: var(--amber); --spine-glow: var(--glow-amber-2); box-shadow: inset 0 1px 0 var(--glass-hi), 0 24px 60px rgba(0,0,0,.5); transition: transform 320ms var(--ease-out); }
 .tour-callout > .spine { top: var(--cut); }
-.tour-callout.in { animation: row-in 280ms var(--ease-out) backwards; }
+/* a fade only: the card's position is an inline transform, and a transform animation would flash it at the top-left corner */
+.tour-callout.in { animation: fade-in 280ms var(--ease-out) backwards; }
 .tour-kicker { font: 600 12px/1 var(--font-cond); letter-spacing: .14em; text-transform: uppercase; color: var(--amber); margin-bottom: 8px; }
 .tour-title { font: 700 22px/1.1 var(--font-cond); letter-spacing: .04em; text-transform: uppercase; color: var(--ink); margin-bottom: 8px; }
 .tour-text { font: 400 var(--fs-body-lg)/1.55 var(--font-body); color: var(--ink-2); }
@@ -1565,6 +1566,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   #contextbar { position: fixed; left: calc(10px + var(--sal)); right: calc(10px + var(--sar)); top: auto; bottom: calc(var(--dock-h) + 8px); height: auto; min-height: 44px; display: none; gap: 8px; padding: 6px 6px 6px 14px; border: 1px solid var(--edge); z-index: 7; --c: var(--cut-sm); clip-path: polygon(var(--c) 0, 100% 0, 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, 0 100%, 0 var(--c)); }
   #contextbar > .spine { left: 0; right: auto; top: var(--c); bottom: 0; width: 2px; height: auto; opacity: .9; box-shadow: var(--spine-glow); }
   body[data-placing] #contextbar { display: flex; }
+  body[data-placing] .panel-body { padding-bottom: 72px; }   /* a lifted sheet's last rows clear the placing strip */
   body[data-peek] #contextbar { bottom: calc(var(--dock-h) + var(--peek-h) + 8px); }
   .hint { white-space: normal; font-size: 13px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .ctx-right { display: none; }
@@ -1646,7 +1648,14 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   .ro { height: 36px; }
   .cele-wrap { top: 18%; height: 64%; }
   .tour-callout { max-width: 520px; }
-  .sheet-box, .sheet-box.wide { max-width: 640px; margin: 0 auto; }
+  .tour-callout.compact { display: flex; align-items: center; gap: 12px; width: auto; padding: 4px 8px 4px 16px; }
+  .tour-callout.compact .tour-kicker, .tour-callout.compact .tour-text, .tour-callout.compact .tour-wait { display: none; }
+  .tour-callout.compact .tour-title { margin: 0; font-size: 15px; white-space: nowrap; }
+  .tour-callout.compact .tour-actions { margin: 0; flex-wrap: nowrap; }
+  .tour-callout.compact .tour-spacer { display: none; }
+  .sheet-box, .sheet-box.wide { max-width: 760px; margin: 0 auto; }
+  .day-strip { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .day-cell { min-height: 0; padding: 8px 4px; gap: 6px; }
 }
 /* the menu and More sheets (phone only; hud.js builds the rows) */
 .menu-ro { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }

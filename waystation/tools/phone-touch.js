@@ -85,6 +85,7 @@ const frames = (page, ms) => page.evaluate(ms => new Promise(res => { const t0 =
   ok('tour advanced to step 5 and lifted the sheet', await page.evaluate(() => Tutorial.step === 4 && !document.getElementById('panel-host').hasAttribute('data-peek')));
   await shot('tour-5');
   // ---- skip the rest of the tour by tap, close the sheet by dragging its head down
+  await frames(page, 500);   // the card slides to its place on each step (320 ms)
   await tap('[data-tour="skip"]');
   await frames(page, 400);
   ok('tour skipped by tap', await page.evaluate(() => !Tutorial.active && Tutorial.done));
