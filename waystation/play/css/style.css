@@ -1631,6 +1631,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   #title-thumb { width: 100%; height: auto; aspect-ratio: 5 / 3; }
   .resume-name { font-size: 22px; white-space: normal; }
   #title-registry { white-space: normal; overflow: visible; text-overflow: clip; }
+  #title .linkish { display: inline-flex; align-items: center; min-height: 32px; }
   .title-actions { flex-wrap: wrap; }
   .title-actions .btn.big { flex: 1 1 auto; }
 }
