@@ -554,6 +554,17 @@ body[data-warp] #app { transition: opacity 300ms var(--ease-in-out); opacity: .6
 .sb-btn .ic { width: 20px; height: 20px; vertical-align: 0; }
 .sb-btn .dot { position: absolute; right: 5px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); box-shadow: var(--glow-amber-2); }
 .sb-btn.narrow-only { display: none; }
+/* Build the Ages: the way back to every game, first in the bar (hud.js HUB_URL; only on space.buildtheages.com) */
+.sb-hub { display: inline-flex; align-items: center; gap: 8px; flex: none; height: 36px; padding: 0 12px 0 10px; margin-right: 2px; border-radius: 3px; color: var(--ink-2); background: var(--glass-2); border: 1px solid var(--edge); text-decoration: none; font: 600 var(--fs-label)/1 var(--font-cond); letter-spacing: .10em; text-transform: uppercase; transition: color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out), transform 90ms var(--ease-out); }
+.sb-hub .hub-mark { width: 18px; height: 18px; color: var(--amber); flex: none; }
+.sb-hub:hover { color: var(--ink); border-color: var(--edge-2); box-shadow: 0 0 14px rgba(233,162,59,.2); }
+.sb-hub:active { transform: scale(.96); }
+.title-hub { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; margin: -6px 0 -2px; color: var(--ink-2); text-decoration: none; font: 600 12px/1 var(--font-cond); letter-spacing: .14em; text-transform: uppercase; transition: color var(--dur-micro) var(--ease-out); }
+.title-hub .hub-mark { color: var(--amber); flex: none; }
+.title-hub .title-hub-at { color: var(--ink-3); font-weight: 500; }
+.title-hub .title-hub-at::before { content: "\00B7"; margin-right: 8px; color: var(--ink-3); }
+.title-hub:hover, .title-hub:hover .title-hub-at { color: var(--ink); }
+.menu-hub .hub-mark { color: var(--amber); }
 #speed > button { min-width: 34px; padding: 0 7px; }
 
 /* --------------------------------------------------------------------------
@@ -1417,6 +1428,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
 @media (max-width: 760px), ((pointer: coarse) and (max-width: 1023px)) {
   #title { align-items: stretch; }
   .title-band, .commission { width: 100%; }
+  .title-hub { flex: none; min-height: 44px; margin: -12px 0 -8px; }
   .title-band { align-items: center; text-align: center; }
   .title-band .wordmark.hero { font-size: clamp(30px, 9.4vw, 44px); }
   .title-loading { justify-content: center; }
@@ -1447,6 +1459,30 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   .ro.power .ro-sub, .ro.people .ro-sub, .ro.rep .ro-sub { display: none; }
   .ro { padding: 0 9px; gap: 7px; }
   .sb-left .wordmark { font-size: 15px; }
+}
+/* The bar folds in steps so no readout ever runs into the next one (measured from 1920 px down to the phone layout, with and
+   without the hub button). Ids, because #power-pips and #rep-pips set their display by id. */
+@media (max-width: 1440px) {
+  #statusbar:has(.sb-hub) #ro-people .ro-sub, #statusbar:has(.sb-hub) #ro-rep .ro-sub { display: none; }
+}
+@media (max-width: 1390px) {
+  .sb-hub { width: 36px; padding: 0; justify-content: center; }
+  .sb-hub-lbl { display: none; }
+}
+@media (max-width: 1300px) {
+  #ro-people .ro-sub, #ro-rep .ro-sub { display: none; }
+}
+@media (max-width: 1180px) {
+  #ro-power .ro-sub { display: none; }
+}
+@media (max-width: 1100px) {
+  .rank-main { display: none; }
+  #statusbar:has(.sb-hub) .sb-left { display: none; }   /* the sector is one tap away on the map */
+}
+/* a small desktop window: the phone's compact bar, its menu holding the readouts, the daily reward and the pause */
+@media (max-width: 1024px) {
+  .sb-btn.phone-only { display: grid; }
+  .sb-left, .ro.power, .ro.people, .ro.rep, #btn-daily, #btn-cloud, #speed { display: none; }
 }
 @media (max-width: 1024px) {
   #notices { display: none; }
@@ -1489,7 +1525,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
 
   /* status bar: credits, Antimatter and the rank ring stay; the rest moves into the menu (UI.openMenu) */
   #statusbar { gap: 6px; padding: var(--sat) calc(8px + var(--sar)) 0 calc(8px + var(--sal)); }
-  .sb-left, .ro.power, .ro.people, .ro.rep, .ro-top, .rank-main, #btn-daily, #btn-cloud, #speed, #btn-notices { display: none; }
+  .sb-left, .sb-hub, .ro.power, .ro.people, .ro.rep, .ro-top, .rank-main, #btn-daily, #btn-cloud, #speed, #btn-notices { display: none; }
   .sb-center { flex: 1 1 auto; margin: 0; justify-content: flex-start; min-width: 0; }
   .ro { height: 40px; padding: 0 6px; gap: 6px; border-left: 0; min-width: 0; }
   .ro.am { border-left: 1px solid rgba(94,196,255,.14); }

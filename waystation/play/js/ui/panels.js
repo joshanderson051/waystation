@@ -1037,7 +1037,7 @@ const Panels = {
           `<p class="fine">Passphrase-protected testing console (also Ctrl+Shift+A). Grants made there are tagged admin in the profile history.</p>`;
       }
       h += shelf('About', null, { hue: 'var(--ink-3)' });
-      h += `<div class="actions"><button type="button" class="btn" data-act="replay-tour">${icon('play', 14)}<span>Replay the tour</span></button><a class="btn" href="../manual/" target="_blank" rel="noopener">${icon('registry', 14)}<span>Open the manual</span></a></div>`;
+      h += `<div class="actions"><button type="button" class="btn" data-act="replay-tour">${icon('play', 14)}<span>Replay the tour</span></button><a class="btn" href="../manual/" target="_blank" rel="noopener">${icon('registry', 14)}<span>Open the manual</span></a>${typeof HUB_URL !== 'undefined' && HUB_URL ? `<a class="btn" href="${esc(HUB_URL)}">${hubMark(14)}<span>All games</span></a>` : ''}</div>`;
       h += `<p class="fine">Port Solace v2 ${MID} a browser space-station builder. Hand-written HTML, CSS and JavaScript with PixiJS for the world. Procedural audio, no trackers, saves on your device. ${MID} Licence: all original work; PixiJS under MIT.</p>`;
       paint(F.body, h, sig, 'st');
     };

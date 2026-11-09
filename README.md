@@ -34,6 +34,13 @@ password resets and push subscriptions.
   `https://{account,push,store}.portsolace.com/health` each answer 200; (3) only then push the site. If the site has to
   ship first, keep the `*.workers.dev` `apiBase` values in the three `<meta name="portsolace-…">` tags of
   `waystation/play/index.html` until the subdomains answer.
+- **space.buildtheages.com.** Build the Ages, the family of city builders, lists Port Solace at
+  `https://space.buildtheages.com/`. The `bta-space` Worker (`workers/space` in the buildtheages repository) serves this
+  site there as it is and adds `<meta name="bta-hub" content="https://buildtheages.com/">` to each page; with that tag the
+  game shows its way back to every game (an "All games" button in the top bar, a link on the title screen, rows in the
+  menu and Settings). portsolace.com never carries the tag, so nothing changes here, and every page's canonical link still
+  names portsolace.com. The three APIs list `https://space.buildtheages.com` in `ALLOWED_ORIGIN`. Saves are kept per
+  address: a station saved on one address without an account does not appear on the other; signing in carries it across.
 - **Email.** Account mail (password resets) goes through Resend from `noreply@portsolace.com`, once the domain is verified
   in Resend (its SPF and DKIM records go into Cloudflare DNS). Until then the account Worker falls back to Resend's
   `onboarding@resend.dev`. A `_dmarc` TXT record (`v=DMARC1; p=none; ...`) is published for the domain.

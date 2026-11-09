@@ -181,6 +181,18 @@ const MORE_PANELS = ['market', 'fleet', 'expeditions', 'registry', 'store', 'set
 // back to play/import.html in the URL fragment. Offered only where the game now lives (and on local test hosts).
 const MOVE_BRIDGE = 'https://joshanderson051.github.io/move/';
 const MOVE_HOSTS = ['portsolace.com', 'www.portsolace.com', 'localhost', '127.0.0.1'];
+// Build the Ages: the hub's address when this game is one of its worlds, for the way back to every game (top bar, title
+// screen, menu, Settings). Port Solace gets <meta name="bta-hub"> only where space.buildtheages.com serves it (the bta-space
+// Worker adds it); a Build the Ages game carries it in GAME_INFO.hub. Null on portsolace.com, which shows no hub link.
+const HUB_URL = (() => {
+  try {
+    const m = document.querySelector('meta[name="bta-hub"]');
+    const v = String((typeof GAME_INFO !== 'undefined' && GAME_INFO && GAME_INFO.hub) || (m && m.getAttribute('content')) || '');
+    return /^https:\/\/[^\s"'<>`]+$/.test(v) ? v : null;
+  } catch (e) { return null; }
+})();
+// the hub's temple mark, as the hub draws it
+const hubMark = (size = 18) => `<svg class="ic hub-mark" viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true"><path d="M4 26h24M7 26V13m6 13V13m6 13V13m6 13V13M4 13h24L16 5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
 // achievement tiers arrive as 1..3 or as a word (TIER_WORDS comes from panels.js)
 const tierName = t => typeof t === 'string' ? t.toLowerCase() : (t >= 1 && t <= 3 ? TIER_WORDS[t - 1] : '');
 
@@ -224,6 +236,7 @@ const UI = {
     this.buildRail();
     this.buildContextBar();
     this.buildNotices();
+    this.buildTitleHub();
     // A4 phone: the layout query drives the sheet peek, More and the menu (CSS reads the same query)
     try {
       this._phoneMq = matchMedia(PHONE_MQ);
@@ -362,6 +375,7 @@ const UI = {
   buildStatusBar() {
     const el = $('#statusbar'); if (!el) return;
     el.innerHTML =
+      (HUB_URL ? `<a class="sb-hub" id="sb-hub" href="${esc(HUB_URL)}" data-tip="Back to Build the Ages to play another game. Your progress is saved." aria-label="All games: back to Build the Ages">${hubMark(18)}<span class="sb-hub-lbl">All games</span></a>` : '') +
       `<div class="sb-left"><span class="wordmark" aria-label="Port Solace">Port Solace</span>` +
       `<button type="button" id="sb-sector" class="sb-sector" title="Open the galaxy map (G)"><span class="sb-sector-name" id="sb-sector-name">—</span><span class="sb-station micro" id="sb-station">—</span></button></div>` +
       `<div class="sb-center">` +
@@ -391,6 +405,11 @@ const UI = {
   buildContextBar() {
     const el = $('#contextbar'); if (!el) return;
     el.innerHTML = `<div class="hint" id="hint"></div><div class="ctx-actions" id="ctx-actions"></div><div class="ctx-right"><span class="micro" id="perf-tag" hidden></span><button type="button" class="btn icon ghost" id="btn-keys" title="Keys (?)" aria-label="Keyboard reference">${icon('keys', 16)}</button></div>`;
+  },
+  // the title band's way back to every game, above the wordmark (only with HUB_URL)
+  buildTitleHub() {
+    const mark = $('.title-band .wordmark'); if (!HUB_URL || !mark || $('.title-hub')) return;
+    mark.insertAdjacentHTML('beforebegin', `<a class="title-hub" href="${esc(HUB_URL)}">${hubMark(16)}<span>All games</span><span class="title-hub-at">Build the Ages</span></a>`);
   },
   buildNotices() {
     const n = $('#notices'); if (!n) return;
@@ -855,6 +874,7 @@ const UI = {
     if (cloud && !cloud.hidden) { const CLOUD_WORD = { 'signed-out': 'Sign in', synced: 'Synced', dirty: 'Pending', syncing: 'Syncing', offline: 'Offline', error: 'Error' }; h += row('cloud', 'cloud', 'Cloud save', esc(CLOUD_WORD[cloud.dataset.state] || '')); }
     h += row('panel:map', 'map', 'Galaxy map', esc(sectorName));
     h += `<a class="menu-row" href="../manual/" target="_blank" rel="noopener"><span class="menu-ic">${icon('registry', 18)}</span><span class="menu-lbl">Manual</span><span class="menu-chev">${icon('chevron-right', 14)}</span></a>`;
+    if (HUB_URL) h += `<a class="menu-row menu-hub" href="${esc(HUB_URL)}"><span class="menu-ic">${hubMark(18)}</span><span class="menu-lbl">All games</span><span class="menu-meta">Build the Ages</span><span class="menu-chev">${icon('chevron-right', 14)}</span></a>`;
     h += `</div>`;
     const nu = $('#nextup .nu-rows');
     if (nu && nu.children.length) h += `<div class="shelf" style="--hue:var(--ice)"><span class="shelf-label">Next up</span></div><div class="nu-rows menu-nu">${nu.innerHTML}</div>`;
@@ -1177,7 +1197,7 @@ const UI = {
     const d = MetaAdapter.daily();
     if (!d) { this.toast('Daily rewards need a profile', 'warn'); return; }
     Overlays.daily(d, {
-      onClaim: () => { const rw = MetaAdapter.claimDaily(); if (rw) { this.celebrate('daily', Object.assign({ reward: rw }, MetaAdapter.daily() || {})); Overlays.fly($(this.phone ? '#sb-menu' : '#btn-daily'), this.anchor(rw.am ? 'am' : 'credits'), { n: 8, icon: rw.am ? 'am' : 'credits', hue: rw.am ? 'am' : 'amber', onHit: () => this.anchorHit(rw.am ? 'am' : 'credits') }); } this.refresh(); },
+      onClaim: () => { const rw = MetaAdapter.claimDaily(); if (rw) { this.celebrate('daily', Object.assign({ reward: rw }, MetaAdapter.daily() || {})); Overlays.fly($(this.phone || !($('#btn-daily') && $('#btn-daily').offsetParent) ? '#sb-menu' : '#btn-daily'), this.anchor(rw.am ? 'am' : 'credits'), { n: 8, icon: rw.am ? 'am' : 'credits', hue: rw.am ? 'am' : 'amber', onHit: () => this.anchorHit(rw.am ? 'am' : 'credits') }); } this.refresh(); },
       onRepair: () => { if (MetaAdapter.repairStreak()) this.toast('Streak repaired', 'good'); else this.toast('Not enough Antimatter', 'bad'); this.refresh(); },
     });
   },
