@@ -7,7 +7,9 @@
 //   hidden (or after a scheduled check-in was skipped because the page was hidden). The account apiBase is the one
 //   Account parsed from <meta name="portsolace-account"> (with its localStorage override). The Bearer token goes
 //   along only while Account is signed in. Every failure is silent: presence never disturbs play.
-// Gifts: the presence answer lists {id, credits, am, note, createdAt}. Each is applied once (the
+//   It also says accepts:['tokens','title'], so the worker may hand over gifts that carry livery tokens or a title (the
+//   Build the Ages reward center's: workers/account/src/rewards.js); a page without this line never receives those.
+// Gifts: the presence answer lists {id, credits, am, note, createdAt, tokens?, title?}. Each is applied once (the
 //   profile.entitlements.history check), recorded with Meta.grantEntitlement('gift', {grantId, mode:'gift', ...}),
 //   saved, then acked with POST {apiBase}/gifts/ack {playerId, ids}. The history entry carries acked:false until the
 //   ack succeeds; every check-in re-sends outstanding acks (from memory and from the stored history, so they survive a
@@ -27,6 +29,7 @@ const Gifts = (() => {
   const PLAYER_RE = /^[A-Za-z0-9_-]{8,64}$/;     // the store worker's PLAYER_RE
   const GIFT_ID_RE = /^[A-Za-z0-9_-]{4,100}$/;   // 'gft_' + base64url on the worker; anything else is ignored, never acked
   const MAX_CREDITS = 10000000, MAX_AM = 100000; // the worker's caps for one gift
+  const MAX_TOKENS = 10, TITLE_MAX = 40;         // a reward's livery tokens and title
   const ACK_BATCH = 50;                          // the worker's ACK_IDS_MAX
   const KEYS = {
     session: 'portsolace.account',          // Account's stored sign-in {token, email}
@@ -162,6 +165,7 @@ const Gifts = (() => {
       id: g.id, credits: int(g.credits, MAX_CREDITS), am: int(g.am, MAX_AM),
       note: typeof g.note === 'string' ? g.note.slice(0, 140) : '',
       createdAt: Number.isFinite(Number(g.createdAt)) ? Number(g.createdAt) : null,
+      tokens: int(g.tokens, MAX_TOKENS), title: typeof g.title === 'string' ? g.title.trim().slice(0, TITLE_MAX) : '',
     };
   }
   // Meta.save() answers false when localStorage refuses the write (quota full, storage blocked).
@@ -180,7 +184,13 @@ const Gifts = (() => {
       if (historyHas(g.id)) { if (!already.includes(g.id) && !applied.some(a => a.id === g.id)) already.push(g.id); continue; }
       if (g.credits > 0) m.addCredits(g.credits, 'gift');
       if (g.am > 0) m.addAM(g.am, 'gift');
-      m.grantEntitlement('gift', { grantId: g.id, mode: 'gift', at: Date.now(), granted: { credits: g.credits, am: g.am }, note: g.note, acked: false });
+      if (g.tokens > 0) {                                    // livery tokens, spent in the Liveries panel (Meta.redeemLiveryToken)
+        const E = m.profile.entitlements, T = E.tokens && typeof E.tokens === 'object' ? E.tokens : (E.tokens = { livery: 0 });
+        T.livery = Math.max(0, (T.livery | 0)) + g.tokens;
+      }
+      const granted = { credits: g.credits, am: g.am, ...(g.tokens ? { tokens: g.tokens } : {}) };
+      // a title rides on the history entry: Meta.grantEntitlement adds it to entitlements.titles
+      m.grantEntitlement('gift', { grantId: g.id, mode: 'gift', at: Date.now(), granted, note: g.note, acked: false, ...(g.title ? { title: g.title } : {}) });
       applied.push(g);
     }
     const saved = applied.length ? saveProfile(m) : true;
@@ -224,11 +234,15 @@ const Gifts = (() => {
   function chipsNode(g) {
     const box = el('div', 'chips');
     // rewardChips builds its markup from the two integers alone (the game's credit and Antimatter icons)
+    // (it escapes the token label and the title it is given)
+    const tokens = int(g.tokens, MAX_TOKENS), token = tokens ? (tokens > 1 ? `${tokens} Livery tokens` : 'Livery token') : '';
     if (typeof Overlays !== 'undefined' && Overlays && typeof Overlays.rewardChips === 'function') {
-      box.innerHTML = Overlays.rewardChips({ credits: int(g.credits, MAX_CREDITS), am: int(g.am, MAX_AM) });
+      box.innerHTML = Overlays.rewardChips({ credits: int(g.credits, MAX_CREDITS), am: int(g.am, MAX_AM), ...(token ? { livery: token } : {}), ...(g.title ? { title: String(g.title) } : {}) });
     } else {
       if (g.credits > 0) box.appendChild(el('span', 'rchip amber', `${fmtN(g.credits)} cr`));
       if (g.am > 0) box.appendChild(el('span', 'rchip am', `${fmtN(g.am)} AM`));
+      if (token) box.appendChild(el('span', 'rchip rose', token));
+      if (g.title) box.appendChild(el('span', 'rchip ivory', String(g.title)));
     }
     return box;
   }
@@ -262,7 +276,7 @@ const Gifts = (() => {
     const pid = playerId();
     if (!pid) return { ok: false, why: 'no-player' };
     state.lastAt = Date.now(); state.sends++;
-    const body = { playerId: pid, summary: summary(), platform: platform(), version: version() };
+    const body = { playerId: pid, summary: summary(), platform: platform(), version: version(), accepts: ['tokens', 'title'] };
     const r = await post(base, '/presence', body, bearer());
     if (!r.ok) { state.lastOk = false; state.lastError = r.why; return { ok: false, why: r.why }; }
     state.lastOk = true; state.lastError = null;
