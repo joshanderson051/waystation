@@ -289,6 +289,25 @@ function tickTimers(root, meta) {
 
 const TIER_WORDS = ['bronze', 'silver', 'gold'];
 
+// TREASURY.md: what a special or a purchase brings, in this world's words. Money is "about" a figure rounded to two
+// significant digits (Store.hoursToMoney: the hours at this city's income, with the region's floor), so the line does not
+// change with every building placed. Plain text: escape it into HTML. Also used by hud.js (the confirm and the Treasury sheet).
+const aboutN = v => { v = Math.max(0, Math.round(Number(v) || 0)); if (v < 1000) return Math.round(v / 10) * 10; const p = Math.pow(10, Math.floor(Math.log10(v)) - 1); return Math.round(v / p) * p; };
+const shopMoney = hours => (typeof Store !== 'undefined' && Store && typeof Store.hoursToMoney === 'function' ? Store.hoursToMoney(hours) : 0);
+function shopItemName(id) {
+  const e = typeof Store !== 'undefined' && Store && typeof Store.item === 'function' ? Store.item(id) : null;
+  return e && e.title ? e.title : String(id);
+}
+// -> "about 48,000 credits at your station's income, plus 280 Antimatter"
+function shopContentLine(c) {
+  if (!c || typeof c !== 'object') return '';
+  const parts = [];
+  if (c.hours > 0) parts.push(`about ${Fmt.n(aboutN(shopMoney(c.hours)))} credits at your station's income`);
+  if (c.gold > 0) parts.push(`${Fmt.n(c.gold)} Antimatter`);
+  for (const id of Array.isArray(c.items) ? c.items : []) parts.push(shopItemName(id));
+  return parts.length > 1 ? `${parts.slice(0, -1).join(', ')}, plus ${parts[parts.length - 1]}` : parts[0] || '';
+}
+
 // A1.2 Territory block for the Station overview: plot size, ring k of n, Expand or the clearing timer.
 // A compact plan of the grid shows the plot (ice) and the next ring (dashed).
 function territoryBlock(s, ctx) {
@@ -913,11 +932,51 @@ const Panels = {
   // ---------------------------------------------------------- Store (7.3)
   store(host, ctx) {
     const F = frame(host, { id: 'store', title: 'Store', sub: '' }, ctx), sig = {};
+    const want = { gold: null, hours: null };   // what the player typed into Bring here, kept across repaints
+    // TREASURY.md 1: the Specials first (from the store Worker), then the Treasury (signed in), then the regular packs
+    const specials = () => {
+      const o = ctx.ui.shop().offers;
+      if (!o.on || (o.why && !o.list)) return `<p class="fine shop-quiet">${icon('info', 12)}<span>Specials need a connection.</span></p>`;
+      let h = shelf('Specials', o.list && o.list.length ? esc(`${o.list.length} for you now`) : null, { first: true, hue: 'var(--am)' });
+      if (!o.list) return h + `<p class="fine shop-quiet">${icon('clock', 12)}<span>Looking for specials…</span></p>`;
+      if (!o.list.length) return h + `<p class="fine shop-quiet">${icon('info', 12)}<span>No specials right now. New ones follow your station's level and sector.</span></p>`;
+      return h + `<div class="offer-list">${o.list.map(offerCard).join('')}</div>`;
+    };
+    const offerCard = o => `<div class="offer"><i class="spine"></i>` +
+      `<span class="offer-ic">${Art.img('icons', o.content.hours > 0 ? 'credits' : 'antimatter', 36, { alt: '', fallback: icon(o.content.hours > 0 ? 'credits' : 'am', 20) })}</span>` +
+      `<div class="offer-main">${o.badge ? `<span class="offer-badge">${esc(o.badge)}</span>` : ''}<span class="offer-name">${esc(o.title)}</span>` +
+      `<span class="offer-what">${esc(Fmt.cap(shopContentLine(o.content)))}</span>${o.blurb ? `<span class="offer-blurb">${esc(o.blurb)}</span>` : ''}` +
+      (o.endsAt ? `<span class="offer-ends">${icon('clock', 12)}<span>Ends in ${countdown(o.endsAt)}</span></span>` : '') + `</div>` +
+      `<button type="button" class="btn am offer-buy" data-offer="${esc(o.id)}" aria-label="${esc(o.title)} for ${esc(o.priceLabel)}">${esc(o.priceLabel)}</button></div>`;
+    const treasury = () => {
+      const acct = ctx.account;
+      if (!acct || !acct.available()) return '';
+      if (!acct.state().signedIn) return `<div class="tre-invite"><span class="fine">${icon('cloud', 12)}<span>Sign in to keep purchases in a Treasury that every game shares.</span></span><button type="button" class="btn ghost" data-act="signin">${icon('cloud', 14)}<span>Sign in</span></button></div>`;
+      const t = ctx.ui.shop().treasury;
+      if (!t.data && !t.busy && !t.why) ctx.ui.shopRefresh();   // signed in while the panel was open
+      let h = shelf('Treasury', 'shared by every game', { hue: 'var(--am)' });
+      if (!t.data) return h + `<p class="fine shop-quiet">${icon(t.why ? 'warn' : 'clock', 12)}<span>${t.why ? 'The Treasury did not answer. What it holds is safe, and shows here when it does.' : 'Opening your Treasury…'}</span></p>`;
+      const d = t.data, gold = want.gold == null ? d.gold : Math.max(0, Math.min(d.gold, Math.floor(want.gold) || 0)), hours = want.hours == null ? d.hours : Math.max(0, Math.min(d.hours, Math.round((want.hours || 0) * 10) / 10));
+      h += `<div class="treasury"><i class="spine"></i>`;
+      if (!d.gold && !d.hours) h += `<p class="tre-empty">Empty for now. Purchases made while signed in wait here for any game on your account.</p>`;
+      else {
+        if (d.gold) h += `<label class="tre-row"><span class="tre-ic">${Art.img('icons', 'antimatter', 28, { alt: '', fallback: icon('am', 18) })}</span><span class="tre-main"><span class="tre-val num">${Fmt.n(d.gold)}</span><span class="tre-lbl">Antimatter</span></span>` +
+          `<input type="number" class="input tre-in" data-tre="gold" min="0" max="${d.gold}" step="1" value="${gold}" inputmode="numeric" aria-label="Antimatter to bring here"></label>`;
+        if (d.hours) h += `<label class="tre-row"><span class="tre-ic">${Art.img('icons', 'credits', 28, { alt: '', fallback: icon('credits', 18) })}</span><span class="tre-main"><span class="tre-val num">${d.hours.toFixed(1)}</span><span class="tre-lbl">hours of income</span><span class="tre-sub">about ${Fmt.n(aboutN(shopMoney(d.hours)))} credits here</span></span>` +
+          `<input type="number" class="input tre-in" data-tre="hours" min="0" max="${d.hours}" step="0.1" value="${hours}" inputmode="decimal" aria-label="Hours of income to bring here"></label>`;
+        h += `<div class="tre-foot"><span class="fine">Hours turn into credits at this station's income when they arrive.</span><button type="button" class="btn primary" data-act="tre-bring">${icon('collect', 16)}<span>Bring here</span></button></div>`;
+      }
+      if (d.items.length) h += `<div class="tre-keep"><span class="tile-lbl">Keepsakes</span><span class="chips">${Overlays.rewardChips({ items: d.items.map(shopItemName) }, 'sm')}</span><span class="fine">Each one reaches every game on its own.</span></div>`;
+      return h + `</div>`;
+    };
     const render = () => {
       const cat = ctx.store.catalog(), mode = ctx.store.mode();
-      F.setSub(`${Art.img('icons', 'antimatter', 14, { alt: '' })}${Fmt.n(ctx.meta.am())} AM in the vault ${MID} ${mode === 'stripe' ? 'secure checkout' : 'sandbox'}`);
+      F.setSub(`${Art.img('icons', 'antimatter', 14, { alt: '' })}${Fmt.n(ctx.meta.am())} AM on hand ${MID} ${mode === 'stripe' ? 'secure checkout' : 'sandbox'}`);
       const am = cat.filter(i => i.kind === 'am'), boosts = cat.filter(i => i.kind === 'credits' || i.kind === 'boost'), passes = cat.filter(i => i.kind === 'pass'), cosm = cat.filter(i => i.kind === 'cosmetic');
+      const kept = ((ctx.ui.shop().treasury.data || {}).items) || [];   // keepsakes this account owns, on their way to this world
+      for (const i of [...passes, ...cosm]) if (!i.owned && kept.includes(i.sku)) { i.owned = true; i.kept = true; }
       let h = mode !== 'stripe' ? `<div class="ribbon"><i class="sq"></i>Test mode. Purchases are free and local until Stripe is connected.</div>` : '';
+      h += specials() + treasury();
       h += `<div class="store-hero"><i class="spine"></i><div class="store-hero-head"><span class="store-hero-ic">${Art.img('icons', 'antimatter', 48, { alt: 'Antimatter', fallback: icon('am', 28) })}</span><div><div class="store-hero-title">Antimatter</div><p class="body">Skip waits, bring crews home early and open sectors on your own schedule. Earned by play, or bought here.</p></div></div>` +
         `<div class="am-tiles">${am.map(i => tile(i)).join('')}</div></div>`;
       const relief = (typeof TIMERS !== 'undefined' && TIMERS.RELIEF_CONVOY) || { am: 10, minutes: 30 };
@@ -926,7 +985,7 @@ const Panels = {
       if (passes.length || cosm.length) { h += shelf('Passes and cosmetics', 'liveries show on your station', { hue: 'var(--rose)' }); h += `<div class="sku-list">${[...passes, ...cosm].map(i => row(i, i.kind === 'pass' ? 'am' : 'rose')).join('')}</div>`; }
       h += shelf('Restore purchases', null, { hue: 'var(--ice)' });
       h += `<div class="restore"><input type="email" class="input" id="restore-email" placeholder="email used at checkout" aria-label="Email used at checkout" autocomplete="email"><button type="button" class="btn" data-act="restore">${icon('reroll', 14)}<span>Restore</span></button></div>`;
-      h += `<p class="legal micro">Prices in USD. Antimatter is a game currency with no cash value and cannot be refunded or transferred. Sandbox grants are local to this browser.</p>`;
+      h += `<p class="legal micro">Prices in USD. Antimatter is a game currency with no cash value and cannot be refunded or transferred to another account. Sandbox grants are local to this browser.</p>`;
       paint(F.body, h, sig, 's');
     };
     // Store.catalog() entries: { sku, kind, title, desc, amount, grant, priceCents, priceLabel, badge, owned }
@@ -940,9 +999,19 @@ const Panels = {
     // A5: cosmetics are live (the engine renders liveries); an owned cosmetic row links to the Livery shelf in Settings
     const row = (i, hue) => `<div class="sku${i.owned ? ' owned' : ''}" style="--hue:var(--${hue})"><i class="spine"></i><span class="sku-ic">${i.kind === 'pass' || i.kind === 'cosmetic' ? icon(i.kind === 'pass' ? 'map' : 'ship', 20) : Art.img('icons', 'credits', 36, { alt: '', fallback: icon('credits', 20) })}</span>` +
       `<div class="sku-main"><span class="sku-name">${esc(i.title || i.sku)}</span><span class="sku-desc">${esc(i.desc || '')}</span></div>` +
-      (i.owned ? `<span class="chip good" data-shape="up">Owned</span>${i.kind === 'cosmetic' ? `<button type="button" class="btn ghost" data-act="liveries" title="Choose a livery in Settings">${icon('settings', 14)}<span>Choose</span></button>` : ''}` : `<button type="button" class="btn${hue === 'am' ? ' am' : ' primary'}" data-sku="${esc(i.sku)}">${esc(i.priceLabel || 'Buy')}</button>`) + `</div>`;
+      (i.owned ? `<span class="chip good" data-shape="up">Owned</span>${i.kind === 'cosmetic' && !i.kept ? `<button type="button" class="btn ghost" data-act="liveries" title="Choose a livery in Settings">${icon('settings', 14)}<span>Choose</span></button>` : ''}` : `<button type="button" class="btn${hue === 'am' ? ' am' : ' primary'}" data-sku="${esc(i.sku)}">${esc(i.priceLabel || 'Buy')}</button>`) + `</div>`;
+    F.body.addEventListener('input', e => { const i = e.target.closest('[data-tre]'); if (i) want[i.dataset.tre] = i.value === '' ? 0 : Number(i.value); });
     F.body.addEventListener('click', e => {
       const b = e.target.closest('[data-sku]'); if (b && !b.disabled) { ctx.ui.purchase(b.dataset.sku, b); return; }
+      const of = e.target.closest('[data-offer]'); if (of && !of.disabled) { ctx.ui.purchaseOffer(of.dataset.offer, of); return; }
+      if (e.target.closest('[data-act="signin"]')) { ctx.ui.openPortal('login'); return; }
+      const tb = e.target.closest('[data-act="tre-bring"]');
+      if (tb) {
+        const val = k => { const i = host.querySelector(`[data-tre="${k}"]`); return i ? Number(i.value) || 0 : 0; };
+        ctx.ui.treasuryBring(val('gold'), val('hours'), tb);
+        want.gold = want.hours = null;
+        return;
+      }
       const lv = e.target.closest('[data-act="liveries"]'); if (lv) { ctx.ui.openLiveries(); return; }
       const rl = e.target.closest('[data-act="relief"]');
       if (rl) {
@@ -953,8 +1022,11 @@ const Panels = {
       }
       const r = e.target.closest('[data-act="restore"]'); if (r) { const inp = host.querySelector('#restore-email'); ctx.ui.restore(inp ? inp.value.trim() : ''); }
     });
+    // the Specials and the Treasury: asked for when the panel opens and every minute while it stays open (ctx.ui.shopRefresh redraws)
+    ctx.ui.shopRefresh();
+    const every = setInterval(() => ctx.ui.shopRefresh(), 60e3);
     render();
-    return { update() { if (document.activeElement && document.activeElement.id === 'restore-email') return; render(); }, destroy() { } };
+    return { update() { if (F.body.contains(document.activeElement) && document.activeElement.matches('input')) return; render(); }, destroy() { clearInterval(every); } };
   },
 
   // ---------------------------------------------------------- Settings (5.2)

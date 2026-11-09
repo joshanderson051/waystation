@@ -171,7 +171,7 @@ const Overlays = {
   },
 
   // Reward chips shared by daily, missions, expeditions and celebrations.
-  // reward: { credits?, am?, xp?, goods?: {id: qty} | string, chart?, livery?, label? } | number (credits)
+  // reward: { credits?, am?, xp?, goods?: {id: qty} | string, chart?, livery?, title?, items?: [names], label? } | number (credits)
   rewardChips(reward, size = '') {
     if (reward == null) return '';
     if (typeof reward === 'number') reward = { credits: reward };
@@ -203,6 +203,7 @@ const Overlays = {
     }
     if (reward.livery) out.push(chip('rose', 'ship', esc(typeof reward.livery === 'string' ? reward.livery : 'Livery token')));
     if (reward.title) out.push(chip('ivory', 'rep', esc(reward.title)));
+    if (Array.isArray(reward.items)) for (const n of reward.items.slice(0, 6)) out.push(chip('rose', 'award', esc(String(n))));   // keepsakes (TREASURY.md)
     if (reward.tier) out.push(`<span class="rchip tier ${esc(reward.tier)}${size ? ' ' + size : ''}">${Art.img('badges', Art.achId(reward.tier), px, { alt: '', fallback: icon('award', 14) })}<span>${esc(Fmt.cap(reward.tier))}</span></span>`);
     if (reward.discover) {
       const dk = reward.discover.kind, grp = dk === 'species' ? 'species' : (dk === 'ships' || dk === 'ship') ? 'ships' : 'artifacts';

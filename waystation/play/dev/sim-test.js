@@ -1133,18 +1133,24 @@ function makeGiftsWorld(o = {}) {
     addCredits(n, reason) { this.profile.credits += n; this.log.push(['credits', n, reason]); return this.profile.credits; },
     addAM(n, reason) { this.profile.am += n; this.log.push(['am', n, reason]); return this.profile.am; },
     grantEntitlement(sku, payload) { this.profile.entitlements.history.push({ sku, ...payload }); this.profile.entitlements.owned[sku] = true; return true; },
+    hasEntitlement(sku) { return !!this.profile.entitlements.owned[sku]; },
+    unlockAllSectors(reason) { this.log.push(['unlockAll', reason]); return []; },
+    totalRate() { return o.rate || 0; },                       // credits per real minute (TREASURY.md hours -> money)
     save() { this.saves++; },
   };
   const Ov = {
     modal(opts) { modals.push(opts); modalText = node('div'); modalText.innerHTML = opts.html || ''; },
     anyOpen: () => false,
     rewardChips: r => [r.credits ? `<span class="rchip amber"><i class="ic-credits"></i><span>${r.credits} cr</span></span>` : '', r.am ? `<span class="rchip am"><i class="ic-antimatter"></i><span>${r.am} AM</span></span>` : '',
-      r.livery ? `<span class="rchip rose"><span>${r.livery}</span></span>` : '', r.title ? `<span class="rchip ivory"><span>${r.title}</span></span>` : ''].join(''),
+      r.livery ? `<span class="rchip rose"><span>${r.livery}</span></span>` : '', r.title ? `<span class="rchip ivory"><span>${r.title}</span></span>` : '',
+      ...(r.items || []).map(n => `<span class="rchip rose"><span>${n}</span></span>`)].join(''),
   };
   const ctx = vm.createContext({ console, localStorage: storage, fetch, document: doc, Meta: M, Overlays: Ov, setTimeout, clearTimeout, setInterval, clearInterval, AbortController });
   if (o.account) ctx.Account = o.account;
+  if (o.priceMul) ctx.Sim = { priceMul: () => o.priceMul };    // the region's price factor (Sim.priceMul)
   ctx.window = ctx;
   vm.runInContext('Date', ctx).now = () => clock.now;
+  if (o.withStore) vm.runInContext(fs.readFileSync(path.join(ROOT, 'store.js'), 'utf8'), ctx, { filename: 'store.js' });   // keepsakes through Store.grantItems
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'gifts.js'), 'utf8'), ctx, { filename: 'gifts.js' });
   const Gifts = vm.runInContext('Gifts', ctx);
   const visibility = hidden => { doc.hidden = hidden; for (const fn of listeners.visibilitychange || []) fn(); };
@@ -1165,7 +1171,7 @@ async function testGifts() {
   const p0 = W.calls[0];
   check('presence: one POST to {apiBase}/presence', r.ok && W.calls.length === 1 && p0.url === GIFTS_BASE + '/presence' && p0.method === 'POST' && /application\/json/.test(p0.headers['content-type']), W.calls.map(c => c.url));
   check('presence body: exactly playerId, summary, platform, version and accepts', p0.body && Object.keys(p0.body).sort().join() === 'accepts,platform,playerId,summary,version', p0.body);
-  check('presence says it applies livery tokens and titles (reward gifts)', JSON.stringify(p0.body.accepts) === JSON.stringify(['tokens', 'title']), p0.body.accepts);
+  check('presence says it applies livery tokens, titles, hours and items (reward and Treasury gifts)', JSON.stringify(p0.body.accepts) === JSON.stringify(['tokens', 'title', 'hours', 'items']), p0.body.accepts);
   check('summary: name, day, level, rank, credits, am, sectors from the profile', JSON.stringify(Object.keys(p0.body.summary).sort()) === JSON.stringify(['am', 'credits', 'day', 'level', 'name', 'rank', 'sectors']) &&
     p0.body.playerId === 'p_test_player_1' && p0.body.summary.name === 'Kestrel Deep' && p0.body.summary.day === 12 && p0.body.summary.level === 4 && p0.body.summary.rank === 3 &&
     p0.body.summary.credits === 6000 && p0.body.summary.am === 20 && p0.body.summary.sectors === 2 && Object.values(p0.body.summary).slice(1).every(Number.isInteger), p0.body.summary);
@@ -1283,6 +1289,65 @@ async function testGifts() {
   check('no innerHTML write and no modal option carries the note', W.nodes.every(n => n.htmlSets.every(h => !h.includes('<img') && !h.includes('<b>'))) && W.modals.every(m => !JSON.stringify(m).includes('onerror')));
   check('two gifts at once: one modal listing both', W.modals.length === 1 && W.nodes.filter(n => n.className === 'gift').length === 2);
 
+  // TREASURY.md: an hours gift becomes this city's money, max(hours * 60 * totalRate, hours * 5000 * priceMul)
+  const one = g => c => (c.url.endsWith('/presence') ? { status: 200, json: { ok: true, gifts: [g] } } : { status: 200, json: { ok: true } });
+  const gh = { ...gift('gft_HOURSHOURSHOURSHOURS01', 0, 30, 'From your Treasury'), hours: 12.5 };
+  W = makeGiftsWorld({ rate: 400, priceMul: Math.pow(1.15, 2), respond: one(gh) });
+  r = await W.Gifts.checkNow();
+  const hh = W.M.profile.entitlements.history.find(h => h.grantId === gh.id);
+  check('hours gift: 12.5 hours at 400 cr/min are 300,000 credits (the income beats the region floor)', W.M.profile.credits === 6000 + 300000 && W.M.log.some(l => l[0] === 'credits' && l[1] === 300000 && l[2] === 'gift') && W.M.profile.am === 50, W.M.log);
+  check('hours gift: recorded once with granted {credits, am, hours} and acked', hh && hh.granted.credits === 300000 && hh.granted.hours === 12.5 && hh.granted.am === 30 && acks(W).length === 1 && r.acked, hh);
+  await W.Gifts.checkNow();
+  check('hours gift delivered again: no second payment', W.M.profile.credits === 306000);
+  W = makeGiftsWorld({ rate: 0, priceMul: Math.pow(1.15, 2), respond: one({ ...gift('gft_HOURSHOURSHOURSHOURS02', 0, 0), hours: 2, note: 'From your Treasury' }) });
+  await W.Gifts.checkNow();
+  check('hours gift for a city with no income yet: the floor, 2 h x 5,000 x 1.15^2 = 13,225', W.M.profile.credits === 6000 + 13225, W.M.profile.credits);
+  W = makeGiftsWorld({ rate: 100, respond: one({ ...gift('gft_HOURSHOURSHOURSHOURS03', 0, 0), hours_tenths: 25 }) });
+  await W.Gifts.checkNow();
+  check('hours read from hours_tenths too (25 = 2.5 h): max(15,000, 12,500)', W.M.profile.credits === 6000 + 15000, W.M.profile.credits);
+  W = makeGiftsWorld({ rate: 100, respond: one({ ...gift('gft_HOURSHOURSHOURSHOURS04', 0, 0), hours: -5 }) });
+  await W.Gifts.checkNow();
+  check('negative hours pay nothing', W.M.profile.credits === 6000);
+  // the HUD's hook: a Bring here the page asked for, then a Treasury gift that came on its own (after a reload)
+  const seen = [];
+  W = makeGiftsWorld({ rate: 400, respond: one(gh) });
+  W.Gifts.ui.arrived = info => { seen.push(info); return true; };
+  W.Gifts.expect(gh.id);
+  await W.Gifts.checkNow();
+  check('a Bring here the page asked for goes to Gifts.ui.arrived as the player\'s own (kind treasury, asked), no gift box', seen.length === 1 && seen[0].kind === 'treasury' && seen[0].asked === true && seen[0].credits === 300000 && seen[0].am === 30 && W.modals.length === 0, seen);
+  W = makeGiftsWorld({ rate: 400, respond: one(gh) });
+  W.Gifts.ui.arrived = info => { seen.push(info); return true; };
+  await W.Gifts.checkNow();
+  check('a Treasury gift nobody waited for still reaches the hook (asked false), no gift box', seen.length === 2 && seen[1].kind === 'treasury' && seen[1].asked === false && W.modals.length === 0, seen[1]);
+  W = makeGiftsWorld({ rate: 400, respond: one(gh) });
+  await W.Gifts.checkNow();
+  check('without the hook a Treasury gift keeps the gift box, its credits on the chips', W.modals.length === 1 && W.nodes.some(n => n.className === 'chips' && /300000 cr/.test(n.innerHTML)));
+
+  // TREASURY.md: an items gift (keepsakes) gets what each sku grants today, through Store.grantItems, without the sku's Antimatter
+  const gk = { ...gift('gft_KEEPSAKEKEEPSAKEKEEP01', 0, 0, 'A keepsake from your Treasury'), items: ['sector_pass', 'founder'] };
+  const shown = [];
+  W = makeGiftsWorld({ withStore: true, respond: one(gk) });
+  W.Gifts.ui.arrived = info => { shown.push(info); return true; };
+  r = await W.Gifts.checkNow();
+  const kh = id => W.M.profile.entitlements.history.find(h => h.grantId === `${gk.id}:${id}`);
+  check('items gift: the Sector Pass unlocks every sector and is owned', W.M.log.some(l => l[0] === 'unlockAll') && W.M.hasEntitlement('sector_pass') && kh('sector_pass') && kh('sector_pass').mode === 'keepsake', W.M.log);
+  check('items gift: the Founder keepsake brings the livery and the title, not the pack\'s 100 Antimatter', W.M.hasEntitlement('founder') && kh('founder').livery === 'founder' && kh('founder').title === 'Founder' && W.M.profile.am === 20 && W.M.profile.credits === 6000, kh('founder'));
+  const gkh = W.M.profile.entitlements.history.find(h => h.grantId === gk.id);
+  check('items gift: the gift itself is recorded with its items and acked', gkh && gkh.mode === 'gift' && JSON.stringify(gkh.granted.items) === JSON.stringify(['sector_pass', 'founder']) && acks(W).length === 1 && r.acked && !W.Gifts.state.unacked.length, gkh);
+  check('items gift: shown through the hook as a keepsake, by name, no gift box', shown.length === 1 && shown[0].kind === 'keepsake' && shown[0].names.join() === 'Sector Pass,Founder\'s Charter' && W.modals.length === 0, shown);
+  await W.Gifts.checkNow();
+  check('items gift delivered again: nothing granted twice', W.M.log.filter(l => l[0] === 'unlockAll').length === 1 && W.M.profile.entitlements.history.filter(h => h.sku === 'founder').length === 1);
+  W = makeGiftsWorld({ withStore: true, history: [{ sku: 'founder', grantId: 'cs_old_founder' }], respond: one({ ...gift('gft_KEEPSAKEKEEPSAKEKEEP02', 0, 0, 'A keepsake from your Treasury'), items: ['founder'] }) });
+  W.M.profile.entitlements.owned.founder = true;
+  W.Gifts.ui.arrived = info => { shown.push(info); return true; };
+  r = await W.Gifts.checkNow();
+  check('a keepsake this city already owns: nothing granted, nothing shown, still acked', shown.length === 1 && W.modals.length === 0 && W.M.profile.entitlements.history.filter(h => h.sku === 'founder').length === 1 && r.acked);
+  W = makeGiftsWorld({ respond: one({ ...gift('gft_KEEPSAKEKEEPSAKEKEEP03', 0, 0), items: 'liveries,Founder,<x>,liveries' }) });
+  await W.Gifts.checkNow();
+  const lh = W.M.profile.entitlements.history.find(h => h.grantId === 'gft_KEEPSAKEKEEPSAKEKEEP03:liveries');
+  check('without store.js: items from a comma list, junk ids dropped, the six sector liveries granted', lh && Array.isArray(lh.liveries) && lh.liveries.length === 6 && !W.M.hasEntitlement('Founder') && W.M.profile.entitlements.history.filter(h => h.mode === 'keepsake').length === 1, W.M.profile.entitlements.history);
+  check('without the hook a keepsake keeps the gift box and names it on a chip', W.modals.length === 1 && W.nodes.some(n => n.className === 'chips' && /Sector Liveries/.test(n.innerHTML)), W.nodes.filter(n => n.className === 'chips').map(n => n.innerHTML));
+
   // unconfigured, offline, no player id: no requests or silence
   W = makeGiftsWorld({ apiBase: '' });
   r = await W.Gifts.checkNow();
@@ -1314,10 +1379,137 @@ async function testGifts() {
   check('visible again after 11 minutes hidden: one check-in', presences(W).length === 2);
 }
 
+// ------------------------------------------------------------ js/store.js: the Treasury and the Specials (TREASURY.md section 6)
+// store.js alone in a vm with a stub Meta, Account, Gifts and Sim, and a fake fetch for the store Worker.
+function makeStoreWorld(o = {}) {
+  const storage = makeStorage(), calls = [], events = [];
+  const M = {
+    profile: { playerId: 'p_test_player_1', credits: 1000, am: 10, entitlements: { owned: {}, history: [] } }, log: [],
+    addAM(n, r) { this.profile.am += n; this.log.push(['am', n, r]); return this.profile.am; },
+    addCredits(n, r) { this.profile.credits += n; this.log.push(['credits', n, r]); return this.profile.credits; },
+    totalRate: () => o.rate || 0,
+    unlockAllSectors(r) { this.log.push(['unlockAll', r]); return []; },
+    grantEntitlement(sku, p) { this.profile.entitlements.history.push({ sku, ...p }); this.profile.entitlements.owned[sku] = true; return true; },
+    hasEntitlement(sku) { return !!this.profile.entitlements.owned[sku]; },
+  };
+  const Account = {
+    available: true, state: { signedIn: !!o.signedIn },
+    async deposit(b) { calls.push(['deposit', b]); return o.deposit ? o.deposit(b, calls) : { ok: false, code: 'offline' }; },
+    async withdraw(b) { calls.push(['withdraw', b]); return o.withdraw ? o.withdraw(b, calls) : { ok: true, giftId: 'gft_WITHDRAWWITHDRAW0001', withdrawn: { gold: b.gold, hours: b.hours }, treasury: { gold: 0, hours: 0, items: [] } }; },
+    async treasury() { calls.push(['treasury']); return { ok: true, gold: 5, hours: 1.5, items: ['founder'], log: [] }; },
+  };
+  const Gifts = { checks: [], expected: [], checkNow(a) { calls.push(['presence', a || null]); return Promise.resolve({ ok: true }); }, expect(id) { this.expected.push(id); } };
+  const Sim = { state: { level: o.level || 4 }, regionIndex: () => o.region || 0, priceMul: () => Math.pow(1.15, o.region || 0), emit: (e, d) => events.push([e, d]) };
+  const fetch = async (url, init) => {
+    calls.push(['fetch', url, init && init.body ? JSON.parse(init.body) : null]);
+    const r = o.fetch ? o.fetch(url, init) : { status: 404, json: { error: 'not-found' } };
+    return { ok: r.status >= 200 && r.status < 300, status: r.status, json: async () => r.json };
+  };
+  const doc = { readyState: 'complete', body: null, addEventListener() {}, querySelector: sel => (sel === 'meta[name="portsolace-store"]' && o.tag ? { getAttribute: () => JSON.stringify(o.tag) } : null) };
+  const ctx = vm.createContext({ console, localStorage: storage, Meta: M, Account, Gifts, Sim, fetch, document: doc, setTimeout, clearTimeout });
+  ctx.window = ctx;
+  if (o.override) storage.setItem('portsolace.store', JSON.stringify(o.override));
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'store.js'), 'utf8'), ctx, { filename: 'store.js' });
+  const Store = vm.runInContext('Store', ctx);
+  Store.configure({ latencyMs: 0 });
+  Store.ui.confirm = async req => { calls.push(['confirm', req]); return true; };
+  Store.on('purchase', d => events.push(['store', d]));
+  return { Store, M, calls, events, Gifts, Account, storage };
+}
+
+async function testTreasuryStore() {
+  sec('19. Treasury and Specials (js/store.js, TREASURY.md section 6)');
+  const deposits = W => W.calls.filter(c => c[0] === 'deposit');
+  // signed out: as before, this world only
+  let W = makeStoreWorld();
+  let r = await W.Store.purchase('am_140');
+  check('signed out: a sandbox purchase applies here as before, no deposit', r.ok && W.M.profile.am === 150 && !deposits(W).length && !r.treasury, r);
+  // signed in, the deposit succeeds: nothing applied here, the HUD hears treasury:true
+  W = makeStoreWorld({ signedIn: true, deposit: b => ({ ok: true, deposited: { gold: 140, hours: 0, items: [] }, treasury: { gold: 140, hours: 0, items: [] } }) });
+  r = await W.Store.purchase('am_140');
+  const dep = deposits(W)[0];
+  check('signed in: the purchase goes into the Treasury and nothing is applied here', r.ok && r.treasury === true && r.deposited.gold === 140 && W.M.profile.am === 10 && r.balance.gold === 140, r);
+  check('deposit body: game, playerId and the sandbox grant (sku, id)', dep && dep[1].game === 'portsolace' && dep[1].playerId === 'p_test_player_1' && dep[1].sandbox && dep[1].sandbox.sku === 'am_140' && /^sandbox-[0-9a-f-]{36}$/.test(dep[1].sandbox.id) && !dep[1].sessionId, dep && dep[1]);
+  check('a presence check-in runs before the deposit (it links this city to the account)', W.calls.findIndex(c => c[0] === 'presence') >= 0 && W.calls.findIndex(c => c[0] === 'presence') < W.calls.findIndex(c => c[0] === 'deposit'));
+  check('the deposited grant is recorded in the profile (sku treasury), so it is never applied here later', W.M.profile.entitlements.history.some(h => h.sku === 'treasury' && h.grantId === r.grantId && h.bought === 'am_140'));
+  check('Sim purchase event carries treasury and deposited', W.events.some(e => e[0] === 'purchase' && e[1].treasury && e[1].deposited.gold === 140));
+  // signed in, the deposit fails: applied here exactly as before (a paid purchase is never lost)
+  W = makeStoreWorld({ signedIn: true, deposit: () => ({ ok: false, code: 'offline' }) });
+  r = await W.Store.purchase('am_140');
+  check('deposit fails: applied here as before', r.ok && !r.treasury && W.M.profile.am === 150 && deposits(W).length === 1, r);
+  W = makeStoreWorld({ signedIn: true, deposit: (b, calls) => (calls.filter(c => c[0] === 'deposit').length < 2 ? { ok: false, code: 'not-your-player', status: 403 } : { ok: true, deposited: { gold: 140, hours: 0, items: [] }, treasury: { gold: 140, hours: 0, items: [] } }) });
+  r = await W.Store.purchase('am_140');
+  check('403 not-your-player: one more check-in, one more try, then the Treasury', r.treasury && deposits(W).length === 2 && W.calls.filter(c => c[0] === 'presence').length === 2 && W.M.profile.am === 10, W.calls.map(c => c[0]));
+  // a keeper into the Treasury counts as owned at once
+  W = makeStoreWorld({ signedIn: true, deposit: () => ({ ok: true, deposited: { gold: 0, hours: 0, items: ['sector_pass'] }, treasury: { gold: 0, hours: 0, items: ['sector_pass'] } }) });
+  r = await W.Store.purchase('sector_pass');
+  check('a Sector Pass deposited: owned here at once, not bought twice, no local unlock', r.treasury && W.Store.owned('sector_pass') && !W.M.log.some(l => l[0] === 'unlockAll') && (await W.Store.purchase('sector_pass')).error === 'already-owned');
+  // Specials: signed out, a special applies its own content, not its sku's
+  const offer = { id: 'frontier', title: 'Frontier Supply', blurb: 'x', badge: 'Grows with your region', sku: 'am_140', priceCents: 499, priceLabel: '$4.99', content: { gold: 40, hours: 10, items: [] }, endsAt: null };
+  W = makeStoreWorld({ rate: 100, region: 2 });
+  r = await W.Store.purchase('am_140', { offer });
+  check('signed out: a special brings its content: 40 Antimatter and 10 hours (max(60,000, 10 x 5,000 x 1.15^2 = 66,125))', r.ok && W.M.profile.am === 50 && W.M.profile.credits === 1000 + 66125 && r.offer === 'frontier' && r.title === 'Frontier Supply', { r, M: W.M.profile });
+  check('the special is recorded on its sku with the offer id', W.M.profile.entitlements.history.some(h => h.sku === 'am_140' && h.offer === 'frontier' && h.grantId === r.grantId));
+  check('the confirm shows the special\'s title, price and content', W.calls.some(c => c[0] === 'confirm' && c[1].title === 'Frontier Supply' && c[1].priceLabel === '$4.99' && c[1].content.hours === 10 && c[1].offer === 'frontier'));
+  W = makeStoreWorld({ signedIn: true, deposit: b => ({ ok: true, deposited: { gold: 40, hours: 10, items: [] }, treasury: { gold: 40, hours: 10, items: [] } }) });
+  r = await W.Store.purchase('am_140', { offer });
+  check('signed in: a special deposits with its offer id', r.treasury && deposits(W)[0][1].sandbox.offer === 'frontier' && W.M.profile.am === 10 && r.deposited.hours === 10, deposits(W)[0]);
+  check('an ended or unknown special is refused before any purchase', (await W.Store.purchase('am_140', { offer: { ...offer, endsAt: 5 } })).error === 'offer-unavailable' && (await W.Store.purchase('am_140', { offer: { ...offer, sku: 'nope' } })).error === 'unknown-offer');
+  // the hours conversion
+  W = makeStoreWorld({ rate: 400, region: 0 });
+  check('hoursToMoney: max(hours x 60 x rate, hours x 5,000 x priceMul)', W.Store.hoursToMoney(12.5) === 300000 && makeStoreWorld({ rate: 0, region: 7 }).Store.hoursToMoney(2) === Math.round(2 * 5000 * Math.pow(1.15, 7)));
+  // /offers: only where a store Worker answers this build
+  W = makeStoreWorld({ override: { mode: 'sandbox' } });
+  r = await W.Store.offers();
+  check('a sandbox with no store Worker of its own fetches no specials', !r.ok && r.why === 'no-backend' && !W.calls.some(c => c[0] === 'fetch'));
+  W = makeStoreWorld({ tag: { mode: 'stripe', apiBase: 'https://store.example.test' }, override: { mode: 'sandbox' } });
+  check('a sandbox forced over a live page (local testing) fetches none either', !(await W.Store.offers()).ok && !W.calls.some(c => c[0] === 'fetch'));
+  W = makeStoreWorld({ tag: { mode: 'sandbox', apiBase: 'https://store-staging.example.test' }, level: 5, region: 1,
+    fetch: () => ({ status: 200, json: { offers: [offer, { ...offer, id: 'bad', sku: 'no_such_sku' }, { ...offer, id: 'empty', content: {} }, { ...offer, id: 'keep', sku: 'founder' }] } }) });
+  r = await W.Store.offers();
+  const of = W.calls.find(c => c[0] === 'fetch');
+  check('a staging sandbox asks GET /offers?game&playerId&level&region', of && of[1] === 'https://store-staging.example.test/offers?game=portsolace&playerId=p_test_player_1&level=5&region=1', of && of[1]);
+  check('offers: unknown skus, empty content and keepers are dropped; the rest normalised', r.ok && r.offers.length === 1 && r.offers[0].id === 'frontier' && r.offers[0].content.hours === 10 && r.offers[0].priceLabel === '$4.99', r.offers);
+  await W.Store.offers();
+  check('a second ask within 30 s answers from memory', W.calls.filter(c => c[0] === 'fetch').length === 1);
+  W = makeStoreWorld({ tag: { mode: 'stripe', apiBase: 'https://store.example.test' }, fetch: () => ({ status: 500, json: { error: 'server' } }) });
+  r = await W.Store.offers();
+  check('offers: a failing store Worker is a quiet failure', !r.ok && r.offers.length === 0);
+  // Bring here
+  W = makeStoreWorld({ signedIn: true });
+  r = await W.Store.withdraw(12.7, 2.46);
+  const wd = W.calls.find(c => c[0] === 'withdraw');
+  check('withdraw: whole gold, hours to a tenth (2.5), game, playerId and a requestId', r.ok && wd[1].gold === 12 && wd[1].hours === 2.5 && wd[1].game === 'portsolace' && wd[1].playerId === 'p_test_player_1' && /^wd-/.test(wd[1].requestId), wd && wd[1]);
+  check('withdraw: the gift is expected and a check-in follows', W.Gifts.expected.includes('gft_WITHDRAWWITHDRAW0001') && W.calls.some(c => c[0] === 'presence' && c[1] && c[1].again));
+  let n = 0;
+  W = makeStoreWorld({ signedIn: true, withdraw: b => (++n === 1 ? { ok: false, code: 'offline' } : { ok: true, giftId: 'gft_WITHDRAWWITHDRAW0002', duplicate: true }) });
+  r = await W.Store.withdraw(5, 0);
+  const wds = W.calls.filter(c => c[0] === 'withdraw');
+  check('withdraw: a lost answer is retried with the same requestId', r.ok && wds.length === 2 && wds[0][1].requestId === wds[1][1].requestId);
+  check('withdraw: nothing asked, nothing sent', (await W.Store.withdraw(0, 0)).why === 'nothing');
+  W = makeStoreWorld();
+  check('withdraw signed out: refused', (await W.Store.withdraw(5, 0)).why === 'signed-out');
+  // Restore: /entitlements also lists grants already deposited. Signed in, nothing it lists is applied here: each goes to the
+  // Treasury, whose deposit is idempotent by session (duplicate = already there); a failed deposit waits for the next restore.
+  const listed = { status: 200, json: { grants: [{ grantId: 'cs_test_deposited_1', sku: 'am_140', at: 1 }, { grantId: 'cs_test_unclaimed_2', sku: 'am_50', at: 2 }] } };
+  const stripeTag = { mode: 'stripe', apiBase: 'https://store.example.test' };
+  W = makeStoreWorld({ tag: stripeTag, signedIn: true, fetch: () => listed,
+    deposit: b => (b.sessionId === 'cs_test_deposited_1' ? { ok: true, duplicate: true, treasury: { gold: 190, hours: 0, items: [] } } : { ok: true, deposited: { gold: 50, hours: 0, items: [] }, treasury: { gold: 190, hours: 0, items: [] } }) });
+  r = await W.Store.restore();
+  check('restore signed in: no listed grant is applied here (one already deposited, one deposited now)', r.ok && r.applied.length === 0 && r.deposited.length === 2 && r.deposited.filter(x => !x.duplicate).length === 1 && W.M.profile.am === 10, r);
+  check('restore signed in: both are recorded, so the next restore asks nothing', W.M.profile.entitlements.history.filter(h => h.sku === 'treasury').length === 2 && (await W.Store.restore()).deposited.length === 0 && deposits(W).length === 2);
+  W = makeStoreWorld({ tag: stripeTag, signedIn: true, fetch: () => listed, deposit: () => ({ ok: false, code: 'offline' }) });
+  r = await W.Store.restore();
+  check('restore signed in, the Treasury down: nothing applied here, the grants wait for the next restore', r.ok && r.applied.length === 0 && r.waiting === 2 && W.M.profile.am === 10 && !W.M.profile.entitlements.history.length, r);
+  W = makeStoreWorld({ tag: stripeTag, fetch: () => listed });
+  r = await W.Store.restore();
+  check('restore signed out: applied here as before', r.ok && r.applied.length === 2 && W.M.profile.am === 10 + 140 + 50 && !deposits(W).length, r);
+}
+
 // ============================================================ run
 (async function main() {
   console.log(`Port Solace v2 sim-test  (${FILES.join(', ')})`);
-  const tests = [testNewProfileAndTutorial, testHoppers, testOffline, testExpeditions, testMissions, testDaily, testRanks, testSectors, testExportImportAndReset, testMigration, testV1Sim, testStore, testConvoyAndMisc, testShippedPreset, testPlots, testAchievements, testLiveries, testMigrateScript, testImportPage, testGifts];
+  const tests = [testNewProfileAndTutorial, testHoppers, testOffline, testExpeditions, testMissions, testDaily, testRanks, testSectors, testExportImportAndReset, testMigration, testV1Sim, testStore, testConvoyAndMisc, testShippedPreset, testPlots, testAchievements, testLiveries, testMigrateScript, testImportPage, testGifts, testTreasuryStore];
   for (const t of tests) {
     try { await t(); } catch (e) { results.fail++; results.failures.push(`${t.name}: threw ${e && e.stack}`); console.log(`  THREW ${e && e.stack}`); }
   }

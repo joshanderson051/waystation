@@ -16,6 +16,12 @@
 //   reload), also when presence returned no gifts, because a gift revoked after it reached the game is no longer
 //   offered. A gift whose profile save failed is not acked, so the server offers it again; the history check never
 //   grants twice.
+// The Treasury (TREASURY.md section 6): accepts also says 'hours' and 'items'. A gift's hours become money here at
+//   max(hours * 60 * Meta.totalRate(), hours * 5000 * Sim.priceMul()); its items (keepsakes: sector_pass, founder, liveries)
+//   get what their skus grant today, through Store.grantItems, each recorded under its own sku. Applied once and acked like
+//   every gift. A gift from the Treasury (one this page asked for with Bring here, Gifts.expect(id), or noted "From your
+//   Treasury") and a keepsake-only gift go to Gifts.ui.arrived(info) when the HUD set it (a reward card or a notice); the
+//   rest, and everything without the hook, keep the modal.
 // The player sees one Overlays modal for all new gifts; notes are untrusted and only ever set through textContent.
 //
 // Integration: main.js calls Gifts.init() after Meta.init, Store.flush, Account.boot and UI.init.
@@ -30,6 +36,11 @@ const Gifts = (() => {
   const GIFT_ID_RE = /^[A-Za-z0-9_-]{4,100}$/;   // 'gft_' + base64url on the worker; anything else is ignored, never acked
   const MAX_CREDITS = 10000000, MAX_AM = 100000; // the worker's caps for one gift
   const MAX_TOKENS = 10, TITLE_MAX = 40;         // a reward's livery tokens and title
+  const MAX_HOURS = 10000, MAX_ITEMS = 10;       // a Treasury gift's hours of income and keepsakes (store.js MAX_HOURS, MAX_ITEMS)
+  const ITEM_RE = /^[a-z][a-z0-9_]{0,39}$/;
+  const TREASURY_NOTE = 'From your Treasury';    // the account worker's note on a withdrawal
+  // keepsakes without store.js (a harness): what each sku grants besides its Antimatter
+  const KEEPSAKES = { sector_pass: { unlockAll: true }, founder: { livery: 'founder', title: 'Founder' }, liveries: { liveries: ['sable', 'kessler', 'thessaly', 'marrow', 'oros', 'keth'] } };
   const ACK_BATCH = 50;                          // the worker's ACK_IDS_MAX
   const KEYS = {
     session: 'portsolace.account',          // Account's stored sign-in {token, email}
@@ -45,6 +56,7 @@ const Gifts = (() => {
   let hiddenAt = null, missed = false;
   const toShow = [];                        // applied gifts the player has not seen yet
   const unsaved = new Set();                // applied in memory but the profile save failed: never acked until a save succeeds
+  const expected = new Set();               // gift ids this page asked the Treasury for (Bring here): the player's own arrival
 
   // ---------------------------------------------------------- small helpers (every browser global is optional)
   const hasDoc = () => typeof document !== 'undefined' && !!document;
@@ -166,7 +178,38 @@ const Gifts = (() => {
       note: typeof g.note === 'string' ? g.note.slice(0, 140) : '',
       createdAt: Number.isFinite(Number(g.createdAt)) ? Number(g.createdAt) : null,
       tokens: int(g.tokens, MAX_TOKENS), title: typeof g.title === 'string' ? g.title.trim().slice(0, TITLE_MAX) : '',
+      hours: hoursOf(g), items: itemsOf(g.items),
     };
+  }
+  // hours with one decimal (TREASURY.md: `hours`; hours_tenths is read too); items as an array (or the stored comma list)
+  function hoursOf(g) {
+    const h = g.hours != null ? num(g.hours) : num(g.hoursTenths != null ? g.hoursTenths : g.hours_tenths) / 10;
+    return Math.min(MAX_HOURS, Math.max(0, Math.round(h * 10) / 10));
+  }
+  function itemsOf(v) {
+    const raw = Array.isArray(v) ? v : typeof v === 'string' ? v.split(/[\s,]+/) : [];
+    return [...new Set(raw.filter(i => typeof i === 'string' && ITEM_RE.test(i)))].slice(0, MAX_ITEMS);
+  }
+  // TREASURY.md section 2, the same formula as Store.hoursToMoney (used when store.js is there)
+  function hoursToMoney(m, hours) {
+    if (typeof Store !== 'undefined' && Store && typeof Store.hoursToMoney === 'function') return Store.hoursToMoney(hours, m);
+    const rate = typeof m.totalRate === 'function' ? num(m.totalRate()) : 0;
+    let mul = 1;
+    try { if (typeof Sim !== 'undefined' && Sim && typeof Sim.priceMul === 'function') mul = num(Sim.priceMul()) || 1; } catch (e) { mul = 1; }
+    return Math.round(Math.max(hours * 60 * rate, hours * 5000 * mul));
+  }
+  // keepsakes: Store.grantItems (the skus' own grants), or the table above; returns the items newly granted here
+  function grantItems(m, items, giftId) {
+    if (typeof Store !== 'undefined' && Store && typeof Store.grantItems === 'function') return Store.grantItems(m, items, giftId, 'keepsake');
+    const done = [];
+    for (const item of items) {
+      if (typeof m.hasEntitlement === 'function' && m.hasEntitlement(item)) continue;
+      const { unlockAll, ...payload } = KEEPSAKES[item] || {};
+      if (unlockAll && typeof m.unlockAllSectors === 'function') m.unlockAllSectors(`keepsake:${item}`);
+      m.grantEntitlement(item, { grantId: `${giftId}:${item}`, mode: 'keepsake', at: Date.now(), sku: item, keepsake: true, granted: { item }, ...payload });
+      done.push(item);
+    }
+    return done;
   }
   // Meta.save() answers false when localStorage refuses the write (quota full, storage blocked).
   function saveProfile(m) {
@@ -183,15 +226,18 @@ const Gifts = (() => {
       const g = cleanGift(raw); if (!g) continue;
       if (historyHas(g.id)) { if (!already.includes(g.id) && !applied.some(a => a.id === g.id)) already.push(g.id); continue; }
       if (g.credits > 0) m.addCredits(g.credits, 'gift');
+      let money = g.credits;
+      if (g.hours > 0) { const n = Math.min(MAX_CREDITS * 100, hoursToMoney(m, g.hours)); if (n > 0) { m.addCredits(n, 'gift'); money += n; } }   // hours of this city's income
       if (g.am > 0) m.addAM(g.am, 'gift');
       if (g.tokens > 0) {                                    // livery tokens, spent in the Liveries panel (Meta.redeemLiveryToken)
         const E = m.profile.entitlements, T = E.tokens && typeof E.tokens === 'object' ? E.tokens : (E.tokens = { livery: 0 });
         T.livery = Math.max(0, (T.livery | 0)) + g.tokens;
       }
-      const granted = { credits: g.credits, am: g.am, ...(g.tokens ? { tokens: g.tokens } : {}) };
+      const items = g.items.length ? grantItems(m, g.items, g.id) : [];   // keepsakes, each under its own sku
+      const granted = { credits: money, am: g.am, ...(g.tokens ? { tokens: g.tokens } : {}), ...(g.hours ? { hours: g.hours } : {}), ...(items.length ? { items } : {}) };
       // a title rides on the history entry: Meta.grantEntitlement adds it to entitlements.titles
       m.grantEntitlement('gift', { grantId: g.id, mode: 'gift', at: Date.now(), granted, note: g.note, acked: false, ...(g.title ? { title: g.title } : {}) });
-      applied.push(g);
+      applied.push({ ...g, money, newItems: items });
     }
     const saved = applied.length ? saveProfile(m) : true;
     return { applied, already, saved };
@@ -231,23 +277,53 @@ const Gifts = (() => {
     return n;
   }
   const fmtN = n => Math.round(num(n)).toLocaleString('en-US');
+  // a keepsake's name in this world's words: the store's own title for the sku
+  const ITEM_NAMES = { sector_pass: 'Sector Pass', founder: 'Founder\'s Charter', liveries: 'Sector Liveries' };
+  function itemName(id) {
+    try { if (typeof Store !== 'undefined' && Store && typeof Store.item === 'function') { const e = Store.item(id); if (e && e.title) return String(e.title); } } catch (e) { /* the table */ }
+    return ITEM_NAMES[id] || id;
+  }
+  const moneyOf = g => int(g.money != null ? g.money : g.credits, MAX_CREDITS * 100);
   function chipsNode(g) {
     const box = el('div', 'chips');
     // rewardChips builds its markup from the two integers alone (the game's credit and Antimatter icons)
-    // (it escapes the token label and the title it is given)
+    // (it escapes the token label, the title and the keepsake names it is given)
     const tokens = int(g.tokens, MAX_TOKENS), token = tokens ? (tokens > 1 ? `${tokens} Livery tokens` : 'Livery token') : '';
+    const names = (g.newItems || []).map(itemName);
     if (typeof Overlays !== 'undefined' && Overlays && typeof Overlays.rewardChips === 'function') {
-      box.innerHTML = Overlays.rewardChips({ credits: int(g.credits, MAX_CREDITS), am: int(g.am, MAX_AM), ...(token ? { livery: token } : {}), ...(g.title ? { title: String(g.title) } : {}) });
+      box.innerHTML = Overlays.rewardChips({ credits: moneyOf(g), am: int(g.am, MAX_AM), ...(token ? { livery: token } : {}), ...(g.title ? { title: String(g.title) } : {}), ...(names.length ? { items: names } : {}) });
     } else {
-      if (g.credits > 0) box.appendChild(el('span', 'rchip amber', `${fmtN(g.credits)} cr`));
+      if (moneyOf(g) > 0) box.appendChild(el('span', 'rchip amber', `${fmtN(moneyOf(g))} cr`));
       if (g.am > 0) box.appendChild(el('span', 'rchip am', `${fmtN(g.am)} AM`));
       if (token) box.appendChild(el('span', 'rchip rose', token));
       if (g.title) box.appendChild(el('span', 'rchip ivory', String(g.title)));
+      for (const n of names) box.appendChild(el('span', 'rchip rose', n));
     }
     return box;
   }
+  // A Treasury withdrawal or a keepsake goes to the HUD's hook (a reward card when the player asked for it, a notice when it
+  // came on its own). A keepsake this world already had says nothing. Returns the gifts still for the modal.
+  function arrivals(gifts) {
+    const hook = api.ui && typeof api.ui.arrived === 'function' ? api.ui.arrived : null, rest = [];
+    for (const g of gifts) {
+      const own = expected.has(g.id) || g.note === TREASURY_NOTE;
+      const keepsake = !own && g.items.length > 0 && !moneyOf(g) && !g.am && !g.tokens && !g.title;
+      if (keepsake && !(g.newItems || []).length) continue;
+      if ((own || keepsake) && hook) {
+        let done = false;
+        try {
+          done = hook({ kind: own ? 'treasury' : 'keepsake', asked: expected.has(g.id), id: g.id, credits: moneyOf(g), am: g.am, hours: g.hours,
+            items: (g.newItems || []).slice(), names: (g.newItems || []).map(itemName) }) !== false;
+        } catch (e) { done = false; }
+        expected.delete(g.id);
+        if (done) continue;
+      }
+      rest.push(g);
+    }
+    return rest;
+  }
   function show() {
-    const gifts = toShow.splice(0, toShow.length);
+    const gifts = arrivals(toShow.splice(0, toShow.length));
     state.waiting = 0;
     if (!gifts.length) return;
     Overlays.modal({
@@ -276,7 +352,9 @@ const Gifts = (() => {
     const pid = playerId();
     if (!pid) return { ok: false, why: 'no-player' };
     state.lastAt = Date.now(); state.sends++;
-    const body = { playerId: pid, summary: summary(), platform: platform(), version: version(), accepts: ['tokens', 'title'] };
+    const body = { playerId: pid, summary: summary(), platform: platform(), version: version(), accepts: ['tokens', 'title', 'hours', 'items'] };
+    // the game names itself (as account.js does): an address that is no game's, a local test, must not count as Port Solace
+    try { if (typeof GAME_INFO !== 'undefined' && GAME_INFO && GAME_INFO.id) body.game = String(GAME_INFO.id); } catch (e) { /* Port Solace: no GAME_INFO */ }
     const r = await post(base, '/presence', body, bearer());
     if (!r.ok) { state.lastOk = false; state.lastError = r.why; return { ok: false, why: r.why }; }
     state.lastOk = true; state.lastError = null;
@@ -309,8 +387,9 @@ const Gifts = (() => {
     for (const id of unsaved) if (!state.unacked.includes(id)) state.unacked.push(id);
     return { ok: true, applied: applied.map(g => g.id), already, acked, saved, ackedIds: ids };
   }
-  function checkNow() {
-    if (inflight) return inflight;
+  // o.again: a check-in already running may have started before the gift was made, so one more follows it (Bring here)
+  function checkNow(o) {
+    if (inflight) return o && o.again ? inflight.then(() => checkNow()) : inflight;
     inflight = (async () => {
       try { return await run(); }
       catch (e) { state.lastOk = false; state.lastError = 'error'; return { ok: false, why: 'error' }; }
@@ -341,8 +420,10 @@ const Gifts = (() => {
   }
 
   const api = {
+    ui: { arrived: null },                                   // the HUD sets Gifts.ui.arrived(info) -> true when it showed the gift
     init,
     checkNow,
+    expect(id) { if (typeof id === 'string' && GIFT_ID_RE.test(id)) expected.add(id); return api; },   // Store.withdraw: this gift is the player's Bring here
     get state() { return { ...state, applied: state.applied.slice(), acked: state.acked.slice(), unacked: state.unacked.slice(), inflight: !!inflight }; },
   };
   if (typeof window !== 'undefined' && window) window.Gifts = api;

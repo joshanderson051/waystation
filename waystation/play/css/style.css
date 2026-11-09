@@ -1006,6 +1006,45 @@ table.market { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .price-line { display: flex; justify-content: space-between; align-items: center; margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--edge); color: var(--ink-2); }
 .price-line b { font-size: 18px; color: var(--ink); }
 .test-note { margin: 10px 0 0; color: var(--warn); font-size: 13px; }
+/* TREASURY.md: the Specials (one card per offer), the Treasury block, the sign-in line and the sheet after a purchase */
+.shop-quiet { margin: 2px 0 10px; color: var(--ink-3); }
+.offer-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.offer { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; background: linear-gradient(135deg, rgba(192,132,255,.13), var(--glass-2) 62%); border: 1px solid rgba(192,132,255,.35); border-radius: 3px; --spine: var(--am); --spine-glow: var(--glow-am); }
+.offer .spine { top: 8px; bottom: 8px; }
+.offer-ic { display: inline-flex; flex: none; color: var(--am); }
+.offer-ic .ic { width: 20px; height: 20px; vertical-align: 0; }
+.offer-ic .art { width: 36px; height: 36px; filter: drop-shadow(0 3px 5px rgba(0,0,0,.6)); }
+.offer-main { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.offer-badge { max-width: 100%; padding: 2px 7px; border-radius: 3px; background: var(--am); color: #FFFFFF; font: 600 10px/1.3 var(--font-cond); letter-spacing: .12em; text-transform: uppercase; box-shadow: var(--glow-am); overflow-wrap: anywhere; }
+.offer-name { font: 600 16px/19px var(--font-cond); letter-spacing: .01em; color: var(--am-hi); }
+.offer-what { font: 500 13px/1.4 var(--font-body); color: var(--ink); }
+.offer-blurb { font: 400 12px/1.4 var(--font-body); color: var(--ink-2); }
+.offer-ends { display: inline-flex; align-items: center; gap: 5px; font: 500 12px/1.2 var(--font-mono); color: var(--warn); }
+.offer-ends .ic { width: 12px; height: 12px; vertical-align: 0; }
+.offer-buy { flex: none; min-width: 76px; font-family: var(--font-mono); letter-spacing: 0; text-transform: none; font-weight: 600; }
+.offer-line { margin: 10px 0 0; font: 500 14px/1.4 var(--font-body); color: var(--am-hi); }
+.tre-invite { display: flex; align-items: center; gap: 10px; margin: 2px 0 10px; padding: 8px 10px; border: 1px dashed rgba(192,132,255,.35); border-radius: 3px; }
+.tre-invite .fine { flex: 1; min-width: 0; margin: 0; }
+.tre-invite .btn { flex: none; }
+.treasury { position: relative; display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; padding: 12px 12px 12px 16px; background: var(--glass-2); border: 1px solid rgba(192,132,255,.3); border-radius: 3px; --spine: var(--am); --spine-glow: var(--glow-am); }
+.treasury .spine { top: 8px; bottom: 8px; }
+.tre-row { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.tre-ic { display: inline-flex; flex: none; color: var(--am); }
+.tre-ic .ic { width: 18px; height: 18px; vertical-align: 0; }
+.tre-ic .art { width: 28px; height: 28px; }
+.tre-main { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.tre-val { font: 600 20px/1.1 var(--font-mono); color: var(--am-hi); font-variant-numeric: tabular-nums; }
+.tre-lbl { font: 500 11px/14px var(--font-cond); letter-spacing: .10em; text-transform: uppercase; color: var(--ink-2); }
+.tre-sub { flex-basis: 100%; font: 400 12px/1.3 var(--font-body); color: var(--ink-2); }
+.treasury .tre-in { flex: none; width: 104px; text-align: right; }
+.tre-foot { display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px solid var(--edge); }
+.tre-foot .fine { flex: 1; min-width: 0; margin: 0; font-size: 12px; }
+.tre-foot .btn { flex: none; }
+.tre-keep { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.tre-keep .chips { margin: 0; }
+.tre-keep .fine { flex-basis: 100%; margin: 0; font-size: 12px; }
+.tre-empty { margin: 0; font: 400 13px/1.5 var(--font-body); color: var(--ink-2); }
+.tre-what { margin: 10px 0 0; font: 600 15px/1.4 var(--font-body); color: var(--am-hi); }
 
 /* --------------------------------------------------------------------------
    20. Settings
@@ -1625,6 +1664,11 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   .panel-body .linkish { padding: 6px 0; margin: -6px 0; }
   .hero-row { grid-template-columns: 1fr; }
   .am-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 8px; }
+  .offer { gap: 10px; padding: 10px 10px 10px 14px; }
+  .tre-foot, .tre-invite { flex-wrap: wrap; }
+  .tre-foot .btn, .tre-invite .btn { flex: 1 1 auto; }
+  .tre-foot .fine, .tre-invite .fine { flex-basis: 100%; }
+  .treasury .tre-in { width: 92px; }
   input.slider { width: 104px; }
   .setting .seg > button { min-width: 48px; padding: 0 6px; }
   .market th.pol, .market td.pol { width: 88px; }

@@ -136,8 +136,15 @@ const StoreAdapter = {
   present() { return typeof Store !== 'undefined' && !!Store; },
   mode() { return this.present() && Store.mode ? Store.mode : 'sandbox'; },
   catalog() { const c = call(Store, 'catalog', [], null); if (Array.isArray(c)) return c; if (typeof STORE_CATALOG !== 'undefined' && Array.isArray(STORE_CATALOG)) return STORE_CATALOG; return []; },
-  purchase(sku) { const p = call(Store, 'purchase', [sku], null); return p && typeof p.then === 'function' ? p : Promise.resolve(p || { ok: false, why: 'Store unavailable' }); },
+  purchase(sku, opts) { const p = call(Store, 'purchase', [sku, opts || {}], null); return p && typeof p.then === 'function' ? p : Promise.resolve(p || { ok: false, why: 'Store unavailable' }); },
   restore(email) { const p = call(Store, 'restore', [email], null); return p && typeof p.then === 'function' ? p : Promise.resolve(p || { ok: false, why: 'Store unavailable' }); },
+  // TREASURY.md: the Specials and the Treasury (store.js talks to the Workers; every call resolves, never rejects)
+  _p(fn, args, dflt) { const p = call(Store, fn, args, null); return p && typeof p.then === 'function' ? p.catch(() => dflt) : Promise.resolve(p || dflt); },
+  offersOn() { return !!call(Store, 'offersOn', [], false); },
+  offers(force) { return this._p('offers', [{ force: !!force }], { ok: false, why: 'no-backend', offers: [] }); },
+  canDeposit() { return !!call(Store, 'canDeposit', [], false); },
+  treasury() { return this._p('treasury', [], { ok: false, why: 'unavailable' }); },
+  withdraw(gold, hours) { return this._p('withdraw', [gold, hours], { ok: false, why: 'unavailable' }); },
   offer() { return this.catalog().some(i => i.offer || i.featured); },
 };
 
@@ -227,7 +234,9 @@ const UI = {
     if (StoreAdapter.present() && Store.ui) {
       Store.ui.confirm = req => Overlays.confirm(
         `Buy ${req.title}?`,
-        `${esc(req.desc || '')}<div class="price-line"><span>Price</span><b class="num">${esc(req.priceLabel || '')}</b></div>` +
+        `${esc(req.desc || '')}${req.content ? `<p class="offer-line">${esc(Fmt.cap(shopContentLine(req.content)))}</p>` : ''}` +
+        (StoreAdapter.canDeposit() ? `<p class="fine">${icon('cloud', 12)}<span>It goes into your Treasury, shared by every game on your account.</span></p>` : '') +
+        `<div class="price-line"><span>Price</span><b class="num">${esc(req.priceLabel || '')}</b></div>` +
         (req.testMode || StoreAdapter.mode() !== 'stripe' ? `<p class="test-note">${GLYPH.sq} Test mode. Nothing is charged.</p>` : `<p class="fine">You will be taken to a secure checkout page.</p>`),
         null, { kind: 'store', yes: req.testMode || StoreAdapter.mode() !== 'stripe' ? `Buy ${MID2} test` : `Buy ${MID2} ${req.priceLabel || ''}`, am: true, tag: `Store ${MID2} ${StoreAdapter.mode() === 'stripe' ? 'Checkout' : 'Sandbox'}` });
     }
@@ -291,6 +300,8 @@ const UI = {
     $('#modal').addEventListener('click', e => { const b = e.target.closest('[data-portal]'); if (b) { e.preventDefault(); this.portalAction(b.dataset.portal, b); } });
     $('#modal').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest && e.target.closest('.portal') && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); this.portalAction('submit'); } });
     AccountAdapter.setChooser(req => this.chooseSave(req));
+    // TREASURY.md: a Treasury withdrawal or a keepsake from presence shows as a reward card or a notice, not the gift box
+    if (typeof Gifts !== 'undefined' && Gifts && Gifts.ui) Gifts.ui.arrived = g => this.giftArrived(g);
     const move = $('#title-move'); if (move) move.hidden = !this.canMoveStation();   // M3 on the title (Settings has its own row)
     // arrived through the link in a "Forgot your password?" email: the portal opens on "Set a new password" over the title
     if (AccountAdapter.resetToken()) requestAnimationFrame(() => this.openPortal('reset'));
@@ -1055,7 +1066,7 @@ const UI = {
       case 'unlock': spec = { kicker: 'Route charted', title: `Sector unlocked ${MID2} ${MetaAdapter.sectorDef(d.id).name || d.id}`, hue: 'ice', fx: fxLevel, img: Art.url('sectors', d.id, 96), imgCls: 'round', imgAlt: MetaAdapter.sectorDef(d.id).name || '' }; break;
       case 'mission': spec = { kicker: 'Mission complete', title: d.title || 'Mission complete', reward: d.reward, hue: 'amber' }; break;
       case 'expedition': spec = { kicker: 'Expedition returned', title: MetaAdapter.sectorDef(d.sector).name || d.title || 'Debrief', reward: d.loot || d.reward, hue: 'ice', img: Art.url('sectors', d.sector, 96), imgCls: 'round', imgAlt: MetaAdapter.sectorDef(d.sector).name || '' }; break;
-      case 'purchase': { const amG = (d.granted && d.granted.am) || (d.reward && d.reward.am); spec = { kicker: 'Vault credited', title: d.title || (d.granted && d.granted.am ? `+${Fmt.n(d.granted.am)} Antimatter` : d.name || 'Purchase complete'), reward: d.granted || d.reward, hue: 'am', img: amG ? Art.url('icons', 'antimatter', 96) : null, imgAlt: 'Antimatter' }; break; }
+      case 'purchase': { const amG = (d.granted && d.granted.am) || (d.reward && d.reward.am); spec = { kicker: 'Added to your station', title: d.title || (d.granted && d.granted.am ? `+${Fmt.n(d.granted.am)} Antimatter` : d.name || 'Purchase complete'), reward: d.granted || d.reward, hue: 'am', img: amG ? Art.url('icons', 'antimatter', 96) : null, imgAlt: 'Antimatter' }; break; }
       case 'daily': spec = { kicker: `Day ${(d.dayIndex != null ? d.dayIndex + 1 : d.streak) || 1} of your streak`, title: 'Daily reward', reward: d.reward, hue: 'amber', img: Art.url('icons', d.reward && d.reward.am ? 'antimatter' : d.reward && d.reward.goods ? 'cargo' : 'credits', 96) }; break;
       case 'achievement': { const tier = tierName(d.tier); spec = { kicker: 'Achievement', title: d.title || 'Achievement', reward: Object.assign({}, d.am ? { am: d.am } : {}, tier ? { tier } : {}), hue: 'amber', img: Art.url('badges', Art.achId(tier || 'bronze'), 96), imgAlt: tier ? `${Fmt.cap(tier)} badge` : 'Badge' }; break; }
       case 'plot': spec = { kicker: 'Territory expanded', title: `Ring ${d.ring} cleared`, sub: d.cells ? `${Fmt.n(d.cells)} new cells to build on` : 'New cells to build on', hue: 'ice', fx: fxLevel }; break;
@@ -1195,9 +1206,22 @@ const UI = {
     if (!d) return;
     const item = StoreAdapter.catalog().find(i => i.sku === d.sku) || {};
     if (d.cancelled) { if (d.sku) this.toast('Purchase cancelled', 'info', { chip: 'Store' }); return; }
-    if (d.error) { this.toast(d.message || `Purchase failed (${d.error})`, 'bad', { chip: 'Store' }); Sound.error(); return; }
+    if (d.error) { this.toast(d.message || `Purchase failed (${d.error})`, 'bad', { chip: 'Store' }); Sound.error(); if (d.error === 'offer-unavailable') this.shopRefresh({ force: true }); return; }
+    if (d.treasury && d.restored) { if (d.balance) { this.shop().treasury.data = d.balance; this.shop().treasury.why = null; } this.refresh(); return; }   // restore() says how many
+    if (d.treasury) { this.treasurySheet(d); this.refresh(); return; }   // signed in: it went into the Treasury
     if (d.pending && !d.granted) { this.toast(`${item.title || 'Purchase'} recorded. It is applied when your profile loads.`, 'info', { chip: 'Store' }); return; }
     if (!d.granted) return;
+    if (d.offer) {   // a special applied to this world: its own content and title
+      const g = d.granted, reward = {};
+      if (g.am) reward.am = g.am; if (g.credits) reward.credits = g.credits; if (g.items && g.items.length) reward.items = g.items.map(shopItemName);
+      if (d.restored) { this.toast(`Restored: ${d.title || item.title || d.sku}`, 'good', { chip: 'Store' }); this.refresh(); return; }
+      this.celebrate('purchase', { sku: d.sku, title: d.title || item.title, reward });
+      const from = $('#panel') || $('#rail');
+      if (g.am) Overlays.fly(from, this.anchor('am'), { n: Math.min(14, Math.max(6, Math.round(g.am / 40))), icon: 'am', hue: 'am', onHit: () => this.anchorHit('am') });
+      if (g.credits) Overlays.fly(from, this.anchor('credits'), { n: 10, icon: 'credits', onHit: () => this.anchorHit('credits') });
+      this.refresh();
+      return;
+    }
     const grant = item.grant || {};
     const am = typeof d.granted === 'object' && d.granted.am ? d.granted.am : grant.am;
     const credits = typeof d.granted === 'object' && d.granted.credits ? d.granted.credits : (grant.credits && grant.credits.fixed) || 0;
@@ -1515,13 +1539,107 @@ const UI = {
       this.refresh();
     }).catch(() => { btn && btn.classList.remove('busy'); this.toast('The store did not answer', 'bad'); });
   },
+
+  // ---------------------------------------------------------- TREASURY.md: the Specials and the Treasury (Store panel data)
+  // offers {on, list, why}: on = this build has a store Worker to ask; treasury {data, why}: signed in only
+  shop() { return this._shop || (this._shop = { offers: { on: false, list: null, why: null, busy: false }, treasury: { data: null, why: null, busy: false } }); },
+  // asks the store Worker for the Specials and the account for the Treasury; the Store panel redraws when either answers
+  shopRefresh(o = {}) {
+    const sh = this.shop(), redraw = () => { if (this.panel === 'store' && this._inst) this._inst.update(); };
+    sh.offers.on = StoreAdapter.offersOn();
+    if (sh.offers.on && !sh.offers.busy) {
+      sh.offers.busy = true;
+      StoreAdapter.offers(!!o.force).then(r => {
+        sh.offers.busy = false;
+        if (r && r.ok) { sh.offers.list = r.offers || []; sh.offers.why = null; } else { sh.offers.why = (r && r.why) || 'error'; if (r && r.why === 'no-backend') sh.offers.on = false; }
+        redraw();
+      });
+    }
+    if (!AccountAdapter.state().signedIn || !StoreAdapter.canDeposit()) { sh.treasury.data = null; sh.treasury.why = null; }
+    else if (!sh.treasury.busy) {
+      sh.treasury.busy = true;
+      StoreAdapter.treasury().then(r => {
+        sh.treasury.busy = false;
+        if (r && r.ok) { sh.treasury.data = r.treasury; sh.treasury.why = null; } else sh.treasury.why = (r && r.why) || 'error';
+        redraw();
+      });
+    }
+  },
+  purchaseOffer(id, btn) {
+    const offer = (this.shop().offers.list || []).find(x => x.id === id); if (!offer) return;
+    btn && btn.classList.add('busy');
+    StoreAdapter.purchase(offer.sku, { offer }).then(res => {
+      btn && btn.classList.remove('busy');
+      if (res && res.redirect) this.toast('Redirecting to checkout…', 'info', { chip: 'Store', ms: 8000 });
+      else if (res && !res.ok && res.error && !res.mode) { this.toast(res.message || 'That special is not available', 'warn', { chip: 'Store' }); this.shopRefresh({ force: true }); }   // refused before any checkout
+      this.refresh();
+    }).catch(() => { btn && btn.classList.remove('busy'); this.toast('The store did not answer', 'bad'); });
+  },
+  // After a purchase went into the Treasury (Sim 'purchase' {treasury, deposited, balance}): bring it into this city now?
+  // Bring it here is the default; keepsakes need no answer, they reach every game on their own.
+  treasurySheet(d, tries = 0) {
+    const c = d.deposited || { gold: 0, hours: 0, items: [] }, s = S(), where = (s && s.name) || 'your station', sh = this.shop();
+    if (d.balance) { sh.treasury.data = d.balance; sh.treasury.why = null; }
+    // back from checkout the title is still up, and the away report may be open: the sheet waits its turn (it never replaces one)
+    if ((!this.started || Overlays.anyOpen() || (typeof Tutorial !== 'undefined' && Tutorial && Tutorial.active)) && tries < 200) { setTimeout(() => this.treasurySheet(d, tries + 1), 600); return; }
+    const item = StoreAdapter.catalog().find(i => i.sku === d.sku) || {}, bring = c.gold > 0 || c.hours > 0, what = shopContentLine(c);
+    const html = `<div class="sheet-kicker">Treasury ${MID2} ${esc(d.title || item.title || 'Purchase')}</div>` +
+      `<h2 class="sheet-title">${bring ? `Bring it into ${esc(where)} now?` : 'In your Treasury'}</h2>` +
+      `<p class="sheet-lead">Your purchase is in your Treasury, shared by every game on your account.</p>` +
+      (what ? `<p class="tre-what">${esc(Fmt.cap(what))}</p>` : '') +
+      (c.items && c.items.length ? `<p class="fine">${icon('award', 12)}<span>Keepsakes reach every game on their own, this one included.</span></p>` : '');
+    const actions = bring
+      ? [{ id: 'bring', label: 'Bring it here', primary: true, icon: 'collect', fn: () => { this.treasuryBring(c.gold, c.hours); } }, { id: 'keep', label: 'Keep it in the Treasury', ghost: true }]
+      : [{ id: 'ok', label: 'Close', primary: true }];
+    Overlays.sheet({ id: 'treasury', hue: 'am', html, actions });
+    if (c.items && c.items.length && typeof Gifts !== 'undefined' && Gifts && typeof Gifts.checkNow === 'function') Gifts.checkNow({ again: true }).catch(() => {});   // the keepsake for this world
+    if (this.panel === 'store' && this._inst) this._inst.update();
+  },
+  // Bring here: whole Antimatter and hours (one decimal) from the Treasury; the gift arrives through presence (giftArrived)
+  treasuryBring(gold, hours, btn) {
+    if (this._bringing) return;
+    this._bringing = true; btn && btn.classList.add('busy');
+    StoreAdapter.withdraw(gold, hours).then(r => {
+      this._bringing = false; btn && btn.classList.remove('busy');
+      const sh = this.shop();
+      if (r && r.ok) { if (r.treasury) { sh.treasury.data = r.treasury; sh.treasury.why = null; } }
+      else if (r && r.why === 'nothing') this.toast('Choose how much to bring here first', 'warn', { chip: 'Treasury' });
+      else { this.toast(r && r.why === 'insufficient' ? 'The Treasury holds less than that now' : 'The Treasury did not answer. Nothing left it; try again in a moment.', 'warn', { chip: 'Treasury' }); this.shopRefresh(); }
+      if (this.panel === 'store' && this._inst) this._inst.update();
+    });
+  },
+  // Gifts.ui.arrived: {kind: 'treasury'|'keepsake', asked, credits, am, hours, items, names}. The player's own Bring here is a
+  // reward card; anything that came on its own (after a reload, a keepsake bought in another game) is a notice.
+  giftArrived(g) {
+    const s = S(), where = (s && s.name) || 'your station';
+    if (g.kind === 'treasury') {
+      const reward = {}; if (g.credits) reward.credits = g.credits; if (g.am) reward.am = g.am; if (g.names && g.names.length) reward.items = g.names;
+      if (g.asked) {
+        this.celebrate('purchase', { kicker: 'From your Treasury', title: `Brought into ${where}`, reward });
+        const from = $('#panel') || $('#rail');
+        if (g.am) Overlays.fly(from, this.anchor('am'), { n: Math.min(14, Math.max(6, Math.round(g.am / 40))), icon: 'am', hue: 'am', onHit: () => this.anchorHit('am') });
+        if (g.credits) Overlays.fly(from, this.anchor('credits'), { n: 10, icon: 'credits', onHit: () => this.anchorHit('credits') });
+      } else {
+        const parts = [g.credits ? `+${Fmt.n(g.credits)} credits` : '', g.am ? `+${Fmt.n(g.am)} Antimatter` : ''].filter(Boolean).join(', ');
+        this.toast(`From your Treasury: ${parts || 'delivered'}`, 'good', { chip: 'Treasury', icon: 'collect' });
+      }
+    } else {
+      const names = (g.names || []).join(', '), dress = (g.items || []).some(i => i === 'founder' || i === 'liveries');
+      this.toast(`${names}: yours in ${where} too`, 'good', { chip: 'Treasury', icon: 'award', ms: 7000, ...(dress ? { action: { label: 'Choose', fn: () => this.openLiveries() } } : {}) });
+    }
+    this.refresh();
+    if (this.panel === 'store') this.shopRefresh();
+    return true;
+  },
   // Store.restore(email?) -> { ok, mode, applied: [...], found, message, error }
   restore(email) {
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { this.toast('That does not look like an email address', 'warn'); return; }
     StoreAdapter.restore(email || undefined).then(res => {
       if (!res) return;
-      const n = Array.isArray(res.applied) ? res.applied.length : 0;
+      const n = Array.isArray(res.applied) ? res.applied.length : 0, t = Array.isArray(res.deposited) ? res.deposited.filter(x => !x.duplicate).length : 0;
       if (!res.ok) this.toast(res.message || 'Restore failed', 'bad', { chip: 'Store' });
+      else if (t) { this.toast(`Restored ${Fmt.plural(t, 'purchase')} to your Treasury`, 'good', { chip: 'Store' }); if (this.panel === 'store') this.shopRefresh(); }
+      else if (res.waiting) this.toast('The Treasury did not answer. Your purchases are safe; restore again in a moment.', 'warn', { chip: 'Store' });
       else if (n) this.toast(`Restored ${Fmt.plural(n, 'purchase')}`, 'good', { chip: 'Store' });
       else this.toast(res.message || (res.found ? 'Everything is already applied' : 'Nothing to restore'), 'info', { chip: 'Store' });
       this.refresh();

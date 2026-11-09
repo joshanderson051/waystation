@@ -510,6 +510,16 @@ const Account = (() => {
     return { ok: r.status !== 'offline' && r.status !== 'conflict' && r.status !== 'none', status: r.status, why: r.why, choice: r.choice || null };
   }
 
+  // ---------------------------------------------------------- the Treasury (TREASURY.md section 5): one per account, every game's
+  // Signed in only; store.js decides what goes in and out. Never throws: {ok:false, code} on any failure, and a 401 signs out
+  // as everywhere else.
+  async function treasuryCall(path, body) {
+    if (!state.available) return unavailable();
+    if (!state.signedIn || !session) return fail('Not signed in', { code: 'signed-out' });
+    try { const data = await call(path, body === undefined ? {} : { method: 'POST', body }); return { ...data, ok: data.ok !== false }; }
+    catch (err) { if (err.status === 401) setSignedOut('expired'); return netFail(err); }
+  }
+
   const api = {
     ui: { choose: null },                                     // H sets Account.ui.choose({local, cloud}) -> Promise<'local'|'cloud'>
     configure,
@@ -519,6 +529,9 @@ const Account = (() => {
     get resetToken() { return resetToken; },                 // the token from ?reset=<token>, until it is used or cleared
     clearResetToken() { resetToken = null; return api; },
     syncNow,
+    treasury: () => treasuryCall('/treasury'),                                   // -> {ok, gold, hours, items, log}
+    deposit: body => treasuryCall('/treasury/deposit', body),                    // {game, playerId, sessionId | sandbox} -> {ok, deposited, treasury, duplicate?}
+    withdraw: body => treasuryCall('/treasury/withdraw', body),                  // {game, playerId, gold, hours} -> {ok, giftId, treasury}
     pull: () => runPull(),
     // "Keep this browser's": overwrite the newest cloud version we know of (state.cloud is never behind the marker)
     push: () => runPush({ force: true, baseVersion: state.cloud ? state.cloud.version : marker() ? marker().version : 0 }),
