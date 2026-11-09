@@ -559,7 +559,7 @@ body[data-warp] #app { transition: opacity 300ms var(--ease-in-out); opacity: .6
 .sb-hub .hub-mark { width: 18px; height: 18px; color: var(--amber); flex: none; }
 .sb-hub:hover { color: var(--ink); border-color: var(--edge-2); box-shadow: 0 0 14px rgba(233,162,59,.2); }
 .sb-hub:active { transform: scale(.96); }
-.title-hub { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; margin: -6px 0 -2px; color: var(--ink-2); text-decoration: none; font: 600 12px/1 var(--font-cond); letter-spacing: .14em; text-transform: uppercase; transition: color var(--dur-micro) var(--ease-out); }
+.title-hub { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 8px; min-height: 32px; margin: -6px 0 -2px; color: var(--ink-2); text-decoration: none; font: 600 12px/1 var(--font-cond); letter-spacing: .14em; text-transform: uppercase; transition: color var(--dur-micro) var(--ease-out); }
 .title-hub .hub-mark { color: var(--amber); flex: none; }
 .title-hub .title-hub-at { color: var(--ink-3); font-weight: 500; }
 .title-hub .title-hub-at::before { content: "\00B7"; margin-right: 8px; color: var(--ink-3); }
@@ -1428,7 +1428,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
 @media (max-width: 760px), ((pointer: coarse) and (max-width: 1023px)) {
   #title { align-items: stretch; }
   .title-band, .commission { width: 100%; }
-  .title-hub { flex: none; min-height: 44px; margin: -12px 0 -8px; }
+  .title-hub { flex: none; min-height: 44px; margin: -12px 0 -4px; }
   .title-band { align-items: center; text-align: center; }
   .title-band .wordmark.hero { font-size: clamp(30px, 9.4vw, 44px); }
   .title-loading { justify-content: center; }
