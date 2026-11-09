@@ -320,7 +320,7 @@ const DAILY_REWARDS = [
 const RANKS = [
   { level: 1, title: 'Ensign', xp: 0 },
   { level: 2, title: 'Lieutenant', xp: 300 },
-  { level: 3, title: 'Harbourmaster', xp: 900, grant: 'collectAll', grantText: 'Collect All' },
+  { level: 3, title: 'Harbourmaster', xp: 900, grant: 'rateBonusSmall', grantText: '+2% bank rate' },
   { level: 4, title: 'Commodore', xp: 2000, grant: 'missionSlot', grantText: 'An extra mission slot' },
   { level: 5, title: 'Admiral of the Reach', xp: 4500, grant: 'rateBonus', grantText: '+5% bank rate' },
   { level: 6, title: 'Fleet Admiral', xp: 7500 },

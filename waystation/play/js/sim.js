@@ -197,20 +197,28 @@ const Sim = {
     if (!def || !this.inBounds(r, c) || s.grid[r][c]) return { ok: false, why: 'Occupied' };
     if (!this.inPlot(r, c, s)) return { ok: false, why: 'plot' };                 // A1.2: unclaimed space
     if (!this.tierUnlocked(def.tier)) return { ok: false, why: `Needs station level ${def.tier}` };
-    if (s.credits < def.cost) return { ok: false, why: 'Not enough credits' };
+    if (s.credits < this.costOf(id, s)) return { ok: false, why: 'Not enough credits' };
     const adj = this.neighbors(r, c).some(([nr, nc]) => this.occupied(nr, nc));
     if (!adj) return { ok: false, why: 'Must touch the station' };
     return { ok: true };
   },
+
+  // Each region further from home asks more for the same building (owner, 2026-11-09). The wallet carries from region
+  // to region, so with one price list a later region was the easiest; now prices rise 15% a region (x2.66 by the
+  // eighth) while banks there pay 8% more a region (Meta._rateBonus), so each move asks more of the player but still pays.
+  regionIndex(s = this.state) { const d = s && typeof SECTORS !== 'undefined' && SECTORS[s.sector]; return d ? (d.index || 0) : 0; },
+  priceMul(s = this.state) { return Math.pow(1.15, this.regionIndex(s)); },
+  costOf(id, s = this.state) { const d = MODULES[id]; if (!d) return 0; const v = (d.cost || 0) * this.priceMul(s); return v >= 1000 ? Math.round(v / 50) * 50 : v >= 100 ? Math.round(v / 5) * 5 : Math.round(v); },
 
   // 6: place deducts credits, creates the cell meta through Meta.onPlace (which emits build-start), emits built
   place(id, r, c) {
     const chk = this.canPlace(id, r, c);
     if (!chk.ok) { this.toast(chk.why, 'bad'); return false; }
     const def = MODULES[id];
-    this.state.credits -= def.cost;
+    const price = this.costOf(id);
+    this.state.credits -= price;
     this.state.grid[r][c] = { id, built: this.state.day };
-    this.floater(c + 0.5, r + 0.5, `-${fmt(def.cost)}`, '#ff9d5a');
+    this.floater(c + 0.5, r + 0.5, `-${fmt(price)}`, '#ff9d5a');
     const M = this.meta();
     const started = M ? M.onPlace(r, c, id) : null;
     if (started && !started.instant) this.log(`Construction of ${def.name} begins.`, '');
@@ -244,7 +252,7 @@ const Sim = {
     const chk = this.canDemolish(r, c);
     if (!chk.ok) { this.toast(chk.why, 'bad'); return false; }
     const id = this.state.grid[r][c].id, def = MODULES[id];
-    const refund = Math.round(def.cost * 0.5);
+    const refund = Math.round(this.costOf(id) * 0.5);
     const M = this.meta();
     if (M) M.onDemolish(r, c, id);
     this.state.credits += refund;
@@ -588,7 +596,7 @@ const Sim = {
     }
     // upkeep
     let upkeep = 0;
-    for (const { m } of this.cells()) upkeep += MODULES[m.id].cost * 0.004;
+    for (const { m } of this.cells()) upkeep += this.costOf(m.id) * 0.004;
     upkeep = Math.round((upkeep + s.residents * 1) * LIVE); delta -= upkeep; this.earn(-upkeep, 'upkeep');
     s.credits += delta;
 

@@ -309,7 +309,7 @@ const EngineTraffic = (() => {
         rec.running.alpha = 0.5 + 0.5 * Math.sin(t * TAU * 0.7 + phase * 6);
         rec.running.visible = !(useArt && rec.turn);
       }
-      updateHold(rec, queued, useArt);
+      updateHold(rec, queued && S.hover === ship, useArt);   // the wait shows on the ship you point at, not over every hull
       rec.hoverRing.clear();
       if (S.hover === ship) rec.hoverRing.circle(0, 0, hitRadius(rec) + 2).stroke({ width: 1.5, color: U.int(U.pal('ivory')), alpha: 0.9 });
       updateVector(rec, ship);
@@ -341,8 +341,9 @@ const EngineTraffic = (() => {
     const st = EngineWorld.station || { x0: -120, y0: -120, x1: 120, y1: 120 };
     const s = simState(), side = hash(ship.id) % 2;
     const q = s ? s.ships.filter(o => o !== ship && o.state === 'queue' && hash(o.id) % 2 === side && o.id < ship.id).length : 0;
-    const x = side ? st.x1 + 1.1 * CELL + q * 0.7 * CELL : st.x0 - 1.1 * CELL - q * 0.7 * CELL;
-    return { x, y: st.y0 + (st.y1 - st.y0) * 0.2 + q * 0.45 * CELL + ALT, axis: side ? 'B' : 'A' };
+    // spaced by a hull's length, so a queue lies in echelon instead of in a heap
+    const x = side ? st.x1 + 1.2 * CELL + q * 1.7 * CELL : st.x0 - 1.2 * CELL - q * 1.7 * CELL;
+    return { x, y: st.y0 + (st.y1 - st.y0) * 0.2 + q * 1.05 * CELL + ALT, axis: side ? 'B' : 'A' };
   }
   // The visual pose of a ship this frame: ground point (x, y), altitude, axis, heading angle and alpha.
   function flightPose(ship, rec) {

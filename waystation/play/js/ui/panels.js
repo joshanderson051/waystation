@@ -371,7 +371,7 @@ const Panels = {
         const placingTier = placing && MODULES[placing] && MODULES[placing].tier === tier;
         h += shelf(`Tier ${tier} ${MID} ${TIER_NAMES[tier]}`, esc(tag), { first: tier === 1, cls: 'tier-head' + (unlocked ? '' : ' locked') + (placingTier ? ' placing' : ''), tagCls: unlocked && freeInPlot ? '' : 'warn' });
         for (const id of ids) {
-          const d = MODULES[id], poor = s.credits < d.cost, sel = placing === id, count = T.counts[id] || 0;
+          const d = MODULES[id], price = Sim.costOf(id, s), poor = s.credits < price, sel = placing === id, count = T.counts[id] || 0;
           const cls = ['card', 'bcard', sel ? 'selected' : '', !unlocked ? 'locked' : poor ? 'poor' : ''].filter(Boolean).join(' ');
           const desc = sel ? (ctx.ui.phone ? 'Tap a bracketed cell beside the station.' : 'Click a bracketed cell. Right-click or Esc to stop.') : d.desc;
           const r = modRate(id);
@@ -382,7 +382,7 @@ const Panels = {
           h += `<div class="${cls}" data-mod="${id}" data-fam="${famOf(id)}" title="${esc(d.desc)}" role="button" tabindex="0"><i class="spine"></i>${plate(id)}` +
             `<div class="card-main"><div class="name">${esc(d.name)}${sel ? ' <span class="chip ivory">Placing</span>' : count ? ` <span class="tag">${GLYPH.times}${count}</span>` : ''}</div>` +
             `<div class="card-meta">${meta}</div><div class="desc">${esc(desc)}</div></div>` +
-            `<div class="card-side"><div class="cost">${Fmt.n(d.cost)}</div>${pips(d.power)}${unlocked && poor ? `<div class="need">Need ${Fmt.n(d.cost - s.credits)}</div>` : ''}</div></div>`;
+            `<div class="card-side"><div class="cost">${Fmt.n(price)}</div>${pips(d.power)}${unlocked && poor ? `<div class="need">Need ${Fmt.n(price - s.credits)}</div>` : ''}</div></div>`;
         }
       }
       paint(F.body, h, sig, 'b');
@@ -455,9 +455,9 @@ const Panels = {
       // A6.3: the 512 render as a 160px hero with the name over its lower edge; the static card is the fallback
       const heroImg = Art.img('modules', m.id, 150, { alt: d.name, eager: true });
       let h = heroImg
-        ? `<div class="mod-hero" data-fam="${famOf(m.id)}">${heroImg}<div class="mod-hero-cap"><div class="name">${esc(d.name)} ${lvlTicks(lvl)}</div><div class="card-side"><div class="cost">${Fmt.n(d.cost)}</div>${pips(d.power)}</div></div></div><p class="mod-desc">${esc(d.desc)}</p>`
+        ? `<div class="mod-hero" data-fam="${famOf(m.id)}">${heroImg}<div class="mod-hero-cap"><div class="name">${esc(d.name)} ${lvlTicks(lvl)}</div><div class="card-side"><div class="cost">${Fmt.n(Sim.costOf(m.id, s))}</div>${pips(d.power)}</div></div></div><p class="mod-desc">${esc(d.desc)}</p>`
         : `<div class="card bcard static" data-mod="${m.id}" data-fam="${famOf(m.id)}"><i class="spine"></i>${plate(m.id, 24)}<div class="card-main"><div class="name">${esc(d.name)} ${lvlTicks(lvl)}</div><div class="desc wrap">${esc(d.desc)}</div></div>` +
-          `<div class="card-side"><div class="cost">${Fmt.n(d.cost)}</div>${pips(d.power)}</div></div>`;
+          `<div class="card-side"><div class="cost">${Fmt.n(Sim.costOf(m.id, s))}</div>${pips(d.power)}</div></div>`;
       // tell state line
       if (d.docks && m.id !== 'hub') {
         h += Sim.dockUsable(sel.r, sel.c) ? `<p class="status good">${GLYPH.up} Berth clear</p>` : `<p class="status bad">${GLYPH.down} Berth blocked: no empty side for ships to pull up to</p>`;
@@ -494,7 +494,7 @@ const Panels = {
       if (m.id === 'hub') h += `<p class="status">The Core Hub cannot be removed.</p>`;
       else {
         const dem = Sim.canDemolish(sel.r, sel.c);
-        h += `<div class="actions end"><button type="button" class="btn danger" data-act="scrap"${dem.ok ? '' : ` disabled title="${esc(dem.why)}"`}>${icon('scrap', 14)}<span>Scrap for ${Fmt.n(d.cost * 0.5)}</span></button>${dem.ok ? '' : `<span class="why">${esc(dem.why)}</span>`}</div>`;
+        h += `<div class="actions end"><button type="button" class="btn danger" data-act="scrap"${dem.ok ? '' : ` disabled title="${esc(dem.why)}"`}>${icon('scrap', 14)}<span>Scrap for ${Fmt.n(Math.round(Sim.costOf(m.id, s) * 0.5))}</span></button>${dem.ok ? '' : `<span class="why">${esc(dem.why)}</span>`}</div>`;
       }
       paint(F.body, h, sig, 'sel:' + sel.r + ',' + sel.c, ctx.meta);
     };

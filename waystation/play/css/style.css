@@ -534,6 +534,12 @@ body[data-warp] #app { transition: opacity 300ms var(--ease-in-out); opacity: .6
 #power-pips { display: inline-flex; align-items: center; gap: 2px; }
 #power-pips .pip { width: 6px; height: 10px; background: rgba(4,5,10,.5); box-shadow: inset 0 0 0 1px var(--hairline-2); flex: none; }
 #power-pips .pip.on { background: var(--ice); box-shadow: 0 0 5px rgba(143,211,232,.6); }
+#power-pips .gauge { display: block; width: 58px; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(4,5,10,.55); box-shadow: inset 0 0 0 1px var(--hairline-2); }
+#power-pips .gauge b { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, color-mix(in srgb, var(--ice) 55%, transparent), var(--ice)); box-shadow: 0 0 6px color-mix(in srgb, var(--ice) 60%, transparent); transition: width 400ms var(--ease-out); }
+#power-pips .gauge.tight b { background: linear-gradient(90deg, color-mix(in srgb, var(--warn) 55%, transparent), var(--warn)); }
+#power-pips .gauge.over { box-shadow: inset 0 0 0 1px var(--bad); }
+#power-pips .gauge.over b { background: var(--bad); animation: gauge-over 1.4s ease-in-out infinite; }
+@keyframes gauge-over { 50% { opacity: .55; } }
 #power-pips .pip.over { background: repeating-linear-gradient(45deg, var(--bad) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--bad); }
 #rep-pips { display: inline-flex; align-items: center; gap: 3px; }
 #rep-pips .pip { position: relative; display: block; width: 7px; height: 14px; border-radius: 2px; overflow: hidden; flex: none; background: rgba(4,5,10,.5); box-shadow: inset 0 0 0 1px var(--hairline-2); }
@@ -1181,6 +1187,33 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .cele-sub { font: 400 var(--fs-body-lg)/1.4 var(--font-body); color: var(--ink-2); }
 .cele-rewards { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .cele-rewards:empty { display: none; }
+/* A celebration is a card under the status bar, not a band across the middle of the view: the city stays in sight while
+   it plays, and rewards claimed together come as one card (Overlays._nextCele merges the queue). */
+.cele-wrap { left: 0; right: 0; top: calc(var(--sb-h, 56px) + 18px + var(--sat, 0px)); height: auto; width: min(560px, calc(100% - 32px)); margin: 0 auto; }
+.cele-band { position: relative; inset: auto; padding: 14px 22px 16px; border: 0; }
+.cele-inner { gap: 6px; padding: 0; }
+.cele-img { width: 56px; height: 56px; }
+.cele-kicker { font-size: 12px; }
+.cele-title { font-size: clamp(20px, 2.4vw, 28px); }
+.cele-sub { font-size: var(--fs-body); }
+/* Collect all, on the map (hud.js refreshCollect): bottom centre above the context bar, only while a bank is ready */
+.collect-fab {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 3; pointer-events: auto;
+  display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 14px 0 12px; border: 1px solid color-mix(in srgb, var(--amber) 55%, transparent);
+  border-radius: 999px; color: var(--ink); cursor: pointer; box-shadow: 0 6px 22px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.04);
+  animation: fab-in 260ms var(--ease-out) backwards;
+}
+.collect-fab[hidden] { display: none; }
+.collect-fab .ic { color: var(--amber-hi); filter: drop-shadow(0 0 6px var(--amber)); }
+.collect-fab .cf-lbl { font: 600 13px/1 var(--font-cond); letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; }
+.collect-fab .cf-amt { font: 600 15px/1 var(--font-mono); color: var(--amber-hi); }
+.collect-fab .cf-key { font: 500 10px/1 var(--font-mono); padding: 3px 5px; border-radius: 3px; border: 1px solid rgba(255,255,255,.18); color: var(--ink-2); }
+.collect-fab:hover { border-color: var(--amber-hi); background-color: color-mix(in srgb, var(--amber) 14%, var(--glass-2, rgba(14,17,22,.86))); }
+.collect-fab:active { transform: translateX(-50%) scale(.97); }
+@keyframes fab-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+@media (hover: none) { .collect-fab .cf-key { display: none; } }
+.toast.bump { animation: toast-bump 260ms var(--ease-out); }
+@keyframes toast-bump { 40% { transform: scale(1.03); } }
 
 /* --------------------------------------------------------------------------
    26. Tooltip (6.7 → glass, 14px) and flights
@@ -1761,3 +1794,12 @@ body[data-motion="reduced"] .toast { animation-duration: 120ms !important; }
 body[data-motion="reduced"] .toast-drain { animation-duration: 4000ms !important; }
 body[data-motion="reduced"] #celebrate.show .cele-wrap { animation-duration: 120ms !important; }
 body[data-motion="reduced"] #condition::before, body[data-motion="reduced"] #condition::after { animation: none !important; opacity: .7; }
+
+/* 2026-11-09 phones: the celebration stays a card under the status bar (the older phone blocks made it a tall band), the
+   Collect all button floats above the dock, and one notice shows at a time */
+@media (max-width: 760px), ((pointer: coarse) and (max-width: 1023px)) {
+  .cele-wrap { top: calc(var(--sb-h) + 10px); height: auto; width: calc(100% - 20px); }
+  .cele-band { padding: 12px 14px 14px; }
+  .collect-fab { bottom: calc(var(--dock-h) + 12px); min-height: 48px; }
+  #toasts .toast:not(:last-child) { display: none; }
+}

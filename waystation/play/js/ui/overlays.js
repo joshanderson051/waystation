@@ -262,12 +262,28 @@ const Overlays = {
 
   // ---------------------------------------------------------- 3. toasts (6.10 → v2 glass)
   // kind: good warn bad gold info ('' = amber). o = { action: { label, fn }, ms, icon, chip }
+  // At most two show at once. A notice of the same kind as one already showing joins it (a count and the latest words)
+  // instead of stacking: a burst of unlocks or arrivals reads as one line, not a column down the screen.
   toast(msg, kind = '', o = {}) {
     const box = $('#toasts'); if (!box) return null;
-    while (box.children.length >= 4) this._removeToast(box.firstElementChild, true);
+    const chip = o.chip || TOAST_CHIP.find(([, re]) => re.test(msg))?.[0] || (kind === 'bad' ? 'Alert' : kind === 'gold' ? 'Event' : 'Notice');
+    const same = [...box.children].find(t => t._chip === chip && !t.classList.contains('out'));
+    if (same) {
+      same._n = (same._n || 1) + 1;
+      const m = same.querySelector('.toast-msg'), c = same.querySelector('.toast-chip');
+      if (m) m.textContent = msg;
+      if (c) c.textContent = `${chip} ${typeof GLYPH !== 'undefined' ? GLYPH.times : '×'}${same._n}`;
+      same.title = msg;
+      if (o.action) same._action = o.action.fn;
+      clearTimeout(same._timer); same._born = performance.now(); same._ms = Math.max(same._ms, o.ms || 3500);
+      if (!same.classList.contains('hold')) same._timer = setTimeout(() => this._removeToast(same), same._ms);
+      same.classList.remove('bump'); void same.offsetWidth; same.classList.add('bump');
+      return same;
+    }
+    while (box.children.length >= 2) this._removeToast(box.firstElementChild, true);
     const el = document.createElement('div');
     el.className = 'toast glass' + (kind ? ' ' + kind : '');
-    const chip = o.chip || TOAST_CHIP.find(([, re]) => re.test(msg))?.[0] || (kind === 'bad' ? 'Alert' : kind === 'gold' ? 'Event' : 'Notice');
+    el._chip = chip;
     // A6.3: o.img (a render URL) replaces the glyph with a 40px picture (discoveries, trade notices)
     el.innerHTML = `<i class="spine"></i><span class="toast-ic${o.img ? ' has-img' : ''}">${o.img ? `<img class="toast-img" src="${esc(o.img)}" width="40" height="40" alt="" loading="lazy" decoding="async" draggable="false">` : icon(o.icon || TOAST_ICON[kind] || 'info', 16)}</span>` +
       `<div class="toast-main"><span class="toast-chip">${esc(chip)}</span><span class="toast-msg">${esc(msg)}</span></div>` +
@@ -275,7 +291,7 @@ const Overlays = {
       `<button type="button" class="toast-close" aria-label="Dismiss">${icon('close', 12)}</button><i class="toast-drain"></i>`;
     el.title = msg;
     if (o.action) el._action = o.action.fn;
-    el._ms = o.ms || 4000; el._born = performance.now();
+    el._ms = o.ms || 3500; el._born = performance.now();
     box.appendChild(el);
     el._timer = setTimeout(() => this._removeToast(el), el._ms);
     return el;
@@ -336,12 +352,18 @@ const Overlays = {
     if (typeof Tutorial !== 'undefined' && Tutorial && Tutorial.active) { this._celeQueue.unshift(item); this._celeBusy = false; return; }
     this._celeBusy = true;
     const host = $('#celebrate'); if (!host) { this._celeBusy = false; return; }
-    const { kind, data } = item;
+    // rewards claimed one after another (missions, expeditions, the daily, achievements) come as one card with every
+    // reward on it, not a run of cards; a rank, a new level or an unlock keeps a card of its own
+    const ROUTINE = { mission: 1, expedition: 1, daily: 1, achievement: 1, claim: 1 }, more = [];
+    if (ROUTINE[item.kind]) while (this._celeQueue.length && ROUTINE[this._celeQueue[0].kind]) more.push(this._celeQueue.shift());
+    const kind = item.kind, data = more.length ? Object.assign({}, item.data, { kicker: `${more.length + 1} rewards claimed`, sub: `${item.data.title || ''} and ${more.length} more`, title: 'Rewards claimed', img: null }) : item.data;
+    const chips = [item].concat(more).map(i => this.rewardChips(i.data.reward)).join('');
+    for (const m of more) if (typeof m.data.fx === 'function') { try { m.data.fx(); } catch (e) { /* decoration */ } }
     const reduced = document.body.getAttribute('data-motion') === 'reduced';
     host.innerHTML = `<div class="cele-wrap"><div class="cele-band glass" data-kind="${esc(kind)}" data-hue="${esc(data.hue || 'amber')}"><i class="spine"></i>` +
       `<div class="cele-inner">${data.img ? `<img class="cele-img${data.imgCls ? ' ' + data.imgCls : ''}" src="${esc(data.img)}" width="96" height="96" alt="${esc(data.imgAlt || '')}" decoding="async" draggable="false">` : ''}<div class="cele-kicker">${esc(data.kicker || '')}</div><div class="cele-title">${esc(data.title || '')}</div>` +
       (data.sub ? `<div class="cele-sub">${esc(data.sub)}</div>` : '') +
-      `<div class="cele-rewards">${this.rewardChips(data.reward)}</div></div></div></div>`;
+      `<div class="cele-rewards">${chips}</div></div></div></div>`;
     void host.offsetWidth;
     host.classList.add('show');
     // once the sweep has landed, drop the finished animation so the band is committed as a static layer

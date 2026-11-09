@@ -173,12 +173,13 @@ function testHoppers() {
   check('collect moves the bank to credits (floor)', got === 1200 && S.state.credits === before + 1200 && M.hopper(dock.r, dock.c).bank === 0, got);
   check('collect event and 12 XP (1 per 100 cr)', W.count('collect') === 1 && M.rank.xp === xp0 + 12);
   check('wallet mirrors Sim.state.credits', M.profile.credits === S.state.credits);
-  check('collectAll is gated to rank 3', M.collectAll() === 0 && M.hopper(hub.r, hub.c).bank === 600);
+  const early = M.collectAll();
+  check('collectAll is open before rank 3', early === 600 && M.hopper(hub.r, hub.c).bank === 0, early);
   M._addXP(900, 'test');
   check('rank 3 reached (Harbourmaster)', M.rank.level === 3 && M.rank.title === 'Harbourmaster');
   const all = M.collectAll();
-  check('collectAll gathers every bank', all === 600 && M.hopper(hub.r, hub.c).bank === 0, all);
-  check('Meta.totalRate is the active station rate per real minute', M.totalRate() === 30, M.totalRate());
+  check('collectAll with every bank empty gathers nothing', all === 0, all);
+  check('Meta.totalRate is the active station rate per real minute (rank 3: +2%)', Math.abs(M.totalRate() - 30.6) < 1e-6, M.totalRate());
   M.profile.rank.xp = 4500; M.profile.rank.level = 5;
   check('Admiral of the Reach adds 5% to rates', near(M.hopper(dock.r, dock.c).rate, 21, 1e-9) && M.totalRate() === 31.5, M.hopper(dock.r, dock.c).rate);
   // demolish loses the bank
@@ -441,7 +442,8 @@ function testSectors() {
   check('home grid intact', JSON.stringify(S.state.grid) === homeGrid && W.modules() === 4);
   check('sable kept its dock', M.profile.sectors.sable.grid[sd.r][sd.c].id === 'dock');
   check('summary of sable shows 1 module', M.sectors().find(x => x.id === 'sable').summary.modules === 1);
-  check('wallet after round trip', S.state.credits === wallet - 800 && M.profile.credits === S.state.credits);
+  check('a dock costs 15% more in the second region', S.costOf('dock', M.profile.sectors.sable) === 920 && S.costOf('dock', homeState) === 800, S.costOf('dock', M.profile.sectors.sable));
+  check('wallet after round trip (the dock at the region price)', S.state.credits === wallet - 920 && M.profile.credits === S.state.credits);
   check('inactive sector banks keep filling', (() => { W.advance(6000); W.advance(30 * MIN); return M.bankedTotal(M.profile.sectors.sable) >= 300; })(), M.bankedTotal(M.profile.sectors.sable));
   // AM shortcut on a fresh profile
   const W2 = makeWorld({ seed: 11 }); W2.Meta.init(); W2.Meta.addAM(40, 'test');
@@ -1136,7 +1138,8 @@ function makeGiftsWorld(o = {}) {
   const Ov = {
     modal(opts) { modals.push(opts); modalText = node('div'); modalText.innerHTML = opts.html || ''; },
     anyOpen: () => false,
-    rewardChips: r => [r.credits ? `<span class="rchip amber"><i class="ic-credits"></i><span>${r.credits} cr</span></span>` : '', r.am ? `<span class="rchip am"><i class="ic-antimatter"></i><span>${r.am} AM</span></span>` : ''].join(''),
+    rewardChips: r => [r.credits ? `<span class="rchip amber"><i class="ic-credits"></i><span>${r.credits} cr</span></span>` : '', r.am ? `<span class="rchip am"><i class="ic-antimatter"></i><span>${r.am} AM</span></span>` : '',
+      r.livery ? `<span class="rchip rose"><span>${r.livery}</span></span>` : '', r.title ? `<span class="rchip ivory"><span>${r.title}</span></span>` : ''].join(''),
   };
   const ctx = vm.createContext({ console, localStorage: storage, fetch, document: doc, Meta: M, Overlays: Ov, setTimeout, clearTimeout, setInterval, clearInterval, AbortController });
   if (o.account) ctx.Account = o.account;
@@ -1161,7 +1164,8 @@ async function testGifts() {
   let r = await W.Gifts.checkNow();
   const p0 = W.calls[0];
   check('presence: one POST to {apiBase}/presence', r.ok && W.calls.length === 1 && p0.url === GIFTS_BASE + '/presence' && p0.method === 'POST' && /application\/json/.test(p0.headers['content-type']), W.calls.map(c => c.url));
-  check('presence body: exactly playerId, summary, platform, version', p0.body && Object.keys(p0.body).sort().join() === 'platform,playerId,summary,version', p0.body);
+  check('presence body: exactly playerId, summary, platform, version and accepts', p0.body && Object.keys(p0.body).sort().join() === 'accepts,platform,playerId,summary,version', p0.body);
+  check('presence says it applies livery tokens and titles (reward gifts)', JSON.stringify(p0.body.accepts) === JSON.stringify(['tokens', 'title']), p0.body.accepts);
   check('summary: name, day, level, rank, credits, am, sectors from the profile', JSON.stringify(Object.keys(p0.body.summary).sort()) === JSON.stringify(['am', 'credits', 'day', 'level', 'name', 'rank', 'sectors']) &&
     p0.body.playerId === 'p_test_player_1' && p0.body.summary.name === 'Kestrel Deep' && p0.body.summary.day === 12 && p0.body.summary.level === 4 && p0.body.summary.rank === 3 &&
     p0.body.summary.credits === 6000 && p0.body.summary.am === 20 && p0.body.summary.sectors === 2 && Object.values(p0.body.summary).slice(1).every(Number.isInteger), p0.body.summary);
@@ -1196,6 +1200,19 @@ async function testGifts() {
   check('same gift delivered again: not re-applied, acked again, no second modal', W.M.profile.credits === 31000 && W.M.profile.am === 95 && W.M.profile.entitlements.history.filter(h => h.grantId === g1.id).length === 1 &&
     acks(W).length === 2 && JSON.stringify(r.already) === JSON.stringify([g1.id]) && W.modals.length === 1, r);
 
+  // a reward from the Build the Ages reward center also carries a livery token and a title
+  const g9 = { ...gift('gft_RRRRRRRRRRRRRRRRRRRRRR', 0, 120, 'Build the Ages reward: Builder of Ages.'), tokens: 1, title: 'Builder of Ages' };
+  W = makeGiftsWorld({ respond: c => (c.url.endsWith('/presence') ? { status: 200, json: { ok: true, gifts: [g9] } } : { status: 200, json: { ok: true } }) });
+  r = await W.Gifts.checkNow();
+  const h9 = W.M.profile.entitlements.history.find(h => h.grantId === g9.id);
+  check('reward gift: the AM, one livery token, and the title on its history entry', W.M.profile.am === 140 && W.M.profile.entitlements.tokens && W.M.profile.entitlements.tokens.livery === 1 && h9 && h9.title === 'Builder of Ages' && h9.granted.tokens === 1, { am: W.M.profile.am, tokens: W.M.profile.entitlements.tokens, h9 });
+  check('reward gift: the modal shows the token and the title', W.nodes.some(n => n.className === 'chips' && /Livery token/.test(n.innerHTML) && /Builder of Ages/.test(n.innerHTML)));
+  await W.Gifts.checkNow();
+  check('reward gift delivered again: no second token', W.M.profile.entitlements.tokens.livery === 1 && W.M.profile.am === 140);
+  const junk = { ...gift('gft_SSSSSSSSSSSSSSSSSSSSSS', 0, 1), tokens: 1e9, title: { not: 'text' } };
+  W = makeGiftsWorld({ respond: c => (c.url.endsWith('/presence') ? { status: 200, json: { ok: true, gifts: [junk] } } : { status: 200, json: { ok: true } }) });
+  await W.Gifts.checkNow();
+  check('reward gift: tokens are capped and a title that is not text is dropped', W.M.profile.entitlements.tokens.livery === 10 && !W.M.profile.entitlements.history.find(h => h.grantId === junk.id).title);
   // a gift already in the history is acked but not applied
   const old = gift('gft_BBBBBBBBBBBBBBBBBBBBBB', 9000, 9);
   const g2 = gift('gft_CCCCCCCCCCCCCCCCCCCCCC', 0, 40, 'Second one');

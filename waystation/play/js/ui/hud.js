@@ -453,7 +453,8 @@ const UI = {
     const go = () => { if (Overlays.anyOpen() && tries++ < 60) { setTimeout(go, 500); return; } if (!Tutorial.start()) this.scheduleDaily(300); };
     setTimeout(go, 1000);
   },
-  scheduleDaily(ms) { const d = MetaAdapter.daily(); if (d && d.claimable) setTimeout(() => { if (!Overlays.anyOpen() && !(typeof Tutorial !== 'undefined' && Tutorial && Tutorial.active)) this.openDaily(); }, ms); },
+  // the daily reward waits on its button (and the Next up card); a quiet notice says it is there, nothing opens by itself
+  scheduleDaily(ms) { const d = MetaAdapter.daily(); if (d && d.claimable) setTimeout(() => { if (!(typeof Tutorial !== 'undefined' && Tutorial && Tutorial.active) && MetaAdapter.daily() && MetaAdapter.daily().claimable) this.toast('Your daily reward is ready', 'gold', { icon: 'calendar', chip: 'Daily', ms: 6000, action: { label: 'Claim', fn: () => this.openDaily() } }); }, ms); },
   onTourEnd() { Overlays.flushCelebrations(); this.scheduleDaily(600); this.refresh(); },
   replayTour() { if (typeof Tutorial === 'undefined' || !Tutorial) return; this.closePanel(); setTimeout(() => Tutorial.start({ replay: true }), 220); },
   tick() {
@@ -463,6 +464,7 @@ const UI = {
     this.refreshContext();
     this.refreshBadges();
     this.refreshMenu();
+    this.refreshCollect();
     if (this._inst) this._inst.update();
     const tag = $('#perf-tag');
     if (tag && !tag.hidden) { const p = EngineAdapter.perf(); const s2 = p ? `${Math.round(p.fps)} fps ${MID2} T${p.tier != null ? p.tier : 2}` : 'perf —'; if (tag.textContent !== s2) tag.textContent = s2; }
@@ -473,7 +475,23 @@ const UI = {
     this.refreshContext();
     this.refreshBadges();
     this.refreshNextUp();
+    this.refreshCollect();
     if (this._inst) this._inst.update();
+  },
+
+  // Collect all on the map: shows while any bank is ready, with what it holds; one press (or Q) empties every bank
+  refreshCollect() {
+    const b = $('#collect-fab'); if (!b) return;
+    if (!b._wired) { b._wired = true; b.addEventListener('click', () => this.collectAll(b)); }
+    const ready = MetaAdapter.readyCells().length, total = ready ? MetaAdapter.bankedTotal() : 0;
+    const show = ready > 0 && total > 0 && !(typeof Tutorial !== 'undefined' && Tutorial && Tutorial.active);
+    if (b.hidden === show) b.hidden = !show;
+    if (!show) return;
+    const key = ready + '|' + total;
+    if (b._key === key) return;
+    b._key = key;
+    b.innerHTML = `${icon('collect', 18)}<span class="cf-lbl">Collect all</span><span class="cf-amt num">${Fmt.n(total)}</span><kbd class="cf-key">Q</kbd>`;
+    b.title = `Collect from ${ready} building${ready === 1 ? '' : 's'} (Q)`;
   },
 
   // ---------------------------------------------------------- status bar (2.4)
@@ -550,13 +568,13 @@ const UI = {
       if (ta._h !== h) { ta._h = h; ta.innerHTML = h; }
     }
   },
+  // A gauge of demand against supply (owner, 2026-11-09: the block pips, hatched red when over, read as stray letters):
+  // the fill is the share of supply in use, amber from 85%, and the whole track red and pulsing when demand outruns it.
   powerPips(used, produced) {
-    const total = Math.max(produced, used); if (total <= 0) return '';
-    const count = Math.min(8, Math.ceil(total / 4)), unit = total / count;
-    const prodPips = Math.round(produced / unit), usedPips = Math.round(used / unit);
-    let h = '';
-    for (let i = 0; i < count; i++) h += `<i class="pip ${i < Math.min(usedPips, prodPips) ? 'on' : i < usedPips ? 'over' : 'spare'}"></i>`;
-    return h;
+    if (Math.max(produced, used) <= 0) return '';
+    const over = used > produced, k = produced > 0 ? Math.min(1, used / produced) : 1;
+    const cls = over ? ' over' : k >= 0.85 ? ' tight' : '';
+    return `<i class="gauge${cls}"><b style="width:${Math.round(k * 1000) / 10}%"></b></i>`;
   },
   // 5.10 → v2 condition strip under the status bar
   refreshCondition(s, T) {
@@ -657,7 +675,7 @@ const UI = {
     if (why === 'Occupied') return 'Occupied: that cell already holds a module.';
     const m = /^Needs station level (\d+)/.exec(why || '');
     if (m) return `Locked: ${d.name} needs station level ${m[1]}.`;
-    if (why === 'Not enough credits') return `Need ${Fmt.n(d.cost - s.credits)} more credits for ${Fmt.aOrAn(d.name)}.`;
+    if (why === 'Not enough credits') return `Need ${Fmt.n(Sim.costOf(d.id || id, s) - s.credits)} more credits for ${Fmt.aOrAn(d.name)}.`;
     if (why === 'Must touch the station') return 'Not adjacent: modules must touch the station.';
     if (why === 'plot') return 'Unclaimed space: clear this ring before building here.';
     return why || '';
@@ -758,7 +776,7 @@ const UI = {
     EngineAdapter.setPlacing(id || null);
     if (id) {
       EngineAdapter.setSelected(null); document.body.setAttribute('data-placing', id);
-      const s = S(); if (s && s.credits < MODULES[id].cost) this.toast(`Need ${Fmt.n(MODULES[id].cost - s.credits)} more credits for ${Fmt.aOrAn(MODULES[id].name)}`, 'warn');
+      const s = S(); if (s && s.credits < Sim.costOf(id)) this.toast(`Need ${Fmt.n(Sim.costOf(id) - s.credits)} more credits for ${Fmt.aOrAn(MODULES[id].name)}`, 'warn');
       this.setPeek(true);   // A4: the sheet drops to its handle so the bracketed cells can be tapped
     }
     else document.body.removeAttribute('data-placing');
@@ -908,7 +926,7 @@ const UI = {
     if (pl) {
       const chk = has(Sim, 'canPlace') ? Sim.canPlace(pl, d.r, d.c) : { ok: true };
       if (!chk.ok) { this.toast(this.reasonSentence(chk.why, pl), 'warn'); Sound.error(); return; }
-      if (Sim.place(pl, d.r, d.c)) { Sound.click(); if (s.credits < MODULES[pl].cost) this.place(null); else this.refresh(); }
+      if (Sim.place(pl, d.r, d.c)) { Sound.click(); if (s.credits < Sim.costOf(pl)) this.place(null); else this.refresh(); }
       return;
     }
     if (d.occupied || (s.grid[d.r] && s.grid[d.r][d.c])) this.select(d.r, d.c); else this.deselect();
@@ -981,6 +999,7 @@ const UI = {
     else if (e.code === 'Space') { e.preventDefault(); this.togglePause(); }
     else if (e.key === '1') this.setSpeed(1);
     else if (e.key === '?') Overlays.keys();
+    else if (k === 'q') { const b = $('#collect-fab'); if (b && !b.hidden) this.collectAll(b); }   // Q: every game's panels leave it free
     else if (KEY_PANEL[k]) this.openPanel(this.panel === KEY_PANEL[k] ? null : KEY_PANEL[k]);
   },
 
@@ -994,6 +1013,12 @@ const UI = {
       ? [{ label: ev.yes, primary: true, fn: () => { Sim.resolveEvent(true); after(); } }, { label: ev.no, ghost: true, fn: () => { Sim.resolveEvent(false); after(); } }]
       : [{ label: 'Acknowledge', primary: true, fn: () => { Sim.resolveEvent(true); after(); } }];
     if (alert) Sound.alert();
+    // news with nothing to decide takes effect at once and passes as a notice, instead of a box the player must dismiss
+    if (!ev.choice) {
+      Sim.resolveEvent(true); after();
+      this.toast(`${ev.title}: ${ev.text}`, alert ? 'bad' : 'gold', { icon: alert ? 'warn' : 'bell', chip: srcCo ? srcCo.name : 'News', ms: 7000 });
+      return;
+    }
     Overlays.modal({ kind: alert ? 'alert' : 'event', tag: `Transmission ${MID2} ${Fmt.day(s.day)} ${MID2} ${srcCo ? srcCo.name : 'Sector comms'}`, title: ev.title, html: esc(ev.text), actions, dismissible: false });
   },
   modalOpen() { return Overlays.anyOpen(); },
@@ -1391,7 +1416,7 @@ const UI = {
   demolish(r, c) {
     const s = S(); const m = s && s.grid[r] && s.grid[r][c]; if (!m) return;
     const hp = MetaAdapter.hopper(r, c), d = MODULES[m.id];
-    this.confirm(`Scrap ${d.name}?`, `Scrapping returns <b>${Fmt.n(d.cost * 0.5)}</b> credits.${hp && hp.bank >= 1 ? ` The <b>${Fmt.n(Math.floor(hp.bank))}</b> credits banked in its hopper are lost.` : ''}`, () => {
+    this.confirm(`Scrap ${d.name}?`, `Scrapping returns <b>${Fmt.n(Math.round(Sim.costOf(m.id) * 0.5))}</b> credits.${hp && hp.bank >= 1 ? ` The <b>${Fmt.n(Math.floor(hp.bank))}</b> credits banked in its hopper are lost.` : ''}`, () => {
       if (Sim.demolish(r, c)) { this.deselect(); Sound.close(); }
     }, { yes: 'Scrap it', danger: true, tag: 'Confirm' });
   },

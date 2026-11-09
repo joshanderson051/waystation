@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://portsolace.com/</loc>
+    <lastmod>2026-11-09</lastmod>
+    <image:image><image:loc>https://portsolace.com/assets/og-card.jpg</image:loc></image:image>
+    <image:image><image:loc>https://portsolace.com/assets/hero.jpg</image:loc></image:image>
+    <image:image><image:loc>https://portsolace.com/assets/bridge.webp</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://portsolace.com/manual/</loc>
+    <lastmod>2026-11-09</lastmod>
+    <image:image><image:loc>https://portsolace.com/assets/manual/fig-achievements.webp</image:loc></image:image>
+    <image:image><image:loc>https://portsolace.com/assets/manual/fig-bank.webp</image:loc></image:image>
+    <image:image><image:loc>https://portsolace.com/assets/manual/fig-bridge.webp</image:loc></image:image>
+    <image:image><image:loc>https://portsolace.com/assets/manual/fig-build.webp</image:loc></image:image>
+    <image:image><image:loc>https://portsolace.com/assets/manual/fig-expeditions.webp</image:loc></image:image>
+    <image:image><image:loc>https://portsolace.com/assets/manual/fig-map.webp</image:loc></image:image>
+    <image:image><image:loc>https://portsolace.com/assets/manual/fig-registry.webp</image:loc></image:image>
+    <image:image><image:loc>https://portsolace.com/assets/manual/fig-settings.webp</image:loc></image:image>
+    <image:image><image:loc>https://portsolace.com/assets/manual/fig-store.webp</image:loc></image:image>
+    <image:image><image:loc>https://portsolace.com/assets/manual/fig-territory.webp</image:loc></image:image>
+    <image:image><image:loc>https://portsolace.com/assets/manual/fig-title.webp</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://portsolace.com/play/</loc>
+    <lastmod>2026-11-09</lastmod>
+  </url>
+</urlset>

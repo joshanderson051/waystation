@@ -89,9 +89,15 @@ const frames = (page, ms) => page.evaluate(ms => new Promise(res => { const t0 =
   await tap('[data-tour="skip"]');
   await frames(page, 400);
   ok('tour skipped by tap', await page.evaluate(() => !Tutorial.active && Tutorial.done));
-  // the tour's end releases the deferred daily sheet (A2.2): it rises as a bottom sheet; Later closes it by tap
+  // the tour's end no longer opens the daily sheet by itself (owner, 2026-11-09: pop-ups in the way): a notice offers it,
+  // and its Claim, tapped, raises the bottom sheet; Later closes it by tap
+  const dailyToast = () => [...document.querySelectorAll('#toasts .toast')].find(t => /daily reward/i.test(t.textContent));
+  await page.waitForFunction(dailyToast, { timeout: 4000 }).catch(() => {});
+  ok('daily notice after the tour, with no sheet in the way', await page.evaluate(d => !document.querySelector('#sheet.open') && !!eval(`(${d})`)(), dailyToast.toString()));
+  await page.evaluate(d => { const t = eval(`(${d})`)(); const b = t && t.querySelector('[data-toast-act]'); if (b) b.setAttribute('data-test', 'daily-claim'); }, dailyToast.toString());
+  if (await page.$('[data-test="daily-claim"]')) await tap('[data-test="daily-claim"]');
   await page.waitForSelector('#sheet.open [data-sheet="daily"]', { visible: true, timeout: 4000 }).catch(() => {});
-  ok('daily sheet rises after the tour', await page.evaluate(() => !!document.querySelector('#sheet.open [data-sheet="daily"]')));
+  ok('the notice\'s Claim raises the daily sheet', await page.evaluate(() => !!document.querySelector('#sheet.open [data-sheet="daily"]')));
   await shot('daily-after-tour');
   if (await page.$('#sheet.open [data-sheet-act="later"]')) { await tap('#sheet.open [data-sheet-act="later"]'); await frames(page, 400); }
   ok('Later closes the daily sheet by tap', await page.evaluate(() => !document.querySelector('#sheet.open')));

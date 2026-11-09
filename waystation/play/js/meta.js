@@ -263,7 +263,8 @@ const Meta = {
   },
 
   // ---------------------------------------------------------- 4.2 hoppers (banks)
-  _rateBonus() { return this.rank.level >= 5 ? 1 + ECON.rankRateBonus : 1; },
+  // rank 3 (in place of Collect all, now open to all): a little of the rank 5 bonus; rank 5: all of it
+  _rateBonus() { const L = this.rank.level, region = 1 + 0.08 * (Sim.regionIndex ? Sim.regionIndex() : 0); return region * (L >= 5 ? 1 + ECON.rankRateBonus : L >= 3 ? 1 + ECON.rankRateBonus * 0.4 : 1); },
   _rate(def, lvl) { return (def.rate || 0) * TIMERS.RATE_MUL[clamp(lvl, 1, 3) - 1] * this._rateBonus(); },
   _cap(def, lvl) { return Math.round(this._rate(def, lvl) * TIMERS.CAP_MINUTES[clamp(lvl, 1, 3) - 1]); },
   totalRate() {                              // active station, credits per real minute
@@ -332,10 +333,9 @@ const Meta = {
     return amount;
   },
 
-  // granted at rank 3 (4.9)
+  // every bank at once: open to everyone from the start (owner, 2026-11-09: tapping coin by coin was a chore)
   collectAll() {
     const s = Sim.state; if (!s || !this.profile) return 0;
-    if (this.rank.level < 3) return 0;
     let total = 0;
     for (const k of Object.keys(s.cells)) {
       const i = k.indexOf(','), r = +k.slice(0, i), c = +k.slice(i + 1);
@@ -343,7 +343,7 @@ const Meta = {
     }
     return total;
   },
-  canCollectAll() { return this.rank.level >= 3; },
+  canCollectAll() { return true; },
 
   // ---------------------------------------------------------- 4.3 build timers, skips, upgrades
   buildMul(state = Sim.state) { const d = state && SECTORS[state.sector]; return d ? d.buildMul : 1; },
@@ -429,7 +429,7 @@ const Meta = {
     if (!def.upgrade || lvl >= 3) return out;
     const nl = lvl + 1;
     const effectKey = { dock: 'dockTime', capacity: 'capacity', power: 'power' }[def.upgrade.kind] || null;
-    out.next = { lvl: nl, cost: def.cost * def.upgrade.costMul[lvl - 1], rate: this._rate(def, nl), cap: this._cap(def, nl),
+    out.next = { lvl: nl, cost: Sim.costOf(m.id, s) * def.upgrade.costMul[lvl - 1], rate: this._rate(def, nl), cap: this._cap(def, nl),
       ms: this.upgradeMs(def, lvl, s), kind: def.upgrade.kind,
       effect: effectKey ? Sim.upgradeEffect(m.id, effectKey, nl) : null };   // dockTime multiplier, or capacity / power multiplier
     return out;
@@ -442,7 +442,7 @@ const Meta = {
     if (!def.upgrade) return { ok: false, cost: 0, totalMs: 0, why: 'The Core Hub cannot be upgraded' };
     if (cell.readyAt != null) return { ok: false, cost: 0, totalMs: 0, why: cell.up ? 'Already upgrading' : 'Still under construction' };
     if (lvl >= 3) return { ok: false, cost: 0, totalMs: 0, why: 'Already at level 3' };
-    const cost = def.cost * def.upgrade.costMul[lvl - 1];
+    const cost = Sim.costOf(id, s) * def.upgrade.costMul[lvl - 1];
     if (s.credits < cost) return { ok: false, cost, totalMs: 0, why: 'Not enough credits' };
     const now = this.now(), totalMs = this.upgradeMs(def, lvl, s);
     s.credits -= cost; this._syncWallet();
@@ -463,7 +463,7 @@ const Meta = {
       const C = P.clearing, remainingMs = Math.max(0, C.endsAt - now);
       out.clearing = { ring: C.ring, endsAt: C.endsAt, remainingMs, totalMs: C.totalMs, skipAM: this.skipCost(remainingMs) };
     } else if (P.ring < rings.length - 1) {
-      const k = P.ring + 1, cost = plotCost(k);
+      const k = P.ring + 1, cost = Math.round(plotCost(k) * Sim.priceMul(s) / 50) * 50;
       out.next = { ring: k, cost, ms: plotMs(k, this.buildMul(s)), cells: boxCells(rings[k]) - boxCells(P), affordable: !!p && s.credits >= cost, bounds: rings[k] };
     }
     return out;

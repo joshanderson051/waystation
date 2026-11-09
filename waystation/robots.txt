@@ -1,3 +1,8 @@
+# Port Solace (portsolace.com, also served at space.buildtheages.com)
+# Every public page may be crawled, indexed and cited, by search engines and AI assistants alike.
+# A plain-text summary for language models: https://portsolace.com/llms.txt
 User-agent: *
 Allow: /
 Disallow: /admin/
+
+Sitemap: https://portsolace.com/sitemap.xml

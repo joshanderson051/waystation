@@ -1,0 +1,50 @@
+# Port Solace
+
+> Port Solace is a free space station builder that plays in your browser and keeps running on the clock while the tab is closed. You command a way station on the edge of interstellar space with one docking collar and 6,000 credits, dock freighters and trade their cargo, keep the power on, and send expeditions to chart eight sectors. A few weeks later the collar has grown into a galactic gate the whole reach routes through, and then you do it again around another star.
+
+Port Solace is made by Prime Signal Marketing LLC and is one of the games listed at Build the Ages (https://buildtheages.com/). It is played at https://portsolace.com/play/ and also at https://space.buildtheages.com/play/.
+
+## Key facts
+
+- Genre: Space station builder: trade, real-time timers and a growing station
+- Setting: A way station on the edge of interstellar space, eight sectors wide
+- Price: Free to play. Antimatter is optional and charged in US dollars
+- Plays in: Chrome, Edge, Firefox and Safari, on desktop, tablet and phone
+- Account: Not needed. Sign in only for a cloud save across devices
+- Pace: Modules come online in 90 seconds to 4 hours; banks fill while you are away
+- In the game: 24 modules, 5 station tiers, 8 sectors, 50 missions and 52 finds for the Registry
+- Made by: Prime Signal Marketing LLC, as part of Build the Ages
+- Website: https://portsolace.com/
+
+## Pages
+
+- [Port Solace](https://portsolace.com/): Command a way station on the edge of interstellar space. Dock freighters, trade cargo, chart eight sectors and grow a galactic gate. Free, no download.
+- [Manual](https://portsolace.com/manual/): The Port Solace manual: 24 modules with costs and timers, banks and offline income, ships and trade, power, sectors, expeditions, missions, ranks and Antimatter.
+- [Play](https://portsolace.com/play/): Play Port Solace now: commission a way station on the edge of interstellar space and grow one docking collar into a galactic gate. Free, no account needed.
+
+## Questions and answers
+
+### What kind of game is this?
+
+A space station builder that plays in the browser and keeps running on the clock while the tab is closed. You start with one docking collar and 6,000 credits, and a few weeks later you have a port the whole reach routes through.
+
+### Is it free?
+
+Yes. The game is free to play, and nothing in it needs Antimatter. Antimatter is earned by missions, daily rewards and expeditions and is also sold in the Store, where purchases are handled by Stripe Checkout and charged in US dollars.
+
+### Do I need an account?
+
+No. Your commander profile saves to your browser. Sign in to keep a cloud save and pick up on another device; without an account nothing leaves your device.
+
+### Does it work on a phone?
+
+Yes. It is built for a desktop browser at 1280 px and wider with WebGL on; a landscape tablet works, and on a phone the bridge folds into a bottom dock with the panels as sheets.
+
+### Is Port Solace part of Build the Ages?
+
+Yes. Port Solace is listed with the other games at buildtheages.com and also plays at space.buildtheages.com, and one account signs in to all of them.
+
+## Optional
+
+- [The whole manual as plain text](https://portsolace.com/llms-full.txt): every chapter, with its tables
+- [Build the Ages](https://buildtheages.com/): the other games in the family
