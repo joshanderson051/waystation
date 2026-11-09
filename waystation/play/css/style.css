@@ -1658,6 +1658,7 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
   /* title screen */
   #title { justify-content: flex-start; gap: 14px; padding: calc(max(20px, 6vh) + var(--sat)) calc(12px + var(--sar)) calc(20px + var(--sab)) calc(12px + var(--sal)); overflow-y: auto; }
   .title-band { padding: 22px 14px 18px; gap: 8px; }
+  .title-band, .commission { flex-shrink: 0; }   /* #title scrolls; a band squeezed by a short screen would clip its centred top and bottom */
   .wordmark.hero { font-size: clamp(30px, 9.4vw, 44px); }
   .title-sub { font-size: 12px; }
   .title-account { position: static; transform: none; margin-top: 6px; justify-content: center; }
@@ -1675,6 +1676,10 @@ img.art { display: block; object-fit: contain; flex: none; user-select: none; -w
    the sheet head and the status bar tighten, so a placing player keeps ~180 px of world between the bars */
 @media ((pointer: coarse) and (max-width: 1023px) and (max-height: 500px) and (orientation: landscape)), ((max-width: 760px) and (max-height: 500px) and (orientation: landscape)) {
   :root { --sb-h: calc(46px + var(--sat)); --dock-h: calc(46px + var(--sab)); --peek-h: 54px; }
+  .title-hub { position: absolute; top: 0; left: 4px; margin: 0; padding: 0 8px; }
+  .title-hub .title-hub-at { display: none; }
+  .title-band .wordmark.hero { font-size: clamp(26px, 5.6vw, 40px); }   /* clear of the corner link at every width */
+  #title { padding-top: calc(10px + var(--sat)); gap: 10px; }   /* the start button above the fold on a 320 px tall screen */   /* the band's corner: no extra height on a short screen */
   .rail-lbl { display: none; }
   .rail-btn { gap: 0; }
   .rail-badge { top: 0; }
