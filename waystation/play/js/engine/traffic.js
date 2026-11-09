@@ -45,6 +45,28 @@ const EngineTraffic = (() => {
   const STERN = { x: 0.36, y: -0.27 }, NOSE = { x: -0.38, y: 0.27 };
   const AXIS = (() => { const dx = STERN.x - NOSE.x, dy = STERN.y - NOSE.y, l = Math.hypot(dx, dy); return { x: dx / l, y: dy / l }; })();
   const PERP = { x: -AXIS.y, y: AXIS.x };
+  // Ships in eight headings (tools/space-art.js, ARTPACK.shipturn): frames named for where the nose points on screen.
+  // The diagonal frames lie on the grid's axes (A down-right, B down-left), the others on screen up, down, left, right.
+  // A ship turns its own heading toward where it is going and shows the nearest frame, so it swings round through the
+  // views in between instead of flipping like a card.
+  const TURN_DIRS = (() => {
+    const n = v => { const l = Math.hypot(v.x, v.y) || 1; return { x: v.x / l, y: v.y / l }; };
+    const A = n(ISO.A), B = n(ISO.B);
+    const d = { e: { x: 1, y: 0 }, se: A, s: { x: 0, y: 1 }, sw: B, w: { x: -1, y: 0 }, nw: { x: -A.x, y: -A.y }, n: { x: 0, y: -1 }, ne: { x: -B.x, y: -B.y } };
+    return Object.keys(d).map(h => ({ h, ...d[h], a: Math.atan2(d[h].y, d[h].x), len: h === 'e' || h === 'w' ? 0.5 : h === 'n' || h === 's' ? 0.32 : 0.45 }));
+  })();
+  const TURN_RATE = 4.5;                 // rad/s
+  function turnOf(artId) {
+    if (!artId || typeof ARTPACK === 'undefined' || !ARTPACK.shipturn || !ARTPACK.shipturn[artId]) return null;
+    const urls = {};
+    for (const d of TURN_DIRS) { const u = ST.assets.url('shipturn', `${artId}.${d.h}`, 512); if (!u) return null; urls[d.h] = u; }
+    return { urls, scale: ARTPACK.shipturn[artId].scale || 1, frame: TURN_DIRS.find(d => d.h === 'sw') };
+  }
+  function nearestTurn(a) {
+    let best = TURN_DIRS[0], bd = 9;
+    for (const d of TURN_DIRS) { const dd = Math.abs(((a - d.a + Math.PI) % TAU + TAU) % TAU - Math.PI); if (dd < bd) { bd = dd; best = d; } }
+    return best;
+  }
   // people (A6.2)
   const PEOPLE_CAP = 24, PERSON_H = 0.4, LOADER_H = 0.52, WALK_SPEED = 0.55 * CELL, WALK_FPS = 10, IDLE_FPS = 4, PEOPLE_ZOOM = 0.9;
 
@@ -138,6 +160,7 @@ const EngineTraffic = (() => {
       w: (ART_W[ship.cls] || 1.5) * CELL, L: halfLength(ship.cls),
       shadow: new PIXI.Sprite(), hull: new PIXI.Sprite(), art: new PIXI.Sprite(), artShadow: new PIXI.Sprite(),
       artId, artUrl: artId ? ST.assets.url('ships', artId, 512) : null, artState: 'none', fadeT0: 0,
+      turn: turnOf(artId), hAng: null, lastG: null,
       mirror: 1, flip: 1, named: !!artId && isNamed(ship),
       bloom: ST.sprite(ST.glowTexture(co, 32, 'core'), { blend: 'add', alpha: 0 }),
       nav: [ST.sprite(ST.glowTexture(NAV_PORT, 6, 'hard'), { blend: 'add' }), ST.sprite(ST.glowTexture(NAV_STBD, 6, 'hard'), { blend: 'add' })],
@@ -161,7 +184,9 @@ const EngineTraffic = (() => {
     ST.layers.traffic.addChild(root);
     S.vectors.addChild(rec.vector);
     applyBand(rec);
-    if (rec.artUrl) ST.assets.load(rec.artUrl);                             // lazy per class / company: first spawn starts the fetch
+    // with eight headings the first frame to arrive (the one as drawn, sw) stands in for the render; all eight load
+    if (rec.turn) { rec.artUrl = rec.turn.urls.sw; for (const d of TURN_DIRS) ST.assets.load(rec.turn.urls[d.h]); }
+    else if (rec.artUrl) ST.assets.load(rec.artUrl);                        // lazy per class / company: first spawn starts the fetch
     return rec;
   }
   function applyBand(rec) {
@@ -222,12 +247,30 @@ const EngineTraffic = (() => {
       const layer = docked ? ST.layers.world.minis : ST.layers.traffic;
       if (rec.root.parent !== layer) layer.addChild(rec.root);
       if (docked) rec.root.zIndex = Math.round(ISO.depthAt(pose.x, pose.y) * 100);
+      // eight headings: the ship's own heading turns toward its ground track while it moves, toward its axis while it
+      // waits, and picks the nearest frame
+      if (rec.turn) {
+        const gx = pose.x, gy = pose.y, lg = rec.lastG;
+        const v = lg && dt > 0 ? Math.hypot(gx - lg.x, gy - lg.y) / dt : 0;
+        const want = v > CELL * 0.35 ? Math.atan2(gy - lg.y, gx - lg.x) : ang;
+        rec.lastG = { x: gx, y: gy };
+        if (rec.hAng == null || reduced) rec.hAng = want;
+        else { const d = ((want - rec.hAng + Math.PI) % TAU + TAU) % TAU - Math.PI; rec.hAng += Math.sign(d) * Math.min(Math.abs(d), TURN_RATE * dt); }
+        const f = nearestTurn(rec.hAng);
+        if (f !== rec.turn.frame) { const tx = ST.assets.texture(rec.turn.urls[f.h]); if (tx) { rec.turn.frame = f; if (useArt) { rec.art.texture = tx; rec.artShadow.texture = tx; } } }
+      }
       // render sprite (sized by class width, mirrored by flip) and the baked hull (rotated) under it while fading
       if (useArt) {
-        const sc = rec.w / Math.max(1, rec.art.texture.width);
-        rec.art.scale.set(sc * rec.flip, sc);
+        if (rec.turn) {
+          // a frame carries the ship smaller than the first pack's render filled its square: turn.scale restores the size
+          const sc = rec.w * rec.turn.scale / Math.max(1, rec.art.texture.width);
+          rec.art.scale.set(sc); rec.artShadow.scale.set(sc);
+        } else {
+          const sc = rec.w / Math.max(1, rec.art.texture.width);
+          rec.art.scale.set(sc * rec.flip, sc);
+          rec.artShadow.scale.set(sc * rec.flip, sc);
+        }
         rec.art.alpha = artK;
-        rec.artShadow.scale.set(sc * rec.flip, sc);
       }
       rec.hull.visible = artK < 1; rec.hull.alpha = 1 - artK; rec.hull.rotation = ang;
       // the shadow falls on the deck below: under the hull when docked, dropped by the altitude in flight
@@ -257,11 +300,14 @@ const EngineTraffic = (() => {
         if (useArt) n.position.set(PERP.x * side * 0.15 * rec.w * rec.flip, PERP.y * side * 0.15 * rec.w);
         else { const p = rec.hd.nav[i]; n.position.set((p.x * Math.cos(ang) - p.y * Math.sin(ang)) * rec.u, (p.x * Math.sin(ang) + p.y * Math.cos(ang)) * rec.u); }
         n.alpha = blink ? 1 : 0.18;
+        // a ship in eight headings carries its own lights in the painting; the drawn pair would sit off its hull
+        n.visible = !(useArt && rec.turn);
       }
       if (rec.running) {
         if (useArt) rec.running.position.set(NOSE.x * 0.5 * rec.w * rec.flip, NOSE.y * 0.5 * rec.w);
         else rec.running.position.set(rec.hd.nose * 0.3 * Math.cos(ang) * rec.u, rec.hd.nose * 0.3 * Math.sin(ang) * rec.u);
         rec.running.alpha = 0.5 + 0.5 * Math.sin(t * TAU * 0.7 + phase * 6);
+        rec.running.visible = !(useArt && rec.turn);
       }
       updateHold(rec, queued, useArt);
       rec.hoverRing.clear();
@@ -335,6 +381,10 @@ const EngineTraffic = (() => {
   }
   // Local stern offset and the direction the exhaust points (away from the nose).
   function sternOf(rec, useArt, ang) {
+    if (useArt && rec.turn) {
+      const f = rec.turn.frame;
+      return { x: -f.x * f.len * rec.w, y: -f.y * f.len * rec.w * 0.8, a: Math.atan2(-f.y, -f.x) };
+    }
     if (useArt) {
       const f = rec.flip;
       return { x: STERN.x * rec.w * f, y: STERN.y * rec.w, a: Math.atan2(AXIS.y, AXIS.x * f) };

@@ -987,6 +987,18 @@ const EngineWorld = (() => {
     for (let i = 0; i < rings.length; i++) if (inBounds(rings[i], r, c)) return i;
     return -1;
   }
+  // The painted debris textures that are already in (ARTPACK debris group): starts their loading on first call and asks
+  // for a plot rebuild when they arrive, so the drawn shards give way to them.
+  let debrisUrls = null;
+  function paintedDebris(n) {
+    if (!debrisUrls) {
+      const ids = ST.assets.ids('debris') || [];
+      debrisUrls = ids.map(id => ST.assets.url('debris', id, 128)).filter(Boolean);
+      if (debrisUrls.length) Promise.all(debrisUrls.map(u => ST.assets.load(u))).then(() => { S.plot.key = ''; });
+    }
+    const ready = debrisUrls.map(u => ST.assets.texture(u)).filter(Boolean);
+    return ready.length ? ready[n % ready.length] : null;
+  }
   function debrisTexture(i) {
     return ST.bake('debris|' + i, 14, 14, g => {
       const rr = U.rng(7000 + i), n = 5 + Math.floor(rr() * 3);
@@ -1048,8 +1060,12 @@ const EngineWorld = (() => {
         if (!cells.length) continue;
         for (const u of cells) g.rect(wx(u.c), wy(u.r), CELL, CELL);
         g.fill({ color: ice, alpha: pass ? 0.035 : 0.015 });
-        for (const u of cells) hatchCell(g, wx(u.c), wy(u.r), CELL / 5, 1);
-        g.stroke({ width: 1, color: ice, alpha: pass ? 0.07 : 0.03 });
+        // Only a ring being cleared is hatched. Across all unclaimed space the hatch (ground diagonals, which the diamond
+        // projection turns vertical) read as stripes over the painted sky; the debris and the dashed edge mark it instead.
+        if (pass) {
+          for (const u of cells) hatchCell(g, wx(u.c), wy(u.r), CELL / 5, 1);
+          g.stroke({ width: 1, color: ice, alpha: 0.07 });
+        }
       }
       const b = P.bounds;
       dashedRect(g, wx(b.c0) + 1, wy(b.r0) + 1, (b.c1 - b.c0 + 1) * CELL - 2, (b.r1 - b.r0 + 1) * CELL - 2, 8, 6);
@@ -1068,9 +1084,13 @@ const EngineWorld = (() => {
         d.r = u.r; d.c = u.c;
         d.x = wx(u.c) + 8 + rr() * (CELL - 16); d.y = wy(u.r) + 8 + rr() * (CELL - 16);
         d.vx = (rr() - 0.5) * 5; d.vy = (rr() - 0.5) * 5; d.vr = (rr() - 0.5) * 0.4;
-        d.sp.texture = debrisTexture(Math.floor(rr() * 3));
-        d.sp.scale.set((0.45 + rr() * 0.55) * 0.8); d.sp.rotation = rr() * TAU; d.sp.alpha = u.clearing ? 0.5 : 0.28 + rr() * 0.17;
-        d.sp.tint = u.clearing ? 0xBFE8F4 : 0xB8C4D0; d.sp.visible = true; d.sp.position.set(d.x, d.y);
+        // painted rocks and scrap (tools/space-art.js) once they are in, the drawn shards until then
+        const pick = Math.floor(rr() * 64), painted = paintedDebris(pick);
+        d.sp.texture = painted || debrisTexture(pick % 3);
+        const s0 = (0.45 + rr() * 0.55) * 0.8;
+        d.sp.scale.set(painted ? s0 * 14 / painted.width * 1.25 : s0); d.sp.rotation = rr() * TAU;
+        d.sp.alpha = painted ? (u.clearing ? 0.85 : 0.55 + rr() * 0.25) : (u.clearing ? 0.5 : 0.28 + rr() * 0.17);
+        d.sp.tint = painted ? (u.clearing ? 0xDDF2FA : 0xFFFFFF) : (u.clearing ? 0xBFE8F4 : 0xB8C4D0); d.sp.visible = true; d.sp.position.set(d.x, d.y);
       }
     }
     for (; i < P.debris.length; i++) P.debris[i].sp.visible = false;

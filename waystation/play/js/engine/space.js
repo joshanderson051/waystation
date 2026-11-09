@@ -57,7 +57,7 @@ const EngineSpace = (() => {
   const S = {
     theme: THEMES.home, seed: 1,
     far: null, mid: null,                 // containers (ST.layers.space.*.moving)
-    twinkle: [], nebula: [],
+    twinkle: [], nebula: [], paintFade: [],   // paintFade: painted art fading in over the drawn version
     planet: null,                         // { root, bands, mask, shade, rim, rings, r, spin }
     asteroids: [],
     comet: null, cometNext: 0,
@@ -111,18 +111,37 @@ const EngineSpace = (() => {
 
   // ---------------------------------------------------------------- textures
   function starTexture(size) {
+    // A crisp point: a hard bright core and a short falloff, so a star reads as a pinpoint at every zoom rather than a
+    // soft blob. The largest ones carry thin diffraction spikes.
     const r = size;
-    return ST.bake('star|' + size, r * 2 + 2, r * 2 + 2, g => {
+    return ST.bake('star2|' + size, r * 2 + 2, r * 2 + 2, g => {
       const c = r + 1;
       const gr = g.createRadialGradient(c, c, 0, c, c, r);
-      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.22, 'rgba(255,255,255,.95)'); gr.addColorStop(0.45, 'rgba(255,255,255,.28)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
       g.fillStyle = gr; g.fillRect(0, 0, r * 2 + 2, r * 2 + 2);
       if (r >= 4) {
-        // faint cross flare on the brightest stars
-        g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 1;
-        g.beginPath(); g.moveTo(c - r, c); g.lineTo(c + r, c); g.moveTo(c, c - r); g.lineTo(c, c + r); g.stroke();
+        const sp = (x0, y0, x1, y1) => { const l = g.createLinearGradient(x0, y0, x1, y1); l.addColorStop(0, 'rgba(255,255,255,0)'); l.addColorStop(0.5, 'rgba(255,255,255,.55)'); l.addColorStop(1, 'rgba(255,255,255,0)'); g.strokeStyle = l; g.lineWidth = 0.8; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); };
+        sp(0, c, r * 2 + 2, c); sp(c, 0, c, r * 2 + 2);
       }
     }).texture;
+  }
+
+  // ---------------------------------------------------------------- painted art (tools/space-art.js, artpack-space.js)
+  // A painted nebula, planet or star for a sector, when the pack has one; null keeps the drawn version.
+  function paintedUrl(group, id) {
+    const ids = ST.assets.ids(group);
+    if (!ids || !ids.includes(id)) return null;
+    const size = group === 'nebula' ? (ST.PHONE ? 960 : 1536) : group === 'planet' ? (ST.PHONE ? 512 : 1024) : 512;
+    return ST.assets.url(group, id, size);
+  }
+  // Calls back with the texture once it is in (at once when it already is). Counts toward Engine.loading, so the home
+  // sector's paintings are in before the title screen lets the player start.
+  function whenPainted(url, fn, failed) {
+    if (!url) return;
+    const have = ST.assets.texture(url);
+    // a tick later even when it is in, so the builder that asked has finished registering what it built
+    if (have) { Promise.resolve().then(() => fn(have)); return; }
+    ST.assets.preload([url]).then(([tex]) => { if (tex) fn(tex); else if (failed) failed(); });
   }
 
   // Cloud texture: fbm density shaped into soft structure, two theme hues mixed by a second noise.
@@ -325,7 +344,7 @@ const EngineSpace = (() => {
     S.far = L.space.far.moving; S.mid = L.space.mid.moving;
     if (!S.laneRoot) { S.laneRoot = new PIXI.Container(); S.laneRoot.eventMode = 'none'; L.lanes.addChildAt(S.laneRoot, 0); }
     clear(S.far); clear(S.mid); clear(S.laneRoot);
-    S.twinkle = []; S.nebula = []; S.asteroids = []; S.planet = null; S.comet = null; S.lanes = [];
+    S.twinkle = []; S.nebula = []; S.asteroids = []; S.planet = null; S.comet = null; S.lanes = []; S.paintFade = [];
     for (const p of S.pulses) p.sprite.destroy();
     S.pulses = [];
     S.cometNext = ST.time + 70 + Math.random() * 70;
@@ -342,6 +361,16 @@ const EngineSpace = (() => {
     if (theme.planet) buildPlanet(theme);
     if (theme.asteroids) buildBelt(theme);
     layout();
+    // once, a little after the first sector is up: the other sectors' paintings load quietly (not counted toward the
+    // title's loading), so a jump shows its sky at once
+    if (!S.warmed) {
+      S.warmed = true;
+      // one at a time, so a sector the player jumps to is never queued behind the whole set
+      const urls = [];
+      for (const id of Object.keys(THEMES)) for (const g of ['nebula', 'planet', 'star']) { const u = paintedUrl(g, id); if (u) urls.push(u); }
+      const next = () => { const u = urls.shift(); if (!u) return; if (ST.assets.texture(u)) { next(); return; } ST.assets.load(u).then(() => setTimeout(next, 250)); };
+      setTimeout(next, 6000);
+    }
   }
 
   // Field rectangle in layer coordinates that stays covered for every camera inside the bounds.
@@ -357,17 +386,19 @@ const EngineSpace = (() => {
   function buildStars(theme) {
     const rr = U.rng(S.seed ^ 0x9E3779B9);
     const tint = U.int(theme.starTint || '#ECE8DE');
-    const texS = starTexture(2), texM = starTexture(3), texL = starTexture(5);
+    const texS = starTexture(2), texM = starTexture(3), texL = starTexture(7);
     const F = fieldRect(0.08), M = fieldRect(0.25);
     const area = (F.x1 - F.x0) * (F.y1 - F.y0);
-    const nFar = Math.round(U.clamp(area / (1440 * 900 * 4.2) * (theme.starCount || 1400), 900, 2800));
+    // A painted nebula carries its own faint star dust, so the drawn field thins out over it.
+    const painted = !!paintedUrl('nebula', theme.id);
+    const nFar = Math.round(U.clamp(area / (1440 * 900 * 4.2) * (theme.starCount || 1400), 900, 2800) * (painted ? 0.55 : 1));
     for (let i = 0; i < nFar; i++) {
       const u = rr();
-      const tex = u < 0.72 ? texS : u < 0.95 ? texM : texL;
+      const tex = u < 0.8 ? texS : u < 0.985 ? texM : texL;
       const sp = ST.sprite(tex);
       sp.position.set(F.x0 + rr() * (F.x1 - F.x0), F.y0 + rr() * (F.y1 - F.y0));
-      sp.alpha = 0.3 + rr() * 0.6;
-      const s = (u < 0.72 ? 0.55 : u < 0.95 ? 0.75 : 1) * (0.8 + rr() * 0.5);
+      sp.alpha = 0.35 + rr() * 0.6;
+      const s = (u < 0.8 ? 0.5 : u < 0.985 ? 0.6 : 0.62) * (0.8 + rr() * 0.4);
       sp.scale.set(s);
       // a little colour variety: 10% blue-white, 8% amber
       const cv = rr();
@@ -375,13 +406,14 @@ const EngineSpace = (() => {
       S.farStarRoot.addChild(sp);
       if (rr() < 0.02) S.twinkle.push({ sp, base: sp.alpha, w: TAU * (0.2 + rr() * 0.8), ph: rr() * TAU });
     }
-    const nMid = Math.round(U.clamp(area / (1440 * 900 * 4.2) * 300, 200, 600));
+    // The mid layer zooms with the camera (parallax), so its stars stay small and few: large ones read as blurred discs.
+    const nMid = Math.round(U.clamp(area / (1440 * 900 * 4.2) * 160, 100, 320));
     for (let i = 0; i < nMid; i++) {
       const u = rr();
-      const sp = ST.sprite(u < 0.6 ? texM : texL);
+      const sp = ST.sprite(u < 0.85 ? texS : texM);
       sp.position.set(M.x0 + rr() * (M.x1 - M.x0), M.y0 + rr() * (M.y1 - M.y0));
-      sp.alpha = 0.45 + rr() * 0.5;
-      sp.scale.set((u < 0.6 ? 0.8 : 1.05) * (0.85 + rr() * 0.4));
+      sp.alpha = 0.5 + rr() * 0.45;
+      sp.scale.set((u < 0.85 ? 0.62 : 0.6) * (0.85 + rr() * 0.3));
       sp.tint = rr() < 0.12 ? 0xBFD8FF : tint;
       S.midStarRoot.addChild(sp);
       if (rr() < 0.04) S.twinkle.push({ sp, base: sp.alpha, w: TAU * (0.3 + rr() * 0.7), ph: rr() * TAU });
@@ -392,6 +424,9 @@ const EngineSpace = (() => {
     const rr = U.rng(S.seed ^ 0x51A7F00D);
     const F = fieldRect(0.08);
     const span = Math.max(ST.w, ST.h);
+    // 0. the painted panorama for this sector, behind everything, covering the view with room for the parallax. The drawn
+    //    clouds below stay until it is in, then fade out under it.
+    const url = paintedUrl('nebula', theme.id), drawn = [];
     // 1. two structured clouds, big and slow, centred away from the station so hull contrast holds
     const a0 = rr() * TAU;
     const cloud = ST.sprite(cloudTexture(theme, S.seed), { blend: 'add' });
@@ -401,12 +436,12 @@ const EngineSpace = (() => {
     cloud.rotation = rr() * TAU;
     cloud.alpha = Math.min(1, (theme.nebulaAlpha || 0.12) * 8);
     S.nebulaRoot.addChild(cloud);
-    S.nebula.push({ sp: cloud, w: 0.0025 });
+    S.nebula.push({ sp: cloud, w: 0.0025 }); drawn.push(cloud);
     const cloud2 = ST.sprite(cloudTexture(theme, S.seed + 17), { blend: 'add' });
     cloud2.position.set(F.cx - Math.cos(a0 + 0.9) * span * 0.55, F.cy - Math.sin(a0 + 0.9) * span * 0.45);
     cloud2.scale.set(cs * 0.85, cs * 0.6); cloud2.rotation = rr() * TAU; cloud2.alpha = cloud.alpha * 0.75;
     S.nebulaRoot.addChild(cloud2);
-    S.nebula.push({ sp: cloud2, w: -0.0018 });
+    S.nebula.push({ sp: cloud2, w: -0.0018 }); drawn.push(cloud2);
     // 2. 6–9 soft radial blobs in lifted theme hues (elliptical so their rotation reads)
     const n = 6 + Math.floor(rr() * 4);
     for (let i = 0; i < n; i++) {
@@ -419,14 +454,28 @@ const EngineSpace = (() => {
       sp.rotation = rr() * TAU;
       sp.alpha = 0.08 + rr() * 0.1;
       S.nebulaRoot.addChild(sp);
-      S.nebula.push({ sp, w: (rr() < 0.5 ? 1 : -1) * 0.004 });
+      S.nebula.push({ sp, w: (rr() < 0.5 ? 1 : -1) * 0.004 }); drawn.push(sp);
+    }
+    if (url) {
+      const keyId = theme.id;
+      whenPainted(url, tex => {
+        if (!S.theme || S.theme.id !== keyId || !S.nebulaRoot || S.nebulaRoot.destroyed) return;
+        const sp = new PIXI.Sprite(tex); sp.eventMode = 'none'; sp.anchor.set(0.5);
+        // cover the screen in far-layer units, 18% over so the parallax never shows an edge
+        const vw = ST.w / F.zk, vh = ST.h / F.zk, k = Math.max(vw / tex.width, vh / tex.height) * 1.18;
+        sp.scale.set(k); sp.position.set(F.cx, F.cy); sp.alpha = 0;
+        S.nebulaRoot.addChildAt(sp, 0);
+        S.paintFade.push({ show: [sp], hide: drawn.map(d => ({ sp: d, a0: d.alpha })), t0: ST.time, dur: 0.9 });
+      });
     }
   }
 
   function buildPlanet(theme) {
     const P = theme.planet;
     const root = new PIXI.Container(); root.eventMode = 'none';
-    const rec = { root, r: 100, spin: P.spin || 5, kind: P.kind, bands: null, mask: null, shade: null, rim: null, rings: null, halo: null, core: null };
+    const rec = { root, r: 100, spin: P.spin || 5, kind: P.kind, bands: null, mask: null, shade: null, rim: null, rings: null, halo: null, core: null, painted: false };
+    const keyId = theme.id;
+    const fresh = () => S.planet === rec && S.theme && S.theme.id === keyId && !root.destroyed;
     if (P.kind === 'dwarf') {
       // white dwarf: a crisp hot disc inside a corona, violet halo far out
       rec.halo = ST.sprite(ST.glowTexture(P.halo, 128), { blend: 'add', alpha: 0.75 });
@@ -434,6 +483,19 @@ const EngineSpace = (() => {
       rec.core = ST.sprite(ST.glowTexture(P.core, 64, 'core'), { blend: 'add', alpha: 1 });
       rec.disc = ST.sprite(ST.glowTexture(P.core, 64, 'hard'), { blend: 'add', alpha: 1 });
       root.addChild(rec.halo, rec.halo2, rec.core, rec.disc);
+      // the painted star, drawn additive (its black stays invisible): its corona replaces the drawn glows
+      whenPainted(paintedUrl('star', theme.id), tex => {
+        if (!fresh()) return;
+        const sp = new PIXI.Sprite(tex); sp.eventMode = 'none'; sp.anchor.set(0.5); sp.blendMode = 'add'; sp.alpha = 0;
+        // the painting carries its own core, corona and halo: it replaces every drawn glow (added together they burned
+        // out to a white disc), its core (about a fifth of the picture) about two thirds of the drawn radius across
+        rec.paintK = 2.1 / tex.width;
+        sp.tint = 0xE6DDFF;                                  // a touch under white, so the screen bloom does not burn it out
+        sp.scale.set(rec.r * rec.paintK);
+        root.addChild(sp);
+        rec.painted = true; rec.paint = sp;
+        S.paintFade.push({ show: [sp], hide: [rec.halo, rec.halo2, rec.core, rec.disc].map(d => ({ sp: d, a0: d.alpha })), t0: ST.time, dur: 0.9 });
+      });
     } else {
       // atmosphere glow behind the disc (only the halo outside the disc shows), plus a wider soft haze
       rec.rim = ST.sprite(ST.glowTexture(P.rim, 128, 'hard'), { blend: 'add', alpha: P.rimAlpha != null ? P.rimAlpha : 0.5 });
@@ -453,10 +515,30 @@ const EngineSpace = (() => {
       limb.eventMode = 'none';
       root.addChild(rec.haze, rec.rim, base, bands, mask, rec.shade, limb);
       rec.bands = bands; rec.mask = mask; rec.base = base; rec.limb = limb;
-      if (P.rings) {
+      const url = paintedUrl('planet', theme.id), disc = typeof ARTPACK !== 'undefined' && ARTPACK.planets && ARTPACK.planets[theme.id];
+      if (P.rings && !url) {
         rec.rings = ST.sprite(ringTexture(theme.id, P.rim));
         rec.rings.alpha = 0.9;
         root.addChild(rec.rings);
+      }
+      // The painted planet (its own rings included) on the drawn disc: placed by its measured disc so the sphere sits
+      // exactly on the radius-100 circle, under the drawn day-night shade, which gives the fully lit painting its terminator.
+      // The drawn disc never shows while a painting is coming (its brush-stroke clouds read as stray lines); only the
+      // atmosphere glows wait in its place, and the drawn disc returns only if the painting fails to load.
+      if (url && disc) {
+        base.visible = bands.visible = rec.shade.visible = limb.visible = false;
+        whenPainted(url, tex => {
+          if (!fresh()) return;
+          const sp = new PIXI.Sprite(tex); sp.eventMode = 'none';
+          sp.anchor.set(disc.cx, disc.cy);
+          rec.paintK = 1 / (disc.r * tex.width);            // the sphere's radius in the picture on the drawn radius
+          sp.scale.set(rec.r * rec.paintK);
+          sp.alpha = 0;
+          root.addChildAt(sp, root.getChildIndex(rec.shade));
+          rec.painted = true; rec.paint = sp;
+          rec.shade.visible = limb.visible = true; rec.shade.alpha = 0; limb.alpha = 0;
+          S.paintFade.push({ show: [sp, rec.shade, limb], hide: [], t0: ST.time, dur: 0.7 });
+        }, () => { if (fresh()) base.visible = bands.visible = rec.shade.visible = limb.visible = true; });
       }
     }
     S.planetRoot.addChild(root);
@@ -466,6 +548,8 @@ const EngineSpace = (() => {
   function sizePlanet(r) {
     const p = S.planet; if (!p) return;
     p.r = r;
+    // the painting is sized like the drawn parts (each part scales on its own; the root never does)
+    if (p.paint) p.paint.scale.set(r * p.paintK);
     if (p.kind === 'dwarf') {
       p.core.scale.set(r * 2.6 / 128); p.disc.scale.set(r * 0.9 / 128);
       p.halo.scale.set(r * 9 / 256); p.halo2.scale.set(r * 4.5 / 256);
@@ -499,6 +583,16 @@ const EngineSpace = (() => {
       S.beltRoot.addChild(sp);
       S.asteroids.push({ sp, vx: (rr() - 0.5) * 6, vy: (rr() - 0.5) * 3, vr: (rr() - 0.5) * 0.25, x0: sp.x, y0: sp.y, span: span * 1.3 });
     }
+    // painted rocks (the drawn ones are 48 px squares with the rock about 40 px across) take their place as they arrive
+    const ids = (ST.assets.ids('debris') || []).filter(id => /^rock_/.test(id)), keyId = theme.id;
+    ids.forEach((id, k) => whenPainted(ST.assets.url('debris', id, 128), tex => {
+      if (!S.theme || S.theme.id !== keyId) return;
+      S.asteroids.forEach((a, i) => {
+        if (i % ids.length !== k || a.sp.destroyed) return;
+        const sc = a.sp.scale.x * 48 / tex.width * 1.15;
+        a.sp.texture = tex; a.sp.scale.set(sc); a.sp.tint = 0xffffff;
+      });
+    }));
   }
 
   // ---------------------------------------------------------------- layout: planet placement, lanes
@@ -512,6 +606,8 @@ const EngineSpace = (() => {
       const floor = (P.kind === 'dwarf' ? 0.08 : 0.16) * H;
       const pos = P.pos || 'ne';
       const corner = () => {
+        // the white dwarf is small: in the very corner it would sit under the status bar and the rail
+        if (P.kind === 'dwarf') return { x: 0.2 * W, y: 0.24 * H };
         if (pos === 'nw') return { x: 0.46 * R, y: 0.46 * R };
         if (pos === 'e') return { x: W - 0.55 * R, y: H * 0.5 };
         return { x: W - 0.46 * R, y: 0.46 * R };
@@ -551,6 +647,16 @@ const EngineSpace = (() => {
     const hx = (st.x0 + st.x1) / 2, hy = (st.y0 + st.y1) / 2;
     const n = 3 + Math.floor(rr() * 3);
     const color = S.theme.lane || '#8FD3E8';
+    // a crisp bright point with a small halo, baked large so it stays sharp when the camera zooms in (the lanes layer
+    // zooms with the station)
+    const beacon = ST.bake('beacon|' + color, 64, 64, gx => {
+      const h = gx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      h.addColorStop(0, U.rgba(color, 0.35)); h.addColorStop(0.45, U.rgba(color, 0.12)); h.addColorStop(1, U.rgba(color, 0));
+      gx.fillStyle = h; gx.fillRect(0, 0, 64, 64);
+      const c = gx.createRadialGradient(32, 32, 0, 32, 32, 9);
+      c.addColorStop(0, 'rgba(255,255,255,1)'); c.addColorStop(0.6, U.rgba(color, 1)); c.addColorStop(1, U.rgba(color, 0));
+      gx.fillStyle = c; gx.beginPath(); gx.arc(32, 32, 9, 0, TAU); gx.fill();
+    }).texture;
     const g = new PIXI.Graphics(); g.eventMode = 'none';
     const far = 16 * CELL;
     for (let i = 0; i < n; i++) {
@@ -566,10 +672,22 @@ const EngineSpace = (() => {
       const ex = sx + dx * tHit, ey = sy + dy * tHit;
       const perp = 0;                                          // straight: a lane is an axis
       const cx = (sx + ex) / 2 - dy / len * perp, cy = (sy + ey) / 2 + dx / len * perp;
-      const lane = { sx, sy, cx, cy, ex, ey, next: ST.time + 1 + rr() * 6 };
+      const lane = { sx, sy, cx, cy, ex, ey, next: ST.time + 1 + rr() * 6, run: null, beacons: [] };
       S.lanes.push(lane);
-      g.moveTo(sx, sy).quadraticCurveTo(cx, cy, ex, ey).stroke({ width: 1.5, color: U.int(color), alpha: 0.085 });
-      g.moveTo(sx, sy).quadraticCurveTo(cx, cy, ex, ey).stroke({ width: 5, color: U.int(color), alpha: 0.025 });
+      // No drawn line (it read as a scratch across the view): a row of small beacons over the lane's last stretch, dim far
+      // out and brighter toward the station, every 1.3 cells.
+      const len2 = Math.hypot(ex - sx, ey - sy), step = 1.3 * CELL, count = Math.max(4, Math.floor(len2 * 0.62 / step));
+      for (let k = 0; k < count; k++) {
+        const tt = 1 - (k * step) / len2;
+        if (tt <= 0) break;
+        const p = lanePoint(lane, tt);
+        const sp = ST.sprite(beacon, { blend: 'add' }); sp.anchor.set(0.5); sp.position.set(p.x, p.y);
+        // world units: the lanes layer zooms with the station, so a beacon is a few units across (a point on screen)
+        const base = 0.1 + 0.3 * Math.pow(tt, 2.2), s = 0.09 + 0.06 * tt;
+        sp.alpha = base; sp.scale.set(s);
+        L.addChild(sp);
+        lane.beacons.push({ sp, t: tt, base, s });
+      }
     }
     L.addChild(g);
   }
@@ -603,6 +721,13 @@ const EngineSpace = (() => {
   // ---------------------------------------------------------------- frame
   function update(dt) {
     const tier = ST.tier, reduced = ST.reduced, t = ST.time;
+    // painted art fading in over the drawn version it replaces
+    for (let i = S.paintFade.length - 1; i >= 0; i--) {
+      const f = S.paintFade[i], k = reduced ? 1 : U.clamp((t - f.t0) / f.dur, 0, 1), e = k * k * (3 - 2 * k);
+      for (const s of f.show) if (!s.destroyed) s.alpha = e;
+      for (const h of f.hide) if (!h.sp.destroyed) { h.sp.alpha = h.a0 * (1 - e); if (k >= 1) h.sp.visible = false; }
+      if (k >= 1) S.paintFade.splice(i, 1);
+    }
     // nebula rotation
     for (const n of S.nebula) n.sp.rotation += n.w * dt;
     // twinkle (2% of stars) — off at tier 0 and under reduced motion
@@ -612,7 +737,8 @@ const EngineSpace = (() => {
     // planet rotation
     const p = S.planet;
     if (p && p.bands) p.bands.tilePosition.x -= p.spin * dt * (p.r / 100);
-    if (p && p.kind === 'dwarf') { p.core.alpha = 0.92 + 0.08 * Math.sin(t * 2.1); p.halo.alpha = 0.7 + 0.08 * Math.sin(t * 0.7); }
+    if (p && p.kind === 'dwarf' && !p.painted) { p.core.alpha = 0.92 + 0.08 * Math.sin(t * 2.1); p.halo.alpha = 0.7 + 0.08 * Math.sin(t * 0.7); }
+    else if (p && p.kind === 'dwarf' && p.paint && !S.paintFade.length) p.paint.alpha = 0.8 + 0.06 * Math.sin(t * 1.3);
     // asteroids drift and wrap along the belt
     if (S.asteroids.length) {
       for (const a of S.asteroids) {
@@ -630,28 +756,16 @@ const EngineSpace = (() => {
         c.root.alpha = k < 0.15 ? k / 0.15 : k > 0.8 ? (1 - k) / 0.2 : 1;
       }
     } else if (tier > 0 && !reduced && t >= S.cometNext) spawnComet();
-    // lane pulses: light travelling inward every 4–9 s per lane (emissive layer, so they bloom)
-    const em = ST.layers.world.emissive;
+    // approach beacons: every 5–9 s a lane's lights fire in sequence toward the station, like a runway's approach lights
     for (const l of S.lanes) {
-      if (t >= l.next) {
-        l.next = t + 4 + Math.random() * 5;
-        if (tier > 0) {
-          const sp = ST.sprite(streakTexture(64, 10, S.theme.lane || '#8FD3E8'), { blend: 'add', alpha: 0 });
-          sp.anchor.set(0.15, 0.5);
-          em.addChild(sp);
-          S.pulses.push({ sprite: sp, lane: l, t0: t, dur: 2.6 + Math.random() * 0.8 });
-        }
+      if (t >= l.next) { l.next = t + 5 + Math.random() * 4; if (tier > 0 && !reduced) l.run = t; }
+      const e = l.run != null ? (t - l.run) / 1.6 : 2;
+      if (e > 1.3) l.run = null;
+      for (const b of l.beacons) {
+        const d = (b.t - e) / 0.05, flash = l.run != null ? Math.exp(-d * d) : 0;
+        b.sp.alpha = b.base + flash * 0.75;
+        b.sp.scale.set(b.s * (1 + flash * 0.6));
       }
-    }
-    for (let i = S.pulses.length - 1; i >= 0; i--) {
-      const pu = S.pulses[i], k = (t - pu.t0) / pu.dur;
-      if (k >= 1) { pu.sprite.destroy(); S.pulses.splice(i, 1); continue; }
-      const e = U.easeInQuad(k);
-      const a = lanePoint(pu.lane, e), b = lanePoint(pu.lane, Math.max(0, e - 0.02));
-      pu.sprite.position.set(a.x, a.y);
-      pu.sprite.rotation = Math.atan2(a.y - b.y, a.x - b.x);
-      pu.sprite.alpha = (k < 0.2 ? k / 0.2 : k > 0.85 ? (1 - k) / 0.15 : 1) * 0.55;
-      pu.sprite.scale.set(0.6 + e * 0.5, 0.6);
     }
   }
 
@@ -670,5 +784,7 @@ const EngineSpace = (() => {
     init, setTheme, setStation, update,
     comet: spawnComet,
     get theme() { return S.theme; },
+    // for the screenshot tools: which painted art is showing
+    debug() { const p = S.planet; return { sector: S.theme && S.theme.id, planetPainted: !!(p && p.painted), planetAlpha: p && p.paint ? +p.paint.alpha.toFixed(2) : null, fading: S.paintFade.length, nebulaSprites: S.nebulaRoot ? S.nebulaRoot.children.length : 0, paintedNebula: S.nebulaRoot ? S.nebulaRoot.children.filter(c => c.texture && c.texture.width >= 900).map(c => ({ a: +c.alpha.toFixed(2), v: c.visible, sx: +c.scale.x.toFixed(2), x: Math.round(c.x), y: Math.round(c.y), w: c.texture.width })) : null }; },
   };
 })();
