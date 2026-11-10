@@ -634,6 +634,11 @@ body[data-condition="alert"] #statusbar > .spine { background: var(--bad); box-s
 .panel-sub { margin-top: 6px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .panel-sub .linkish { font: inherit; letter-spacing: inherit; text-transform: inherit; }
 .panel-close { flex: none; margin: -4px -2px 0 0; }
+/* store apps (store.js mode 'off'): nothing is for sale, so every way into the Store stays hidden */
+body[data-store="off"] #btn-am-plus,
+body[data-store="off"] [data-act="store"],
+body[data-store="off"] [data-act="restore"],
+body[data-store="off"] .rail-btn[data-panel="store"] { display: none !important; }
 /* sandbox ribbon (7.2): body[data-store] drives it */
 body[data-store="sandbox"] #panel[data-panel="store"] .panel-head::after { content: 'Test mode'; align-self: center; margin-right: 4px; padding: 3px 7px; border-radius: 3px; font: 600 11px/1 var(--font-cond); letter-spacing: .12em; text-transform: uppercase; color: var(--warn); border: 1px solid rgba(255,143,61,.5); background: var(--warn-ghost); }
 .panel-tabs { display: flex; gap: 2px; padding: 0 16px 0 24px; border-bottom: 1px solid var(--edge); flex: none; }

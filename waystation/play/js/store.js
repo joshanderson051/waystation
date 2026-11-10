@@ -33,7 +33,10 @@
 
 const Store = (() => {
   // ---------------------------------------------------------- constants
-  const MODES = new Set(['sandbox', 'stripe']);
+  // 'off': the game runs inside a store app (appShell below). Google Play and the Microsoft Store want their own billing
+  // for a game's digital goods, so that build sells nothing: no checkout, no specials, no restore by email.
+  const MODES = new Set(['sandbox', 'stripe', 'off']);
+  const SHELLS = new Set(['android', 'windows', 'ios']);   // ?app=<shell> on the store app's start URL
   const NON_CONSUMABLE = new Set(['pass', 'cosmetic']);      // bought once, owned forever
   const SIM_EVENTS = new Set(['purchase']);                  // 0.6: only `purchase` crosses to the Sim bus
   const LEDGER_CAP = 300;                                    // local grant history length
@@ -95,6 +98,28 @@ const Store = (() => {
   const warn = msg => { if (!warnings.includes(msg)) warnings.push(msg); };
   const delay = ms => new Promise(res => setTimeout(res, ms));
   const enc = v => encodeURIComponent(String(v));
+
+  // The store apps open play/?app=android (Google Play) or ?app=windows (Microsoft Store); a Trusted Web Activity also
+  // arrives with an android-app:// referrer. The answer is kept for this visit in sessionStorage (a store app's
+  // reloads keep it; a browser tab on the same device never picks it up) and the parameter leaves the address bar.
+  let shellMemo;
+  function appShell() {
+    if (shellMemo !== undefined) return shellMemo;
+    let shell = '';
+    try {
+      const p = hasLoc() && typeof location.search === 'string' ? new URLSearchParams(location.search).get('app') : null;
+      const ref = typeof document !== 'undefined' && document && typeof document.referrer === 'string' ? document.referrer : '';
+      const ss = typeof sessionStorage !== 'undefined' ? sessionStorage : null;
+      if (p && SHELLS.has(p.toLowerCase())) shell = p.toLowerCase();
+      else if (ref.startsWith('android-app://')) shell = 'android';
+      else if (ss) { const v = ss.getItem('portsolace.app'); if (v && SHELLS.has(v)) shell = v; }
+      if (shell && ss) ss.setItem('portsolace.app', shell);
+    } catch (e) { /* no storage or a malformed address: a plain browser visit */ }
+    shellMemo = shell;
+    if (appParamInUrl()) stripQuery(['app']);
+    return shell;
+  }
+  function appParamInUrl() { try { return hasLoc() && typeof location.search === 'string' && new URLSearchParams(location.search).has('app'); } catch (e) { return false; } }
 
   function storage() {
     try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; }
@@ -427,6 +452,7 @@ const Store = (() => {
     apply(readLocalOverride());          // localStorage['portsolace.store'] always wins: local testing against another origin
     if (!MODES.has(next.mode)) { warn(`Unknown store mode "${next.mode}"; using sandbox.`); next.mode = 'sandbox'; }
     if (next.mode === 'stripe' && !/^https?:\/\/\S+$/.test(next.apiBase)) { warn('Stripe mode needs an http(s) apiBase; using sandbox.'); next.mode = 'sandbox'; }
+    if (appShell()) next.mode = 'off';  // a store app sells nothing, whatever the page or a local override says
     Object.assign(config, next);
     markBody();
     emit('config', { ...config });
@@ -467,7 +493,7 @@ const Store = (() => {
     } catch (e) { /* defaults */ }
     return { level, region };
   }
-  const offersOn = () => !!config.apiBase && (config.mode === 'stripe' || !!config.ownApi);
+  const offersOn = () => config.mode !== 'off' && !!config.apiBase && (config.mode === 'stripe' || !!config.ownApi);
   // {id, title, blurb, badge, sku, priceCents, priceLabel, content, endsAt}; an offer for a sku this build does not sell is dropped
   function normaliseOffer(raw) {
     if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !OFFER_RE.test(raw.id)) return null;
@@ -644,6 +670,7 @@ const Store = (() => {
   // opts.offer: a special from Store.offers() (it sells at its sku's price and brings its own content)
   async function purchase(sku, opts = {}) {
     await readyPromise;
+    if (config.mode === 'off') return { ok: false, sku, granted: false, error: 'store-off', message: 'Purchases are not available in this version of the game.' };
     const offer = opts && opts.offer ? normaliseOffer(opts.offer) : null;
     if (opts && opts.offer && !offer) return { ok: false, sku, granted: false, error: 'unknown-offer', message: 'That special is no longer available.' };
     if (offer && offer.endsAt && offer.endsAt <= Date.now()) return { ok: false, sku, granted: false, offer: offer.id, error: 'offer-unavailable', message: 'That special has ended.' };
@@ -724,6 +751,7 @@ const Store = (() => {
     await readyPromise;
     flush();
     const applied = [];
+    if (config.mode === 'off') return { ok: true, mode: 'off', applied, message: 'Purchases are not available in this version of the game.' };
     if (config.mode !== 'stripe') return { ok: true, mode: config.mode, applied, message: 'Test mode: purchases live in this browser only.' };
     try {
       const pid = enc(playerId());
@@ -795,6 +823,7 @@ const Store = (() => {
     pending: () => pendingQueue(),
     on, off,
     get mode() { return config.mode; },
+    get shell() { return appShell(); },                       // 'android' | 'windows' | 'ios' inside a store app, else ''
     get config() { return { ...config }; },
     get catalogSource() { entries(); return catalogSource; },
     get warnings() { return warnings.slice(); },

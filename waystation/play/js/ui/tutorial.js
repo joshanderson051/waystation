@@ -32,7 +32,7 @@ const TOUR_STEPS = [
   { id: 'missions', title: 'Missions and achievements', text: 'Goals pay credits, Antimatter and rank. When one lights up, come here and claim it.', target: '.rail-btn[data-panel="missions"]' },
   { id: 'map', title: 'Territory and the galaxy', text: 'Unclaimed space around the station is cleared ring by ring. Beyond it, eight sectors wait on the galaxy map, each with its own world and its own station.', target: '.rail-btn[data-panel="map"]' },
   { id: 'expeditions', title: 'Expeditions', text: 'Send a crew out and they come back hours later with charts, cargo and discoveries for the Registry.', phoneText: 'Send a crew out from Expeditions, under More, and they come back hours later with charts, cargo and discoveries for the Registry.', target: ['.rail-btn[data-panel="expeditions"]', '.rail-btn[data-more]'] },
-  { id: 'finish', title: 'You have the bridge.', text: 'A reward waits here every day, the Store sells Antimatter when you are in a hurry, and the manual covers everything in depth.', phoneText: 'A reward waits in this menu every day, the Store under More sells Antimatter when you are in a hurry, and the manual covers everything in depth.', target: ['#btn-daily', '#sb-menu'], place: 'below', finish: true, manual: true },
+  { id: 'finish', title: 'You have the bridge.', text: 'A reward waits here every day, the Store sells Antimatter when you are in a hurry, and the manual covers everything in depth.', phoneText: 'A reward waits in this menu every day, the Store under More sells Antimatter when you are in a hurry, and the manual covers everything in depth.', offText: 'A reward waits here every day, and the manual covers everything in depth.', offPhoneText: 'A reward waits in this menu every day, and the manual covers everything in depth.', target: ['#btn-daily', '#sb-menu'], place: 'below', finish: true, manual: true },
 ];
 const phoneLayout = () => !!(typeof UI !== 'undefined' && UI && UI.phone);
 
@@ -151,7 +151,9 @@ const Tutorial = {
     const el = this._el, st = this.steps[this.step]; if (!el || !st) return;
     el.querySelector('#tour-kicker').textContent = `Tour ${GLYPH.mid} ${this.step + 1} of ${this.steps.length}`;
     el.querySelector('#tour-title').textContent = st.title;
-    el.querySelector('#tour-text').textContent = (phoneLayout() && st.phoneText) || st.text;
+    // offText / offPhoneText: the same step inside a store app, where nothing is for sale (store.js mode 'off')
+    const off = typeof Store !== 'undefined' && !!Store && Store.mode === 'off' && !!st.offText;
+    el.querySelector('#tour-text').textContent = off ? ((phoneLayout() && st.offPhoneText) || st.offText) : ((phoneLayout() && st.phoneText) || st.text);
     const waiting = !!st.waitFor && !this._satisfied;
     el.querySelector('#tour-wait').hidden = !waiting;
     el.querySelector('#tour-wait-text').textContent = st.waitLabel || 'Do it to continue';

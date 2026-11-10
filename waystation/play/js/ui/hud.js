@@ -135,6 +135,7 @@ const EngineAdapter = {
 const StoreAdapter = {
   present() { return typeof Store !== 'undefined' && !!Store; },
   mode() { return this.present() && Store.mode ? Store.mode : 'sandbox'; },
+  off() { return this.mode() === 'off'; },                   // inside a store app: nothing is for sale
   catalog() { const c = call(Store, 'catalog', [], null); if (Array.isArray(c)) return c; if (typeof STORE_CATALOG !== 'undefined' && Array.isArray(STORE_CATALOG)) return STORE_CATALOG; return []; },
   purchase(sku, opts) { const p = call(Store, 'purchase', [sku, opts || {}], null); return p && typeof p.then === 'function' ? p : Promise.resolve(p || { ok: false, why: 'Store unavailable' }); },
   restore(email) { const p = call(Store, 'restore', [email], null); return p && typeof p.then === 'function' ? p : Promise.resolve(p || { ok: false, why: 'Store unavailable' }); },
@@ -198,6 +199,15 @@ const HUB_URL = (() => {
     return /^https:\/\/[^\s"'<>`]+$/.test(v) ? v : null;
   } catch (e) { return null; }
 })();
+// The way back to the hub, keeping a store app's ?app=<shell> (store.js): sessionStorage belongs to one address, so the
+// hub only learns it is inside a store app from the link. Read when a link is drawn (store.js loads after this file).
+const hubHref = () => {
+  try {
+    const shell = typeof Store !== 'undefined' && Store ? Store.shell : '';
+    if (!shell) return HUB_URL;
+    const u = new URL(HUB_URL); u.searchParams.set('app', shell); return u.href;
+  } catch (e) { return HUB_URL; }
+};
 // the hub's temple mark, as the hub draws it
 const hubMark = (size = 18) => `<svg class="ic hub-mark" viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true"><path d="M4 26h24M7 26V13m6 13V13m6 13V13m6 13V13M4 13h24L16 5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
 // achievement tiers arrive as 1..3 or as a word (TIER_WORDS comes from panels.js)
@@ -229,6 +239,9 @@ const UI = {
     Sound.bind(st, () => MetaAdapter.saveSettings());
     Overlays.init({ sound: Sound });
     body.setAttribute('data-store', StoreAdapter.mode());
+    // A store app (store.js appShell) sells nothing, so the Store panel leaves the rail and the More sheet;
+    // style.css hides the other ways in (the Antimatter +, Sector Pass, Restore purchases) under body[data-store="off"]
+    if (StoreAdapter.off()) for (const list of [PANEL_DEFS, MORE_PANELS]) { const i = list.findIndex(p => (p && p.id) === 'store' || p === 'store'); if (i >= 0) list.splice(i, 1); }
     if (st.perf != null && st.perf !== 'auto') EngineAdapter.setPerf(st.perf);
     // 7.2: the store asks the HUD to confirm a purchase; sandbox copy says so plainly
     if (StoreAdapter.present() && Store.ui) {
@@ -386,7 +399,7 @@ const UI = {
   buildStatusBar() {
     const el = $('#statusbar'); if (!el) return;
     el.innerHTML =
-      (HUB_URL ? `<a class="sb-hub" id="sb-hub" href="${esc(HUB_URL)}" data-tip="Back to Build the Ages to play another game. Your progress is saved." aria-label="All games: back to Build the Ages">${hubMark(18)}<span class="sb-hub-lbl">All games</span></a>` : '') +
+      (HUB_URL ? `<a class="sb-hub" id="sb-hub" href="${esc(hubHref())}" data-tip="Back to Build the Ages to play another game. Your progress is saved." aria-label="All games: back to Build the Ages">${hubMark(18)}<span class="sb-hub-lbl">All games</span></a>` : '') +
       `<div class="sb-left"><span class="wordmark" aria-label="Port Solace">Port Solace</span>` +
       `<button type="button" id="sb-sector" class="sb-sector" title="Open the galaxy map (G)"><span class="sb-sector-name" id="sb-sector-name">—</span><span class="sb-station micro" id="sb-station">—</span></button></div>` +
       `<div class="sb-center">` +
@@ -420,7 +433,7 @@ const UI = {
   // the title band's way back to every game, above the wordmark (only with HUB_URL)
   buildTitleHub() {
     const mark = $('.title-band .wordmark'); if (!HUB_URL || !mark || $('.title-hub')) return;
-    mark.insertAdjacentHTML('beforebegin', `<a class="title-hub" href="${esc(HUB_URL)}">${hubMark(16)}<span>All games</span><span class="title-hub-at">Build the Ages</span></a>`);
+    mark.insertAdjacentHTML('beforebegin', `<a class="title-hub" href="${esc(hubHref())}">${hubMark(16)}<span>All games</span><span class="title-hub-at">Build the Ages</span></a>`);
   },
   buildNotices() {
     const n = $('#notices'); if (!n) return;
@@ -733,7 +746,7 @@ const UI = {
   // ---------------------------------------------------------- panels (0.4)
   openPanel(id) {
     if (id == null) return this.closePanel();
-    if (!Panels[id]) return;
+    if (!Panels[id] || (id === 'store' && StoreAdapter.off())) return;
     const host = $('#panel'), wrap = $('#panel-host');
     if (!host) return;
     if (this.panel === id) { if (this._inst) this._inst.update(); this.setPeek(false); return; }
@@ -903,7 +916,7 @@ const UI = {
     if (cloud && !cloud.hidden) { const CLOUD_WORD = { 'signed-out': 'Sign in', synced: 'Synced', dirty: 'Pending', syncing: 'Syncing', offline: 'Offline', error: 'Error' }; h += row('cloud', 'cloud', 'Cloud save', esc(CLOUD_WORD[cloud.dataset.state] || '')); }
     h += row('panel:map', 'map', 'Galaxy map', esc(sectorName));
     h += `<a class="menu-row" href="../manual/" target="_blank" rel="noopener"><span class="menu-ic">${icon('registry', 18)}</span><span class="menu-lbl">Manual</span><span class="menu-chev">${icon('chevron-right', 14)}</span></a>`;
-    if (HUB_URL) h += `<a class="menu-row menu-hub" href="${esc(HUB_URL)}"><span class="menu-ic">${hubMark(18)}</span><span class="menu-lbl">All games</span><span class="menu-meta">Build the Ages</span><span class="menu-chev">${icon('chevron-right', 14)}</span></a>`;
+    if (HUB_URL) h += `<a class="menu-row menu-hub" href="${esc(hubHref())}"><span class="menu-ic">${hubMark(18)}</span><span class="menu-lbl">All games</span><span class="menu-meta">Build the Ages</span><span class="menu-chev">${icon('chevron-right', 14)}</span></a>`;
     h += `</div>`;
     const nu = $('#nextup .nu-rows');
     if (nu && nu.children.length) h += `<div class="shelf" style="--hue:var(--ice)"><span class="shelf-label">Next up</span></div><div class="nu-rows menu-nu">${nu.innerHTML}</div>`;
@@ -1664,6 +1677,7 @@ const UI = {
       }, { yes: 'Spend the token' });
       return;
     }
+    if (StoreAdapter.off()) { this.toast(L.id === 'founder' ? "The Founder's Charter livery is not available in this version" : 'A sector livery is yours for a livery token, earned on day 7 of your streak', 'info', { chip: 'Livery', icon: 'ship', ms: 7000 }); return; }
     this.toast(L.id === 'founder' ? "The Founder's Charter is sold in the Store" : 'The six sector liveries are a set in the Store, or one for a livery token on day 7 of your streak', 'info', { chip: 'Livery', icon: 'ship', ms: 7000, action: { label: 'Store', fn: () => this.openPanel('store') } });
   },
   openLiveries() {
@@ -1688,7 +1702,7 @@ const UI = {
   },
   resetProfile() {
     this.confirm('Reset the whole profile?', 'Every sector, your rank, Antimatter and the registry are erased from this browser.', () => {
-      this.confirm('Last chance', 'This cannot be undone. Purchases can be restored from the Store later.', () => MetaAdapter.resetProfile(), { yes: 'Erase everything', danger: true });
+      this.confirm('Last chance', StoreAdapter.off() ? 'This cannot be undone.' : 'This cannot be undone. Purchases can be restored from the Store later.', () => MetaAdapter.resetProfile(), { yes: 'Erase everything', danger: true });
     }, { yes: 'Continue', danger: true });
   },
 
