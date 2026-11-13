@@ -131,6 +131,14 @@ function icon(id, size = 16, cls = '') {
 // ------------------------------------------------------------
 const Fmt = {
   n(v) { return Math.round(Number(v) || 0).toLocaleString('en-US'); },
+  /*qa:short*/ // the status bar's balances: every digit below a billion, then 1.23B, 45.6T, 1.2Qa, cut (never rounded up)
+  short(v) {
+    v = Math.round(Number(v) || 0); const a = Math.abs(v);
+    if (a < 1e9) return v.toLocaleString('en-US');
+    const [div, unit] = a < 1e12 ? [1e9, 'B'] : a < 1e15 ? [1e12, 'T'] : a < 1e18 ? [1e15, 'Qa'] : [1e18, 'Qi'];
+    const x = a / div, places = x >= 100 ? 0 : x >= 10 ? 1 : 2, cut = Math.floor(x * 10 ** places) / 10 ** places;
+    return (v < 0 ? '-' : '') + cut.toLocaleString('en-US', { minimumFractionDigits: places, maximumFractionDigits: places }) + unit;
+  },
   signed(v) { v = Number(v) || 0; return (v >= 0 ? '+' : GLYPH.minus) + Fmt.n(Math.abs(v)); },
   pct(v) { return Math.round((Number(v) || 0) * 100) + '%'; },
   pad2(n) { return String(n).padStart(2, '0'); },

@@ -246,13 +246,56 @@ function sectorArt(id, def, size, cls = 'round') { return Art.img('sectors', id,
 // Signature-diffed render that keeps the scroll position and staggers rows on first paint (2.2).
 // Live values (countdowns, rings, hopper banks) are filled by tickTimers right after the paint and
 // every 250ms after that, so a ticking number never forces a whole-panel re-render.
+/*qa:H3paint*/ // A repaint replaces every control in the panel body, so two things have to survive it:
+//  - a press. A click only lands when the press and the release meet the same element, so while a mouse, a pen or a
+//    finger is down inside the body the repaint waits; the panel's next update, a quarter of a second later, does it.
+//  - the keyboard's place. Someone moving through the panel with Tab keeps the control they are on, and a box keeps
+//    what is in it unless the new HTML gives that box another value.
+// Hands also tells the HUD how the player is steering (hud.js onKey: Space on a control reached with Tab presses it;
+// Space after a mouse click is the pause key).
+const Hands = { down: null, at: 0, keys: false };
+if (typeof document !== 'undefined' && document.addEventListener) {
+  const up = () => { Hands.down = null; };
+  document.addEventListener('pointerdown', e => { Hands.down = e.target; Hands.at = Date.now(); Hands.keys = false; }, true);
+  document.addEventListener('pointerup', up, true);
+  document.addEventListener('pointercancel', up, true);
+  document.addEventListener('pointermove', e => { if (Hands.down && e.pointerType === 'mouse' && !e.buttons) up(); }, true);   // let go outside the window
+  document.addEventListener('keydown', e => { if (e.key === 'Tab') Hands.keys = true; }, true);
+  window.addEventListener('blur', up);
+}
+// what a control is, apart from how it looks, and where it sits: enough to find the same one in the new HTML
+const ctlSig = n => { let s = `${n.tagName}#${n.id}`; for (const a of n.attributes) if (a.name.startsWith('data-') || a.name === 'name' || a.name === 'type' || a.name === 'role' || a.name === 'href') s += `|${a.name}=${a.value}`; return s; };
+const ctlMark = (n, root) => {
+  const sig = ctlSig(n), path = []; let nth = 0;
+  for (const c of root.getElementsByTagName(n.tagName)) { if (c === n) break; if (ctlSig(c) === sig) nth++; }
+  for (let x = n; x && x !== root; x = x.parentElement) path.unshift(Array.prototype.indexOf.call(x.parentElement.children, x));
+  return { tag: n.tagName, sig, nth, path };
+};
+const ctlFind = (root, m) => {
+  let k = 0;
+  for (const c of root.getElementsByTagName(m.tag)) if (ctlSig(c) === m.sig && k++ === m.nth) return c;
+  let n = root; for (const i of m.path) { n = n.children[i]; if (!n) return null; }
+  return n !== root && n.tagName === m.tag ? n : null;
+};
 function paint(el, html, store, key, meta) {
   if (!el) return false;
   if (store[key] === html && store.__last === key) return false;   // same key and same HTML: nothing to do; a different key (tab) always repaints
-  const first = store[key] == null;
+  if (Hands.down && Date.now() - Hands.at < 10000 && el.contains(Hands.down)) return false;   // a control in here is being pressed
+  const first = store[key] == null, same = !first && store.__last === key;
   store[key] = html; store.__last = key;
   const scroll = el.scrollTop;
+  const act = document.activeElement, inside = !!act && act !== el && el.contains(act), typing = inside && /^(INPUT|TEXTAREA|SELECT)$/.test(act.tagName);
+  const focus = inside && same && (Hands.keys || typing) ? ctlMark(act, el) : null;
+  let sel = null; if (focus && typing) { try { if (act.selectionStart != null) sel = [act.selectionStart, act.selectionEnd]; } catch (e) { /* a number box has no selection */ } }
+  const boxes = [];
+  if (same) for (const f of el.querySelectorAll('input, textarea')) if (f.type !== 'checkbox' && f.type !== 'radio' && f.value !== f.defaultValue) boxes.push({ m: ctlMark(f, el), value: f.value, def: f.defaultValue });
   el.innerHTML = html;
+  for (const b of boxes) { const f = ctlFind(el, b.m); if (f && f.defaultValue === b.def) f.value = b.value; }
+  if (focus) {
+    const f = ctlFind(el, focus);
+    if (f && !f.disabled && typeof f.focus === 'function') { f.focus({ preventScroll: true }); if (sel) { try { f.setSelectionRange(sel[0], sel[1]); } catch (e) { /* not a text box */ } } }
+    else el.focus({ preventScroll: true });
+  } else if (inside && Hands.keys) el.focus({ preventScroll: true });   // another view: the keyboard stays in the panel
   if (first) {
     let i = 0;
     for (const ch of el.children) {
@@ -369,7 +412,7 @@ const Panels = {
       F.setSub(`Level ${s.level} ${MID} ${T.modules} module${T.modules === 1 ? '' : 's'} ${MID} ${Fmt.n(s.credits)} cr`);
       const over = T.used > T.produced;
       let h = `<div class="tiles"><div class="tile"><span class="tile-lbl">Station rate</span><span class="tile-val num c-amber-hi">+${Fmt.n(rate)}<small>/min</small></span></div>` +
-        `<div class="tile"><span class="tile-lbl">Power</span><span class="tile-val num ${over ? 'c-bad' : T.flare ? 'c-warn' : 'c-ice'}">${over ? GLYPH.down + ' ' : T.flare ? GLYPH.sq + ' ' : ''}${T.used} / ${T.produced}</span></div>` +
+        `<div class="tile"><span class="tile-lbl">Power</span><span class="tile-val num ${over ? 'c-bad' : T.flare ? 'c-warn' : 'c-ice'}">${over ? GLYPH.down + ' ' : T.flare ? GLYPH.sq + ' ' : ''}${T.used}<small> / ${T.produced}</small></span></div>` +   /*qa:L6*/ // the second figure small, as in the station panel: at full size "▼ 213 / 145" was cut short
         `<div class="tile"><span class="tile-lbl">Berths</span><span class="tile-val num c-ice">${T.docks}</span></div></div>`;
       const sIdx = sectorIndex(s.sector || 'home');
       // A1.2: is there any empty cell inside the plot that touches the station? If not, every tier needs more plot.
@@ -1085,8 +1128,9 @@ const Panels = {
       unsupported: 'This browser cannot show notifications for a closed tab.',
       unconfigured: 'The notification service is not connected yet.',
     };
+    /*qa:H3fpsFn*/ const fps = () => { const f = F.body.querySelector('[data-fps]'); if (!f) return; const p = ctx.engine.perf(), t = p ? ` ${MID} ${Math.round(p.fps)} fps` : ''; if (f.textContent !== t) f.textContent = t; };
     const render = () => {
-      const st = ctx.meta.settings(), snd = ctx.sound.settings, perf = ctx.engine.perf();
+      const st = ctx.meta.settings(), snd = ctx.sound.settings;
       const sw = (id, on, label, sub, o = {}) => `<div class="setting"><div class="setting-main"><span class="setting-lbl">${esc(label)}</span>${sub ? `<span class="setting-sub">${esc(sub)}</span>` : ''}</div>${o.chip ? `<span class="chip ${o.chip[0]}">${esc(o.chip[1])}</span>` : ''}<button type="button" class="switch${on ? ' on' : ''}" role="switch" aria-checked="${on}" data-switch="${id}" aria-label="${esc(label)}"${o.disabled ? ' disabled' : ''}><i></i></button></div>`;
       const notifyRows = () => {
         const N = notifyApi() ? notifyApi().state() : { status: 'unsupported', wanted: false, daily: false, detail: '' };
@@ -1136,7 +1180,7 @@ const Panels = {
       h += sw('music', snd.music, 'Bridge ambience', 'A low hum and a slow pad') + slider('musicVol', snd.musicVol, 'Ambience volume');
       h += shelf('Motion and performance', null, { hue: 'var(--ice)' });
       h += seg('motion', st.motion || 'auto', [['auto', 'System'], ['reduced', 'Reduced'], ['full', 'Full']], 'Motion');
-      h += seg('perf', st.perf == null ? 'auto' : st.perf, [['auto', 'Auto'], ['2', 'High'], ['1', 'Medium'], ['0', 'Low']], `Effects tier${perf ? ` ${MID} ${Math.round(perf.fps)} fps` : ''}`);
+      h += seg('perf', st.perf == null ? 'auto' : st.perf, [['auto', 'Auto'], ['2', 'High'], ['1', 'Medium'], ['0', 'Low']], 'Effects tier').replace('Effects tier</span>', 'Effects tier<span data-fps></span></span>');   /*qa:H3fps*/ // the frame rate has its own element (fps() below): printed in the HTML it rebuilt the whole panel whenever it changed
       h += sw('perfTag', !!st.perfTag, 'Show performance readout', 'fps and tier in the context bar');
       h += shelf('Notifications', null, { hue: 'var(--ice)' });
       h += notifyRows();
@@ -1154,7 +1198,7 @@ const Panels = {
       h += shelf('About', null, { hue: 'var(--ink-3)' });
       h += `<div class="actions"><button type="button" class="btn" data-act="replay-tour">${icon('play', 14)}<span>Replay the tour</span></button><a class="btn" href="../manual/" target="_blank" rel="noopener">${icon('registry', 14)}<span>Open the manual</span></a>${typeof HUB_URL !== 'undefined' && HUB_URL ? `<a class="btn" href="${esc(HUB_URL)}">${hubMark(14)}<span>All games</span></a>` : ''}</div>`;
       h += `<p class="fine">Port Solace v2 ${MID} a browser space-station builder. Hand-written HTML, CSS and JavaScript with PixiJS for the world. Procedural audio, no trackers, saves on your device. ${MID} Licence: all original work; PixiJS under MIT.</p>`;
-      paint(F.body, h, sig, 'st');
+      paint(F.body, h, sig, 'st'); fps();   /*qa:H3fpsPaint*/
     };
     host.addEventListener('click', e => {
       const sw = e.target.closest('[data-switch]');
@@ -1176,7 +1220,7 @@ const Panels = {
       const b = e.target.closest('button[data-act]'); if (!b) return;
       const io = host.querySelector('#save-io'), act = b.dataset.act;
       if (act === 'export') { const txt = ctx.meta.exportSave(); if (io) { io.value = txt || ''; io.focus(); io.select(); } ctx.ui.toast(txt ? 'Profile exported. Copy the text to keep it safe.' : 'Nothing to export yet', txt ? 'good' : 'warn'); }
-      else if (act === 'import') { const txt = io ? io.value.trim() : ''; if (!txt) { ctx.ui.toast('Paste a profile first', 'warn'); return; } ctx.ui.confirm('Import this profile?', 'The current profile in this browser will be replaced.', () => { const ok = ctx.meta.importSave(txt); ctx.ui.toast(ok ? 'Profile imported' : 'That does not look like a Port Solace profile', ok ? 'good' : 'bad'); if (ok) ctx.ui.refresh(); }, { yes: 'Import', danger: true }); }
+      else if (act === 'import') { const txt = io ? io.value.trim() : ''; if (!txt) { ctx.ui.toast('Paste a profile first', 'warn'); return; } ctx.ui.confirm('Import this profile?', 'The current profile in this browser will be replaced.', () => { /*qa:M3import*/ const res = ctx.meta.importSave(txt), ok = !!res && res.ok !== false; ctx.ui.toast(ok ? 'Profile imported' : (res && res.why) || 'That does not look like a Port Solace profile', ok ? 'good' : 'bad'); if (ok) ctx.ui.refresh(); }, { yes: 'Import', danger: true }); }
       else if (act === 'restore') ctx.ui.openPanel('store');
       else if (act === 'notify-test') { const N = notifyApi(); if (N) N.test().then(ok => ctx.ui.toast(ok ? 'A test notification is on its way. It can take up to a minute.' : 'The test could not be sent. Check the notification service.', ok ? 'good' : 'warn')); }
       else if (act === 'scrap-station') ctx.ui.scrapStation();
@@ -1196,6 +1240,6 @@ const Panels = {
       sig.st = '';
     });
     render();
-    return { update() { if (host.contains(document.activeElement) && document.activeElement.matches('input,textarea')) return; render(); }, destroy() { } };
+    return { update() { /*qa:H3fpsTick*/ fps(); if (host.contains(document.activeElement) && document.activeElement.matches('input,textarea')) return; render(); }, destroy() { } };
   },
 };

@@ -158,12 +158,14 @@ const Account = (() => {
     return session;
   }
   function setSignedIn(user, token) {
+    /*qa:L2user*/ if (!user || typeof user !== 'object' || !user.id) { const e = new Error('The account service gave an answer the game could not read. Please try again.'); e.code = 'bad-answer'; throw e; }
     if (token) { session = { token, email: user.email }; writeJson(KEYS.session, session); }
     setState({ signedIn: true, user: { id: user.id, email: user.email }, conflict: false, lastError: null });
     startInterval();
     emit('signed-in', { user: { ...state.user } });
   }
   function setSignedOut(reason) {
+    clearRefused();   /*qa:refusedOut*/ // it belonged to this account's cloud save
     session = null; writeJson(KEYS.session, null);
     stopTimers(); queued = false;
     setState({ signedIn: false, user: null, cloud: null, conflict: false, dirty: false, syncing: false, offline: false });
@@ -209,13 +211,24 @@ const Account = (() => {
   }
 
   // ---------------------------------------------------------- pull and push (the two primitives)
+  var pullRefused = false;   /*qa:pullVar*/ // (var: setSignedOut, defined above, may run before this line)
+  /*qa:refused*/ // ...and across visits: the version of a cloud save this device could not read. While the cloud still holds that
+  // version, nothing but the player's own choice writes over it (doPush).
+  const REFUSED_KEY = 'portsolace.account.refused';
+  function isRefused() { if (pullRefused) return true; const r = readJson(REFUSED_KEY, null); return !!(r && state.cloud && typeof r.version === 'number' && r.version === state.cloud.version); }
+  function setRefused(version) { pullRefused = true; if (typeof version === 'number') writeJson(REFUSED_KEY, { version, at: Date.now() }); }
+  function clearRefused() { pullRefused = false; try { localStorage.removeItem(REFUSED_KEY); } catch (e) { /* storage is blocked */ } }
   async function doPull() {
     const m = meta(); if (!m) throw new AccountError('no-profile', 'The game has not loaded a profile yet.');
     const data = await call('/save');
+    /*qa:pullAnswer*/ if (!data || typeof data !== 'object' || !data.profile || typeof data.version !== 'number') throw new AccountError('bad-answer', 'The cloud save service gave an answer the game could not read.');
     applying = true;
     let r;
     try { r = m.import(data.profile); } finally { applying = false; }
-    if (!r || !r.ok) throw new AccountError('bad-cloud-save', (r && r.why) || 'The cloud save could not be read.');
+    /*qa:pullRefused*/ // A cloud save this device cannot read is left exactly as it is: no automatic push may write the local station
+    // over it (runPush). Only the player's own "keep this one" does.
+    if (!r || !r.ok) { /*qa:refusedSet*/ setRefused(data.version); throw new AccountError('bad-cloud-save', 'The cloud save could not be read on this device, so it is left as it is. You are playing the station saved here.'); }
+    clearRefused();   /*qa:refusedOk*/
     const now = Date.now();
     setMarker(data.version, now);
     setState({ cloud: { version: data.version, updatedAt: data.updatedAt, summary: data.summary || summarise(data.profile) }, dirty: false, conflict: false, offline: false, lastError: null, lastSyncAt: now });
@@ -226,13 +239,19 @@ const Account = (() => {
 
   async function doPush(o = {}) {
     const m = meta(); if (!m) throw new AccountError('no-profile', 'The game has not loaded a profile yet.');
+    /*qa:refusedDoPush*/ // every push comes through here, the conflict's default answer included (resolveConflict): only a push the
+    // player asked for (force, or chosen in the chooser) may replace a cloud save this device could not read
+    if (!o.force && !o.chosen && isRefused()) throw new AccountError('bad-cloud-save', 'Your cloud save could not be read on this device, so it is left as it is. You are playing the station saved here.');
     let profile;
     try { profile = JSON.parse(m.export()); } catch (e) { throw new AccountError('bad-profile', 'The local profile could not be exported.'); }
     delete profile.cloud;                                     // the marker is per browser, not part of the save
     const mk = marker();
     const baseVersion = o.baseVersion != null ? o.baseVersion : mk ? mk.version : state.cloud ? state.cloud.version : 0;
     const data = await call('/save', { method: 'PUT', body: { profile, baseVersion }, keepalive: !!o.keepalive });
+    /*qa:pushAnswer*/ // without a version in the answer nothing says the save was stored
+    if (!data || typeof data !== 'object' || typeof data.version !== 'number') throw new AccountError('bad-answer', 'The cloud save service gave an answer the game could not read.');
     const now = Date.now();
+    clearRefused();   /*qa:pullClear*/ /*qa:refusedPush*/ // the service took this station: the cloud save is readable again
     setMarker(data.version, now);
     setState({ cloud: { version: data.version, updatedAt: data.updatedAt, summary: data.summary || summarise(profile) }, dirty: queued, conflict: false, offline: false, lastError: null, lastSyncAt: now });
     emit('synced', { direction: 'push', version: data.version, updatedAt: data.updatedAt });
@@ -241,6 +260,9 @@ const Account = (() => {
 
   // One push in flight at a time; a request during a flight runs again afterwards.
   function runPush(o = {}) {
+    /*qa:pullGuard*/ /*qa:refusedGuard*/ if (!o.force && isRefused()) return Promise.resolve(fail('The cloud save could not be read on this device and is left as it is', { code: 'bad-cloud-save' }));
+    /*qa:trial*/ if (typeof Meta !== 'undefined' && Meta && Meta._trial) return Promise.resolve(fail('The save is being checked', { code: 'trial' }));   // an import still on trial (meta.js import)
+    /*qa:H1push*/ if (typeof Meta !== 'undefined' && Meta && Meta.stoodDown) return Promise.resolve(fail('This game is open in another tab, which holds the save', { code: 'stood-down' }));
     if (!state.available) return Promise.resolve(fail(NOT_CONNECTED));
     if (!state.signedIn) return Promise.resolve(fail('Not signed in', { code: 'signed-out' }));
     if (!meta()) return Promise.resolve(fail('The game has not loaded a profile yet', { code: 'no-profile' }));
@@ -299,13 +321,18 @@ const Account = (() => {
     if (!cloud) return 'local';
     if (!local || local.fresh) return 'cloud';
     const ct = cloud.updatedAt ? Date.parse(cloud.updatedAt) || 0 : 0;
-    return ct > (local.savedAt || 0) ? 'cloud' : 'local';
+    /*qa:newest*/ // "The newest" is judged by when this device last saved before this start. (The start itself stamps the save with
+    // now, which made the local side win every time: a device that had lain unused wrote its old save over the newer
+    // cloud save.) Within two minutes the local one stays: the two times are not read from the same clock.
+    const m = meta(), mine = m && m._asLoaded ? m._asLoaded.savedAt || 0 : (local.savedAt || 0);
+    return ct > mine + 120000 ? 'cloud' : 'local';
   }
   async function resolveConflict() {
     const choice = await choose();
     try {
       if (choice === 'cloud') return { ...(await doPull()), choice };
-      if (choice === 'local') return { ...(await doPush({ baseVersion: state.cloud ? state.cloud.version : 0 })), choice };
+      /*qa:refusedChoice*/ // chosen: the player picked it in the chooser (with no chooser up, "local" is only the default answer)
+      if (choice === 'local') return { ...(await doPush({ baseVersion: state.cloud ? state.cloud.version : 0, chosen: !!(api.ui && typeof api.ui.choose === 'function') })), choice };
     } catch (err) { return handleSyncError(err, choice === 'cloud' ? 'pull' : 'push', { noResolve: true }); }
     return fail('Choose which save to keep', { code: 'conflict', status: 'conflict', choice: choice || null });
   }
@@ -320,6 +347,12 @@ const Account = (() => {
       if (err.code === 'offline') emit('offline', { direction: 'me' }); else emit('error', { code: err.code, message: err.message, direction: 'me' });
       return { status: 'offline', why: err.message };
     }
+    /*qa:L2me*/ // a 200 that is not the service's answer (a Wi-Fi sign-in page): the same as not reaching it
+    if (!me || typeof me !== 'object' || !me.user || !me.user.id) {
+      setState({ offline: true, lastError: 'bad-answer' });
+      emit('offline', { direction: 'me' });
+      return { status: 'offline', why: 'The cloud save service gave an answer the game could not read.' };
+    }
     if (!state.signedIn) setSignedIn(me.user);
     else setState({ user: { id: me.user.id, email: me.user.email } });
     const cloud = me.save ? { version: me.save.version, updatedAt: me.save.updatedAt, summary: me.save.summary, size: me.save.size } : null;
@@ -333,8 +366,14 @@ const Account = (() => {
     }
     const mk = marker();
     const local = localSide();
+    /*qa:ownPush*/ // The last push of a visit goes out as the page closes, and its answer never comes back: at the next start the
+    // cloud's version is one this device does not know, though the save is its own. When the cloud holds exactly the save
+    // this device had when the game opened, the cloud has not moved.
+    const loaded = m._asLoaded && m._asLoaded.profile ? summarise(m._asLoaded.profile) : null;
+    const ownPush = !!(loaded && cloud.summary && ['name', 'day', 'level', 'credits', 'am', 'sectors', 'rank'].every(k => loaded[k] === cloud.summary[k]));
+    if (m._asLoaded) m._asLoaded.profile = null;              // only its time is needed from here on (choose())
     const localMoved = state.dirty || !mk || (local.savedAt || 0) > (mk.syncedAt || 0) + config.graceMs;   // dirty = a change since the last successful push
-    const cloudMoved = !mk || cloud.version !== mk.version;
+    const cloudMoved = (!mk || cloud.version !== mk.version) && !ownPush;
     if (local.fresh && cloudMoved) return outcome(await runPull(), 'cloud');     // nothing to lose here: take the cloud save
     if (!cloudMoved && !localMoved) return { status: 'local', inSync: true };
     if (cloudMoved && !localMoved) return outcome(await runPull(), 'cloud');
@@ -391,7 +430,15 @@ const Account = (() => {
   const unavailable = () => fail(NOT_CONNECTED, { code: 'unavailable' });
   const netFail = err => fail(err.message, { code: err.code, status: err.status || 0, retryAfter: err.data && err.data.retryAfter });
 
+  /*qa:L9var*/ let handoffError = null;   // this game signs in on its own page: there is no hand-off to fail
+  /*qa:L4*/ // The title waits for this. A cloud that has stalled must not hold it for the full request time twice over (16 s
+  // measured): while starting, each request gets 6 s, and the game then plays locally and syncs when the cloud answers.
   async function boot() {
+    const full = config.timeoutMs;
+    config.timeoutMs = full > 0 ? Math.min(full, 6000) : full;
+    try { return await bootNow(); } finally { config.timeoutMs = full; }
+  }
+  async function bootNow() {
     bindOnce();
     if (!state.available) return { status: 'none', why: NOT_CONNECTED };
     if (!loadSession()) return { status: 'none' };
@@ -524,6 +571,7 @@ const Account = (() => {
     ui: { choose: null },                                     // H sets Account.ui.choose({local, cloud}) -> Promise<'local'|'cloud'>
     configure,
     boot,
+    takeHandoffError() { /*qa:L9api*/ const e = handoffError; handoffError = null; return e; },
     signup, login, logout, recover, deleteAccount,
     forgot, reset,
     get resetToken() { return resetToken; },                 // the token from ?reset=<token>, until it is used or cleared

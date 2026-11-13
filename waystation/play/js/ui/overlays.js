@@ -49,6 +49,21 @@ const Overlays = {
       const n = document.getElementById('notices') || document.body;
       n.insertAdjacentHTML('afterbegin', '<div id="toasts" aria-live="polite"></div>');
     }
+    /*qa:M6*/ // An open confirmation or sheet holds the keyboard: Tab goes round inside it, and a focus that lands behind it is
+    // brought back. Without this, Enter on a control behind a question that has to be answered opened a panel under it.
+    const trapBox = () => { const top = this._top === 'modal' ? (this._modal ? 'modal' : this._sheet ? 'sheet' : '') : (this._sheet ? 'sheet' : this._modal ? 'modal' : ''); return top === 'modal' ? $('#modal .box') : top === 'sheet' ? $('#sheet .sheet-box') : null; };
+    const stops = box => [...box.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(n => !n.disabled && n.offsetParent !== null);
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Tab') return;
+      const box = trapBox(); if (!box) return;
+      const list = stops(box); if (!list.length) { e.preventDefault(); return; }
+      const at = list.indexOf(document.activeElement), last = list.length - 1;
+      if (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === last)) { e.preventDefault(); list[e.shiftKey ? last : 0].focus(); }
+    }, true);
+    document.addEventListener('focusin', e => {
+      const box = trapBox(); if (!box || box.contains(e.target)) return;
+      const list = stops(box); if (list.length) list[0].focus();
+    });
     const modal = $('#modal');
     modal.addEventListener('click', e => {
       const b = e.target.closest('#modal-actions button'); if (b) { this.modalAction(+b.dataset.i); return; }
@@ -77,7 +92,26 @@ const Overlays = {
   // ---------------------------------------------------------- 1. modal (6.8, 5.3)
   // o = { kind: 'event'|'alert'|'confirm'|'lend'|'store', tag, title, html, extra,
   //       actions: [{ label, primary, danger, am, fn }], dismissible, onClose }
+  /*qa:L8from*/ // Someone working by keyboard gets their place back when the last pop-up closes: the control they were on when the
+  // first one opened. (Not for a mouse: there the focus has no meaning, and Space has to stay the pause key.)
+  _from: null,
+  _keepPlace() {
+    if (this._modal || this._sheet) return;
+    const a = document.activeElement;
+    this._from = typeof Hands !== 'undefined' && Hands.keys && a && a !== document.body ? a : null;
+  },
+  _giveBack() {
+    if (this._modal || this._sheet) return;
+    const n = this._from; this._from = null;
+    if (typeof Hands === 'undefined' || !Hands.keys) return;
+    const ok = x => x && document.contains(x) && x.offsetParent !== null && !x.disabled;
+    const to = ok(n) ? n : [$('#panel .panel-body'), $('#rail .rail-btn')].find(ok);
+    if (to) to.focus({ preventScroll: true });
+  },
   modal(o) {
+    /*qa:lock*/ if (this._modal && this._modal.lock && !o.lock) return;
+    if (o.lock && this._sheet) this.closeSheet();   /*qa:lockOverSheet*/ // sheets sit above modals: an open one would hide it   // a notice that ends the session here (another tab holds the save) is not replaced by a transmission
+    this._keepPlace();
     const m = $('#modal'), box = m.querySelector('.box');
     box.dataset.kind = o.kind || 'confirm';
     box.querySelector('.modal-ic').innerHTML = icon(o.icon || (o.kind === 'store' ? 'am' : o.kind === 'confirm' || o.kind === 'lend' ? 'info' : 'dish'), 16);
@@ -89,7 +123,7 @@ const Overlays = {
       const cls = ['btn', 'big', a.primary ? 'primary' : '', a.danger ? 'danger' : '', a.am ? 'am' : '', a.ghost ? 'ghost' : ''].filter(Boolean).join(' ');
       return `<button type="button" class="${cls}" data-i="${i}"${a.disabled ? ' disabled' : ''}>${a.icon ? icon(a.icon, 16) : ''}<span>${esc(a.label)}</span></button>`;
     }).join('');
-    this._modal = o;
+    this._modal = o; this._top = 'modal';   /*qa:M6modal*/
     m.classList.remove('open'); void m.offsetWidth; m.classList.add('open');
     document.body.setAttribute('data-modal', o.kind || 'confirm');
     const focus = $('#modal-extra input') || $('#modal-actions .btn.primary') || $('#modal-actions .btn');
@@ -101,16 +135,18 @@ const Overlays = {
     const a = (o.actions || [])[i];
     // an explicit action answers the modal: closing it afterwards is not a dismissal, so onClose
     // (which resolves confirm() promises to false) must not run before the action resolves them to true
-    this._modal = Object.assign({}, o, { onClose: null });
+    this._modal = Object.assign({}, o, { onClose: null, lock: false });   /*qa:lockAct*/ // its own button may close it
     this.closeModal();
     if (a && typeof a.fn === 'function') a.fn();
     if (this.sound) this.sound.click();
   },
   closeModal() {
     const m = $('#modal'); if (!m) return;
+    if (this._modal && this._modal.lock) return;   /*qa:lockClose*/ // only its own button closes it
     const o = this._modal; this._modal = null;
     m.classList.remove('open');
     document.body.removeAttribute('data-modal');
+    this._giveBack();   /*qa:L8modalClose*/
     if (o && typeof o.onClose === 'function') o.onClose();
   },
   // Esc closes confirmations; a transmission (event / alert) must be answered
@@ -135,6 +171,8 @@ const Overlays = {
   // ---------------------------------------------------------- 2. sheets: Daily, While you were away, Keys (5.3)
   // o = { id, hue: 'amber'|'ice'|'am'|'good', html, actions: [{ id, label, primary, am, ghost, fn }], dismissible, onClose, wide }
   sheet(o) {
+    if (this._modal && this._modal.lock) return;   /*qa:lockSheet*/
+    this._keepPlace();   /*qa:L8sheet*/
     const s = $('#sheet'), box = s.querySelector('.sheet-box');
     box.dataset.sheet = o.id || 'sheet';
     box.dataset.hue = o.hue || 'amber';
@@ -147,7 +185,7 @@ const Overlays = {
     box.querySelector('.sheet-content').innerHTML =
       `<button type="button" class="btn icon ghost sheet-close" data-sheet-act="__close" title="Close" aria-label="Close">${icon('close', 16)}</button>` +
       o.html + (acts ? `<div class="sheet-actions">${acts}</div>` : '');
-    this._sheet = o;
+    this._sheet = o; this._top = 'sheet';   /*qa:M6sheet*/
     s.classList.remove('open'); void s.offsetWidth; s.classList.add('open');
     document.body.setAttribute('data-sheet', o.id || 'sheet');
     const f = box.querySelector('.sheet-actions .btn.primary, .sheet-actions .btn.am, .sheet-actions .btn');
@@ -167,6 +205,7 @@ const Overlays = {
     const o = this._sheet; this._sheet = null;
     s.classList.remove('open');
     document.body.removeAttribute('data-sheet');
+    this._giveBack();   /*qa:L8sheetClose*/
     if (o && typeof o.onClose === 'function') o.onClose();
   },
 

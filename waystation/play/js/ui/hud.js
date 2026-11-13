@@ -325,6 +325,7 @@ const UI = {
     $('#ctx-actions').addEventListener('click', e => { const b = e.target.closest('button[data-act]'); if (b && !b.disabled) this.ctxAction(b.dataset.act); });
     $('#nextup').addEventListener('click', e => { const r = e.target.closest('.nu-row[data-go]'); if (r) this.nextUpGo(r.dataset.go, r); });
     window.addEventListener('keydown', e => this.onKey(e));
+    window.addEventListener('keyup', e => this.onKeyUp(e));   /*qa:M5bind*/
     window.addEventListener('resize', () => { this.placeAvoid(); });
 
     // Sim bus (0.6)
@@ -347,6 +348,16 @@ const UI = {
       Sim.on('discover', d => this.onDiscover(d));
       Sim.on('purchase', d => this.onPurchase(d));
       Sim.on('offline', d => { if (this.started) this.showAway(d); else this._pendingOffline = d; });
+      /*qa:H2*/ // the start's own offline pass ran before this listener existed: take what it kept
+      if (typeof Meta !== 'undefined' && Meta && Meta._offlineEvent) { if (!this._pendingOffline) this._pendingOffline = Meta._offlineEvent; Meta._offlineEvent = null; }
+      Sim.on('standdown', () => this.showStoodDown());
+      /*qa:stood2*/ // another tab may have taken the save while this one was still starting, before anyone listened
+      if (typeof Meta !== 'undefined' && Meta && Meta.stoodDown) setTimeout(() => this.showStoodDown(), 0);
+      else if (typeof Meta !== 'undefined' && Meta && Meta.newer) setTimeout(() => this.showNewer(), 0);
+      /*qa:L3*/ // the device refused the save (storage full or blocked): say so, or the station is simply gone at the next visit
+      Sim.on('savefail', () => { /*qa:L3b*/ if (this.started) this.saveFailNotice(); });   // before the start, start() says it (the first save runs before the HUD exists)
+      /*qa:L9*/ // a sign-in that failed while the game was still starting (account.js finishHandoff) was reported before anyone listened
+      if (typeof Account !== 'undefined' && Account && typeof Account.takeHandoffError === 'function') { const hf = Account.takeHandoffError(); if (hf) this._handoffErr = hf; }   /*qa:L9b*/ // said when the game starts (start())
       Sim.on('plot', d => this.onPlot(d));
       Sim.on('achievement', d => this.onAchievement(d));
       Sim.on('account', d => this.onAccount(d));
@@ -468,10 +479,41 @@ const UI = {
     const rb = $('.rail-btn[data-panel="build"]'); if (rb) rb.classList.toggle('pulse', !!fresh);
     if (s && s.pending) this.showEvent();
     if (this._pendingOffline) { const d = this._pendingOffline; this._pendingOffline = null; setTimeout(() => this.showAway(d), 500); }
+    /*qa:startNotes*/ // what the start found out before there was a HUD to say it
+    /*qa:newer*/ if (typeof Meta !== 'undefined' && Meta && Meta.stoodDown) this.showStoodDown();
+    else if (typeof Meta !== 'undefined' && Meta && Meta.newer) this.showNewer();
+    /*qa:startNotes2*/ // each has a chip of its own, so a later notice does not take its place, and stays long enough to read
+    if (typeof Meta !== 'undefined' && Meta) {
+      /*qa:secondTry*/ /*qa:startNotes3*/ // (the second try has been made by now: main.js, straight after the start)
+      if (Meta.recovered) { Meta.recovered = false; const kept = !Meta._keepStored; setTimeout(() => this.toast(kept ? 'Your saved station could not be read, so a new one was started. A copy of the old save is kept on this device.' : 'Your saved station could not be read. It is still stored, and nothing is saved over it until this device has room for a copy.', 'warn', { chip: 'Save data', ms: 12000 }), 1200); }
+      else if (Meta.cloudInstead) { Meta.cloudInstead = false; setTimeout(() => this.toast('The save on this device could not be read, so your cloud save was loaded. A copy of the old one is kept on this device.', 'warn', { chip: 'Save data', ms: 12000 }), 1200); }
+      if (Meta.asideAsk) { const a = Meta.asideAsk; Meta.asideAsk = null; const ask = () => { if (Overlays.anyOpen() || (typeof Tutorial !== 'undefined' && Tutorial && Tutorial.active)) { setTimeout(ask, 1500); return; } this.askAside(a); }; setTimeout(ask, 1800); }
+      else if (Meta.mended) { Meta.mended = false; setTimeout(() => this.toast('Part of your save could not be read and was set back to how a new station starts. A copy of the save as it was is kept on this device.', 'warn', { chip: 'Save data', ms: 12000 }), 1200); }
+      if (Meta._saveFailed) setTimeout(() => this.saveFailNotice(), 700);
+    }
+    if (this._handoffErr) { this._handoffErr = null; setTimeout(() => this.toast('The sign-in could not be completed, so you are not signed in. Please try again.', 'warn', { icon: 'cloud', chip: 'Account', ms: 9000 }), 500); }   /*qa:sooner*/
+    else {
+      // a cloud save that failed while the game was starting was reported before anyone listened
+      const a = AccountAdapter.state();
+      if (a && a.signedIn && (a.lastError || a.offline) && !this._acctLastErr && !this._acctOffline) {
+        this._acctOffline = !!a.offline; this._acctLastErr = a.lastError || null;
+        /*qa:cloudWords*/ const words = a.lastError === 'bad-cloud-save' ? 'Your cloud save could not be read on this device, so it is left as it is. You are playing the station saved here.' : 'Cloud save is not working right now. You are playing on this device; it will sync when the service answers.';
+        setTimeout(() => this.toast(words, 'warn', { icon: 'cloud', chip: 'Account', ms: 9000 }), 900);   /*qa:sooner2*/
+      }
+    }
     // A2.2: a fresh station (no dock, no ships served) that never finished or skipped the tour gets it first;
     // the daily sheet and any celebration wait until the tour ends
     const tour = !!fresh && typeof Tutorial !== 'undefined' && Tutorial && !Tutorial.done;
     if (tour) this.startTour(); else this.scheduleDaily(900);
+    /*qa:tourBack*/ // The tour starts by itself only where nothing is built yet. Someone whose page reloaded part-way through (or whose
+    // phone closed the app) comes back to a station with a dock and no tour: offer it once, then leave them be.
+    if (!tour && typeof Tutorial !== 'undefined' && Tutorial && !Tutorial.done) {
+      const set = MetaAdapter.settings();
+      if (set && !set.tourOffered) {
+        set.tourOffered = true; MetaAdapter.saveSettings();
+        setTimeout(() => { if (!Tutorial.active && !Tutorial.done && !Overlays.anyOpen()) this.toast('New here, or want a refresher? The tour takes two minutes.', 'info', { chip: 'Tour', ms: 15000, action: { label: 'Show me', fn: () => this.replayTour() } }); }, 2600);
+      } else Tutorial.markDone();
+    }
   },
   startTour() {
     let tries = 0;
@@ -526,11 +568,11 @@ const UI = {
     const setText = (sel, v) => { const el = $(sel); if (el && el.textContent !== v) el.textContent = v; };
     setText('#sb-sector-name', MetaAdapter.sectorDef(s.sector || 'home').name || 'Home');
     setText('#sb-station', `${s.name} ${MID2} ${regOf(s.name)}`);
-    const cr = $('#v-credits'); if (cr) { cr.classList.toggle('bad', s.credits < 0); Counter.set(cr, s.credits, v => v < 0 ? `${GLYPH.down} ${Fmt.n(Math.abs(v))}` : Fmt.n(v)); }
+    const cr = $('#v-credits'); if (cr) { cr.classList.toggle('bad', s.credits < 0); Counter.set(cr, s.credits, v => v < 0 ? `${GLYPH.down} ${Fmt.short(Math.abs(v))}` : Fmt.short(v)); }   /*qa:shortCr*/
     const y = s.income ? s.income.yesterday : 0;
     const tri = $('#v-income-tri'); if (tri) tri.className = 'tri ' + (y >= 0 ? 'up c-good' : 'down c-bad');
-    Counter.set($('#v-income'), y, Fmt.signed, { quiet: true });
-    Counter.set($('#v-am'), MetaAdapter.am(), Fmt.n);
+    Counter.set($('#v-income'), y, v => (v >= 0 ? '+' : GLYPH.minus) + Fmt.short(Math.abs(v)), { quiet: true });   /*qa:shortIn*/
+    Counter.set($('#v-am'), MetaAdapter.am(), Fmt.short);   /*qa:shortAm*/
     const over = T.used > T.produced, pw = $('#v-power');
     if (pw) { pw.className = 'ro-val ' + (over ? 'c-bad' : T.flare ? 'c-warn' : 'c-ice'); const prod = T.produced, pre = over ? `${GLYPH.down} ` : T.flare ? `${GLYPH.sq} ` : ''; Counter.set(pw, T.used, v => `${pre}${Fmt.n(v)} / ${Fmt.n(prod)}`, { quiet: true }); }
     const pp = $('#power-pips'); if (pp) { const h = this.powerPips(T.used, T.produced); if (pp._h !== h) { pp._h = h; pp.innerHTML = h; } }
@@ -571,7 +613,7 @@ const UI = {
       if (!avail) state = 'off';
       else if (!st.signedIn) { state = 'signed-out'; tip = 'Guest · this station is saved on this device only. Sign in to keep it.'; }
       else if (st.syncing) { state = 'syncing'; tip = 'Cloud save · syncing…'; }
-      else if (st.lastError) { state = 'error'; tip = `Cloud save · ${st.lastError}${last}`; }
+      else if (st.lastError) { state = 'error'; tip = `Cloud save · error (${st.lastError}), it retries on its own${last}`; }   /*qa:cloudTip*/
       else if (offline) { state = 'offline'; tip = `Cloud save · offline, retrying${last}`; }
       else if (st.dirty) { state = 'dirty'; tip = `Cloud save · changes waiting to sync${last}`; }
       else { state = 'synced'; tip = st.lastSyncAt ? `Cloud save · synced ${Fmt.ago(Date.now() - st.lastSyncAt)} ago` : 'Cloud save · synced'; }
@@ -586,7 +628,7 @@ const UI = {
       if (avail && st.signedIn && st.user) {
         const c = st.cloud && st.cloud.summary;
         h = `<div class="title-signed"><span class="title-signed-main">${icon('cloud', 14)}<span>Signed in ${MID2} ${esc(st.user.email)}</span></span>` +
-          `<span class="micro">${c ? `Cloud save ${MID2} ${esc(c.name || 'station')} ${MID2} ${Fmt.day(c.day || 1)} ${MID2} L${c.level || 1} ${MID2} ${Fmt.n(c.credits || 0)} cr` : 'No cloud save yet'}${st.cloud && st.cloud.updatedAt ? ` ${MID2} ${Fmt.ago(Date.now() - st.cloud.updatedAt)} ago` : ''}</span>` +
+          `<span class="micro">${c ? `Cloud save ${MID2} ${esc(c.name || 'station')} ${MID2} ${Fmt.day(c.day || 1)} ${MID2} L${c.level || 1} ${MID2} ${Fmt.n(c.credits || 0)} cr` : 'No cloud save yet'}${/*qa:M7*/ (u => (Number.isFinite(u) ? ` ${MID2} ${Fmt.ago(Date.now() - u)} ago` : ''))(st.cloud && st.cloud.updatedAt ? (typeof st.cloud.updatedAt === 'number' ? st.cloud.updatedAt : Date.parse(st.cloud.updatedAt)) : NaN)}</span>` +
           `<button type="button" class="linkish" data-account="notyou">Not you?</button></div>`;
       } else if (!avail) h = '';   // no cloud on this build: the Settings shelf explains, the title band stays quiet
       else h = `<button type="button" class="btn ghost" data-account="signin">${icon('cloud', 14)}<span>Sign in or create an account</span></button>`;
@@ -639,6 +681,7 @@ const UI = {
     if (this._alert.kind && performance.now() < this._alert.until) { kind = 'alert'; text = `Condition ${MID2} ${this._alert.kind === 'pirates' ? 'Pirate raid' : 'Hold fever'}`; }
     else if (T.flare) { const n = Math.max(1, Math.ceil(s.fx.flareUntil - s.day)); kind = 'flare'; text = `Condition ${MID2} Solar flare ${MID2} Solar arrays dark ${n} day${n === 1 ? '' : 's'}`; }
     else if (s.fx && s.day < s.fx.festivalUntil) { const n = Math.max(1, s.fx.festivalUntil - s.day); kind = 'festival'; text = `Festival ${MID2} Visitor spending ${GLYPH.times}2 ${MID2} ${n} day${n === 1 ? '' : 's'}`; }
+    else if (typeof Meta !== 'undefined' && Meta && Meta._saveFailed) { kind = 'flare'; text = `Not saving ${MID2} this device is refusing the save`; }   /*qa:L3cond*/ // until a save goes through again (meta.js save)
     const el = $('#condition'); if (el && text && el.textContent !== text) el.textContent = text;
     if (kind !== this._cond) { this._cond = kind; if (kind) document.body.setAttribute('data-condition', kind); else document.body.removeAttribute('data-condition'); }
   },
@@ -785,6 +828,8 @@ const UI = {
     if (this.panel === id) { if (this._inst) this._inst.update(); this.setPeek(false); return; }
     if (this._inst) { this._inst.destroy(); this._inst = null; }
     this.setPeek(false);
+    /*qa:L8open*/ // someone who opened the panel from the keyboard gets their place back when it closes (closePanel)
+    if (!this.panel) { const a = document.activeElement; this._panelFrom = a && a !== document.body && !host.contains(a) && typeof Hands !== 'undefined' && Hands.keys ? a : null; }
     this.panel = id;
     host.dataset.panel = id;
     document.body.setAttribute('data-panel', id);
@@ -801,6 +846,7 @@ const UI = {
   closePanel() {
     const host = $('#panel'), wrap = $('#panel-host');
     if (!this.panel) return;
+    const wasPanel = this.panel;   /*qa:L8id*/
     if (this._inst) { this._inst.destroy(); this._inst = null; }
     this.setPeek(false);
     this.panel = null;
@@ -809,6 +855,13 @@ const UI = {
     if (host) { host.classList.remove('open'); host.classList.add('closing'); setTimeout(() => { if (!this.panel) { host.classList.remove('closing'); wrap.hidden = true; host.innerHTML = ''; host.removeAttribute('data-panel'); } }, Motion.reduced() ? 0 : 180); }
     Sound.close();
     EngineAdapter.avoid(null);
+    /*qa:L8close*/ /*qa:L8back*/ const from = this._panelFrom; this._panelFrom = null;
+    if (typeof Hands !== 'undefined' && Hands.keys && (!document.activeElement || document.activeElement === document.body || (host && host.contains(document.activeElement)))) {
+      // back to where the panel was opened from; failing that its button on the rail, so the next Tab does not start from the top of the page
+      const ok = n => n && document.contains(n) && n.offsetParent !== null && !n.disabled;
+      const to = ok(from) ? from : [$(`.rail-btn[data-panel="${wasPanel}"]`), $('#rail .rail-btn'), $('#sb-menu')].find(ok);
+      if (to) to.focus({ preventScroll: true });
+    }
   },
   // the camera keeps the station clear of the panel (2.4 / 3.2); a phone sheet covers the world instead of sharing it
   placeAvoid() {
@@ -1045,6 +1098,7 @@ const UI = {
   togglePause() { const s = S(); if (s) this.setSpeed(s.speed ? 0 : 1); },
 
   // ---------------------------------------------------------- keyboard (5.1)
+  /*qa:M5up*/ onKeyUp(e) { if (e.code === 'Space' && this._eatSpace) { this._eatSpace = false; e.preventDefault(); } },
   onKey(e) {
     if (document.body.getAttribute('data-screen') === 'title') return;
     const tag = e.target && e.target.tagName;
@@ -1053,7 +1107,13 @@ const UI = {
     if (e.ctrlKey || e.metaKey || e.altKey || !S()) return;
     const k = e.key.toLowerCase();
     if (e.key === 'Escape') { if (EngineAdapter.placing()) this.place(null); else if (EngineAdapter.selected()) this.deselect(); else if (this.panel) this.closePanel(); }
-    else if (e.code === 'Space') { e.preventDefault(); this.togglePause(); }
+    else if (e.code === 'Space') { /*qa:M5*/ /*qa:M5b*/ // Space is the pause key, except for someone moving through the controls with Tab: there it presses the
+      // control it is on, and only that. After a mouse click the focus is still on the button clicked: Space pauses, and
+      // the key's release must not press that button a second time (onKeyUp).
+      const ctl = e.target && e.target.closest ? e.target.closest('button, a[href], summary, [role="button"], [role="tab"], [role="switch"]') : null;
+      if (ctl && typeof Hands !== 'undefined' && Hands.keys) return;
+      if (ctl) this._eatSpace = true;
+      e.preventDefault(); this.togglePause(); }
     else if (e.key === '1') this.setSpeed(1);
     else if (e.key === '?') Overlays.keys();
     else if (k === 'q') { const b = $('#collect-fab'); if (b && !b.hidden) this.collectAll(b); }   // Q: every game's panels leave it free
@@ -1284,6 +1344,38 @@ const UI = {
     if (credits || (grant.credits && grant.credits.hours)) Overlays.fly(from, this.anchor('credits'), { n: 10, icon: 'credits', onHit: () => this.anchorHit('credits') });
     this.refresh();
   },
+  /*qa:L3fn*/ saveFailNotice() {
+    /*qa:L3fn2*/ const signedIn = !!AccountAdapter.state().signedIn, canSignIn = !signedIn && AccountAdapter.available();
+    this.toast(signedIn ? 'This device would not store the save. Your cloud save still holds your station.' : 'This device would not store the save. Free some space or allow site data for this page, or what you build will not be here next time.', 'bad',
+      { chip: 'Saving', ms: 12000, action: canSignIn ? { label: 'Save it', fn: () => this.accountCard() } : undefined });
+  },
+  /*qa:H1modal*/ // another tab or window opened this game after this one: it owns the save now, and this one has stopped saving (meta.js)
+  /*qa:newerFn*/ // an old copy of the game met a save from a newer one (meta.js init): nothing is written, the save is safe
+  showNewer() {
+    if (Overlays._modal && Overlays._modal.lock) return;
+    try { this.setSpeed(0); } catch (e) { /* the title is still up: nothing runs yet */ }
+    Overlays.modal({ kind: 'alert', icon: 'info', tag: 'Save', title: 'This copy of the game is out of date', dismissible: false, lock: true,
+      html: 'Your station was saved by a newer version of the game. It has not been touched, and nothing done here will be kept. Reload to get the current version.',
+      actions: [{ label: 'Reload', primary: true, fn: () => location.reload() }] });
+  },
+  /*qa:noHudTry*/ // A copy of a save that was set aside can be read again and something has been built since (meta.js retryAside)
+  askAside(a) {
+    /*qa:askSafe*/ // the focused answer changes nothing (Space and Enter press it); the station that is replaced is kept (meta.js)
+    Overlays.modal({ kind: 'confirm', icon: 'info', tag: 'Save data', title: 'An earlier station can be opened again',
+      html: `A save on this device that could not be read before can be read now: <b>${esc(a.name || 'your station')}</b>, ${Fmt.day(a.day || 1)}, level ${a.level || 1}.<br><br>Opening it replaces the station you are playing now.`,
+      actions: [
+        { label: 'Not now', primary: true },
+        { label: 'Open the earlier station', fn: () => { const ok = Meta.restoreAside(); this.refresh(); this.toast(ok ? 'The earlier station is open.' : 'It could not be opened after all. Nothing was changed.', ok ? 'good' : 'warn', { chip: 'Save data', ms: 9000 }); } },
+        { label: 'Keep this one', ghost: true, fn: () => Meta.forgetAside() },
+      ] });
+  },
+  showStoodDown() {
+    /*qa:stood3*/ if (Overlays._modal && Overlays._modal.lock) return;
+    try { this.setSpeed(0); } catch (e) { /* the title is still up: nothing runs yet */ }
+    Overlays.modal({ kind: 'alert', icon: 'info', tag: 'Save', title: 'Open in another tab', dismissible: false, lock: true,
+      html: 'This station is now open in another tab or window, and that one holds the save. Nothing more done here will be kept.',
+      actions: [{ label: 'Play here instead', primary: true, fn: () => location.reload() }] });
+  },
   showAway(d) {
     if (!d) return;
     const banked = d.banked != null ? d.banked : d.credits;
@@ -1294,7 +1386,7 @@ const UI = {
     if (!d) { this.toast('Daily rewards need a profile', 'warn'); return; }
     Overlays.daily(d, {
       onClaim: () => { const rw = MetaAdapter.claimDaily(); if (rw) { this.celebrate('daily', Object.assign({ reward: rw }, MetaAdapter.daily() || {})); Overlays.fly($(this.phone || !($('#btn-daily') && $('#btn-daily').offsetParent) ? '#sb-menu' : '#btn-daily'), this.anchor(rw.am ? 'am' : 'credits'), { n: 8, icon: rw.am ? 'am' : 'credits', hue: rw.am ? 'am' : 'amber', onHit: () => this.anchorHit(rw.am ? 'am' : 'credits') }); } this.refresh(); },
-      onRepair: () => { if (MetaAdapter.repairStreak()) this.toast('Streak repaired', 'good'); else this.toast('Not enough Antimatter', 'bad'); this.refresh(); },
+      onRepair: () => { /*qa:M3repair*/ const r = MetaAdapter.repairStreak(); if (r && r.ok !== false) this.toast('Streak repaired', 'good'); else { this.toast((r && r.why) || 'Not enough Antimatter', 'bad'); Sound.error(); } this.refresh(); },
     });
   },
 
@@ -1475,7 +1567,7 @@ const UI = {
     const bd = MetaAdapter.build(r, c); if (!bd || !bd.building) return;
     const name = S() && S().grid[r][c] ? MODULES[S().grid[r][c].id].name : 'the build';
     this.confirm('Skip the wait?', `Finish <b>${esc(name)}</b> now for <b class="c-am">${bd.skipAM} AM</b>. You have ${Fmt.n(MetaAdapter.am())} AM.`, () => {
-      if (!MetaAdapter.skipBuild(r, c)) { this.toast('Not enough Antimatter', 'bad'); Sound.error(); }
+      /*qa:M3skip*/ const res = MetaAdapter.skipBuild(r, c); if (!res || res.ok === false) { this.toast((res && res.why) || 'Not enough Antimatter', 'bad'); Sound.error(); }
       this.refresh();
     }, { kind: 'store', yes: `Skip ${MID2} ${bd.skipAM} AM`, am: true, tag: 'Antimatter' });
   },
@@ -1494,7 +1586,7 @@ const UI = {
   },
   rename(name) {
     const s = S(); if (!s) return;
-    const n = String(name || '').trim().slice(0, 28); if (!n || n === s.name) return;
+    const n = /*qa:L5*/ typeof Meta !== 'undefined' && Meta && Meta.cleanName ? Meta.cleanName(name) : String(name || '').trim().slice(0, 28); if (!n || n === s.name) return;
     s.name = n; if (has(Sim, 'emit')) Sim.emit('change'); call(Sim, 'save', [], undefined);
     this.toast(`Registry updated: ${n} ${MID2} ${regOf(n)}`, 'good', { chip: 'Station' });
   },
@@ -1558,7 +1650,7 @@ const UI = {
     const x = MetaAdapter.expeditions().find(e => e.id === id); if (!x) return;
     const am = Math.max(1, Math.ceil(Math.max(0, x.endsAt - Date.now()) / 60000 / 8));
     this.confirm('Bring them home now?', `Instant return from <b>${esc(MetaAdapter.sectorDef(x.sector).name || x.sector)}</b> for <b class="c-am">${am} AM</b>. The loot is the same.`, () => {
-      if (!MetaAdapter.skipExpedition(id)) { this.toast('Not enough Antimatter', 'bad'); Sound.error(); }
+      /*qa:M3return*/ const res = MetaAdapter.skipExpedition(id); if (!res || res.ok === false) { this.toast((res && res.why) || 'Not enough Antimatter', 'bad'); Sound.error(); }
       this.refresh();
     }, { kind: 'store', yes: `Return ${MID2} ${am} AM`, am: true, tag: 'Antimatter' });
   },

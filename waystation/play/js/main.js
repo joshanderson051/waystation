@@ -102,7 +102,7 @@
       }
       return;
     }
-    const name = ((T.name && T.name.value.trim()) || randomName()).slice(0, 28);
+    const name = /*qa:L5*/ Meta.cleanName(T.name && T.name.value) || Meta.cleanName(randomName());
     if (T.mode === 'new') {
       // NEW PROFILE: Meta rebuilds a fresh profile and home station and emits sector 'switched',
       // which the engine and the HUD both follow.
@@ -180,12 +180,31 @@
     if (typeof PAL !== 'undefined' && has(PAL, 'load')) { try { PAL.load(); } catch (e) { /* fallbacks stay */ } }
 
     const had = !!(safeGet('portsolace.profile.v2') || safeGet('portsolace-save-v1'));
-    const r = Meta.init() || {};
-    call(Store, 'flush');
+    /*qa:H4boot*/ // Meta.init() starts a new station and keeps a copy of a save it cannot read; if even that throws, the stored
+    // profile is set aside here and the start is tried once more. Nothing in storage may leave the title dead.
+    /*qa:boot2*/ // If Meta.init() itself throws, the game could not start for a reason that is not the save (a script that did not
+    // load, most likely): storage is left exactly as it is, and the page says so instead of sitting on a dead title.
+    let r;
+    try { r = Meta.init() || {}; }
+    catch (e) { console.error('The game could not start', e); showStartFailure(e); return; }
+    /*qa:second*/ // A stored save the start could not use gets its second try at once, before the cloud is asked (it is the local
+    // side of any comparison with the cloud save). Then a copy set aside on an earlier visit is looked at again.
+    try { if (Meta.recovered && has(Meta, 'secondTry') && Meta.secondTry()) { r.resumed = true; console.warn('The stored save needed its second try to load'); } } catch (e) { console.error(e); }
+    try { const aside = has(Meta, 'retryAside') ? Meta.retryAside() : null; if (aside && aside.restored) r.resumed = true; Meta.asideAsk = aside && aside.ask ? aside : null; } catch (e) { Meta.asideAsk = null; }
+    try { call(Store, 'flush'); } catch (e) { console.error('The store could not settle its waiting grants', e); }
     if (typeof Notify !== 'undefined') call(Notify, 'boot');   // A3: re-attaches push notifications only when the player opted in earlier
     // cloud save (A2.1): with a stored sign-in, pull a newer cloud profile or push a newer local one before the title shows
     if (typeof Account !== 'undefined' && has(Account, 'boot')) {
-      try { const a = await Account.boot(); if (a && a.status === 'cloud') call(Meta, 'load'); } catch (e) { /* play continues locally */ }
+      try {
+        const a = await Account.boot();
+        /*qa:pull2*/ // the cloud save is the station now: a Resume card, and nothing to say about the local save it replaced
+        /*qa:pull3*/ // (when the local save could not be read, the HUD says the cloud save was loaded in its place, and the copy of
+        // the local one keeps its mark so a later start can offer it again)
+        if (a && a.status === 'cloud') {
+          call(Meta, 'load'); r.resumed = true; Meta.mended = false; Meta.asideAsk = null;
+          if (Meta.recovered) { Meta.recovered = false; Meta.cloudInstead = true; if (Meta.profile && !Meta._keepStored) { Meta.profile.asideAt = Date.now(); call(Meta, 'save'); } }
+        }
+      } catch (e) { /* play continues locally */ }
     }
 
     const host = $('#world') || body;
@@ -194,6 +213,7 @@
 
     call(UI, 'init');
     wireBeats();
+    /*qa:H4say*/ /*qa:say2*/ // a save that could not be read: the HUD says so once the game has started (hud.js start)
 
     on('#btn-commission', 'click', commission);
     on('#btn-resume', 'click', resume);
@@ -205,8 +225,16 @@
       T.name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commission(); } });
     }
     window.addEventListener('keydown', e => { if (T.open && T.mode === 'new' && e.key === 'Escape') { e.preventDefault(); titleBack(); } });
+    /*qa:titleTab*/ // the title covers the whole game: Tab goes round its own controls (a pop-up over it holds the keyboard itself)
+    window.addEventListener('keydown', e => {
+      if (e.key !== 'Tab' || !T.open || !T.el || body.hasAttribute('data-modal') || body.hasAttribute('data-sheet')) return;
+      const list = [...T.el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(n => !n.disabled && n.offsetParent !== null);
+      if (!list.length) return;
+      const at = list.indexOf(document.activeElement), last = list.length - 1;
+      if (at < 0 || (e.shiftKey && at === 0) || (!e.shiftKey && at === last)) { e.preventDefault(); list[e.shiftKey ? last : 0].focus(); }
+    });
 
-    showTitle('boot', had && (r.resumed || r.migrated || true));
+    showTitle('boot', had && /*qa:title2*/ ('resumed' in r ? !!(r.resumed || r.migrated) : true));   /*qa:title*/ // a save that could not be read is a new station: the name form, not a Resume card
     if (r.migrated) setTimeout(() => call(UI, 'toast', 'Your station was brought forward to the new bridge.', 'good'), 1200);
     if (takeMovedFlag()) setTimeout(() => call(UI, 'toast', 'Station moved to portsolace.com', 'good'), 900);   // M5: back from play/import.html
 
@@ -228,9 +256,18 @@
       return true;
     } catch (e) { return false; }
   }
+  /*qa:failLook*/ function failLook() { return 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;background:rgba(8,12,18,.96);color:#e8eef5;font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;text-align:center;overflow:auto'; }
+  /*qa:startFail*/ function showStartFailure(e) {
+    const el = document.createElement('div');
+    el.className = 'engine-failure'; el.style.cssText = failLook();
+    el.innerHTML = '<div class="box"><h2>The game could not start</h2><p>Part of it did not load. Your saved station has not been touched. Check your connection, then reload.</p><p><button type="button" class="btn primary">Reload</button></p><p class="micro"></p></div>';
+    el.querySelector('button').addEventListener('click', () => location.reload());
+    el.querySelector('.micro').textContent = String((e && e.message) || e);
+    body.appendChild(el);
+  }
   function showEngineFailure(e) {
     const el = document.createElement('div');
-    el.className = 'engine-failure';
+    el.className = 'engine-failure'; el.style.cssText = failLook();
     el.innerHTML = '<div class="box"><h2>The bridge display could not start</h2><p>Port Solace needs WebGL. Try a current Chrome, Edge, Firefox or Safari with hardware acceleration on.</p><p class="micro"></p></div>';
     el.querySelector('.micro').textContent = String((e && e.message) || e);
     body.appendChild(el);

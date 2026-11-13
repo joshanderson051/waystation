@@ -46,6 +46,17 @@ const Meta = {
 
   _freshAcc(now) { return { lastMission: 0, missionDirty: true, lastSave: now, lastInactive: now }; },
 
+  /*qa:L5fn*/ // A name as typed: no control characters and no direction overrides (U+202E turned round the text printed after
+  // the name), and at most 28 units without cutting a character in half (an emoji is two units or more).
+  cleanName(name) {
+    const s = String(name == null ? '' : name).replace(/[\u0000-\u001F\u007F-\u009F\u200B\u2028\u2029\u202A-\u202E\u2066-\u2069\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
+    let parts;
+    try { parts = Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(s), x => x.segment); } catch (e) { parts = Array.from(s); }
+    let out = '';
+    for (const ch of parts) { if (out.length + ch.length > 28) break; out += ch; }
+    return out.trim();
+  },
+
   _readJSON(key) {
     try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
   },
@@ -105,65 +116,283 @@ const Meta = {
     return p;
   },
 
+  /*qa:aside*/ // Keep what is stored under its own key before anything is written over it. True when the copy is there (or there
+  // was nothing to copy). With no room for two copies the older copy goes.
+  _setAside() {
+    /*qa:aside2*/ // a copy that is already waiting is never replaced: a later one goes beside it (.2), and when there is no room
+    // nothing is removed to make some
+    try {
+      const raw = localStorage.getItem(PROFILE_KEY); if (!raw) return true;
+      const A = PROFILE_KEY + '.unreadable', had = localStorage.getItem(A);
+      if (had === raw) return true;
+      const slot = had ? A + '.2' : A;
+      localStorage.setItem(slot, raw);
+      return localStorage.getItem(slot) === raw;
+    } catch (e) { return false; }
+  },
+
+  /*qa:doubt*/ // A stored save the start could not use stays exactly where it is, with saving off (this._keepStored), until two
+  // things have happened: it has had a second try through import(), which reads a save from end to end; and, when that
+  // fails as well, a checked copy of it is under its own key. main.js calls this straight after init(), before the
+  // cloud is asked. True when the stored save is the station after all.
+  secondTry() {
+    if (!this.recovered) return false;
+    let raw = null; try { raw = localStorage.getItem(PROFILE_KEY); } catch (e) { raw = null; }
+    this._keepStored = false; this._saveFailed = 0;
+    let ok = false;
+    if (raw && raw.length > 40) { try { const r = this.import(raw); ok = !!r && r.ok === true; } catch (e) { ok = false; } }
+    if (ok) { this.recovered = false; this.mended = false; return true; }
+    // It cannot be read even so. The station that takes its place is marked, so later starts look at the copy again.
+    if (this._setAside()) { if (this.profile) this.profile.asideAt = this.now(); this.save(); }
+    else this._keepStored = true;                             // no room for a copy: the stored save is not written over
+    return false;
+  },
+  // A copy that was set aside is looked at again on every start while the station that replaced it carries the mark:
+  // it may be readable now (the game was out of date, or only part of it had loaded, the day it was set aside). With
+  // nothing built since, it simply comes back. With something built, the player is asked (hud.js): this returns what to
+  // ask about, and restoreAside() or forgetAside() carries out the answer.
+  retryAside() {
+    const p = this.profile; if (!p || !p.asideAt || this.newer || this.recovered) return null;
+    let raw = null; try { raw = localStorage.getItem(PROFILE_KEY + '.unreadable'); } catch (e) { raw = null; }
+    if (!raw) { delete p.asideAt; return null; }
+    let dry = null; try { dry = this.import(raw, { dry: true }); } catch (e) { dry = null; }
+    if (!dry || !dry.ok) return null;                         // still unreadable: it stays where it is
+    if (!this._builtOn()) return this.restoreAside() ? { restored: true } : null;
+    return { ask: true, name: dry.name, day: dry.day, level: dry.level };
+  },
+  _builtOn() {                                                /*qa:untouched*/ // has anything happened in the running station that a restore would lose?
+    const p = this.profile; if (!p) return false;
+    if (Object.keys(p.sectors).length > 1) return true;
+    const st = p.sectors[p.activeSector]; if (!st || !Array.isArray(st.grid)) return false;
+    let n = 0; for (const row of st.grid) for (const c of row) if (c) n++;
+    if (n > 1 || (st.stats && st.stats.shipsServed > 0)) return true;
+    // a gift, a purchase, a Treasury withdrawal, a claimed reward: none of them is given a second time
+    const e = p.entitlements || {}, s = p.stats || {};
+    if (p.am !== TIMERS.START_AM || p.credits !== TIMERS.START_CREDITS || (p.rank && p.rank.xp > 0)) return true;
+    if ((e.history && e.history.length) || (e.owned && Object.keys(e.owned).length) || (e.liveries && e.liveries.length) || (e.titles && e.titles.length) || (e.tokens && e.tokens.livery > 0) || e.sectorPass) return true;
+    return !!(s.amEarned || s.amBought || s.dailyClaims || s.missionsClaimed || s.collects || (p.daily && p.daily.streak > 0) || (p.expeditions && p.expeditions.list && p.expeditions.list.length));
+  },
+  restoreAside() {
+    let raw = null; try { raw = localStorage.getItem(PROFILE_KEY + '.unreadable'); } catch (e) { raw = null; }
+    if (!raw) return false;
+    /*qa:replaced*/ // the station this replaces is kept under its own key first, when anything has happened in it
+    let was = null; try { was = this._builtOn() ? JSON.stringify(this.profile) : null; } catch (e) { was = null; }
+    let r = null; try { r = this.import(raw); } catch (e) { r = null; }
+    if (!r || !r.ok) return false;
+    if (was) { try { localStorage.setItem(PROFILE_KEY + '.replaced', was); } catch (e) { /* no room: the player chose this */ } }
+    if (this.profile && this.profile.asideAt) { delete this.profile.asideAt; this.save(); }   /*qa:restoreClears*/ // this is the copy: nothing waits any more
+    // the copy goes only once the station is safely back under the main key
+    const back = this._readJSON(PROFILE_KEY);
+    if (back && this.profile && back.playerId === this.profile.playerId && back.createdAt === this.profile.createdAt) { try { localStorage.removeItem(PROFILE_KEY + '.unreadable'); } catch (e) { /* it can stay */ } }
+    return true;
+  },
+  forgetAside() {                                             /*qa:forget2*/ // "keep this one": the copy steps aside, and its place is free for a later one
+    const p = this.profile; if (p && p.asideAt) { delete p.asideAt; this.save(); }
+    try { const A = PROFILE_KEY + '.unreadable', raw = localStorage.getItem(A); if (raw) { try { localStorage.setItem(A + '.2', raw); } catch (e) { /* no room: it goes */ } localStorage.removeItem(A); } } catch (e) { /* storage is blocked */ }
+  },
+
   // load or create, migrate, settle timers, compute the offline summary. Returns { resumed, migrated }.
   init() {
+    /*qa:starting*/ this._starting = true;   // until the start is through nothing is saved: a start that throws leaves storage as it found it (save())
     const now = this.now();
     let p = this._readJSON(PROFILE_KEY), resumed = false, migrated = false;
-    if (!this._validProfile(p)) p = null;
+    let doubt = false;                                        // something is stored that this start cannot use
+    /*qa:asLoaded*/ // the save as it stood when the game opened, before this start stamps and advances it: what the cloud save is
+    // compared with (account.js reconcile)
+    this._asLoaded = null;
+    try { if (this._validProfile(p)) this._asLoaded = { savedAt: p.savedAt || 0, profile: JSON.parse(JSON.stringify(p)) }; } catch (e) { this._asLoaded = null; }
+    if (!this._validProfile(p)) {
+      /*qa:keep*/ /*qa:keep2*/ // A save from a newer version of the game (an old copy of the game is running): nothing is written
+      // this session, so the next start with the right version finds it untouched; the HUD says so. Anything else of
+      // size that is not a save this game can read (cut short, say) is in doubt.
+      if (p && typeof p === 'object' && typeof p.v === 'number' && p.v > 2) this.newer = true;
+      else { let raw = null; try { raw = localStorage.getItem(PROFILE_KEY); } catch (e) { raw = null; } if (raw && raw.length > 40) doubt = true; }
+      p = null;
+    }
     if (p) resumed = true;
     else { p = this._migrateV1(now); if (p) { resumed = true; migrated = true; } }
     if (!p) { p = this._newProfile(now); p.sectors.home = Sim.makeState('home'); }
-    this.profile = p;
-    this._fixup(p, now);
-    this._acc = this._freshAcc(now);
-    this._offline = null;
-    this._bindActive();
-    if (resumed) this._offlineCatchUp(now);
-    p.lastSeenAt = now;
-    this._convoyWas = this.convoyActive();
-    this.evalMissions(now, true);
-    this.save(now);
+    /*qa:H4init*/ // A stored save with a field of the wrong kind makes the fix-ups throw. That must never leave the title dead,
+    // and it must never cost the save either.
+    const begin = (prof, proving) => {
+      this.profile = prof;
+      this._fixup(prof, now);
+      this._acc = this._freshAcc(now);
+      this._offline = null;
+      this._bindActive();
+      if (proving) { this._proveProfile(false); this._offlineCatchUp(now); }
+      prof.lastSeenAt = now;
+      this._convoyWas = this.convoyActive();
+      this.evalMissions(now, true);
+    };
+    try {
+      begin(p, resumed);
+      /*qa:mendCopy*/ // part of the save was mended: keep the save as it was before the first save writes over it (unless a copy
+      // from an earlier visit is still waiting for its retry: that one is worth more)
+      if (this.mended && !p.asideAt && !this._setAside()) this._keepStored = true;
+    }
+    catch (e) {
+      /*qa:blame*/ // Is it the save, or the game itself (a script that did not load, a fault in the code)? A new profile goes through
+      // the very same steps. If that throws too the save is not to blame: nothing in storage is touched, and the start
+      // fails where main.js can say so. When a new profile starts cleanly, the stored one is in doubt.
+      if (e instanceof ReferenceError) throw e;                  // a name the code does not know: a script is missing
+      const wasResumed = resumed;
+      p = this._newProfile(now); p.sectors.home = Sim.makeState('home');
+      begin(p, true);
+      this._offline = null; this._offlineEvent = null; this.mended = false;   /*qa:mendReset*/
+      resumed = false; migrated = false;
+      if (wasResumed) doubt = true;
+    }
+    if (doubt) { this.recovered = true; this._keepStored = true; }   // settled by secondTry()
+    this._starting = false;   /*qa:started*/
+    if (!this.newer) this._claimSave();                       // an out-of-date copy of the game takes no lock from the current one
+    if (!doubt) this.save(now);
     return { resumed, migrated };
   },
 
   save(now = this.now()) {
     const p = this.profile; if (!p) return false;
+    if (this._starting) return false;   /*qa:startingSave*/
+    /*qa:H1save*/ if (this.stoodDown) return false;
+    /*qa:keepStored*/ if (this.newer) return false;                       // a newer version's save is in storage: it stays as it is
+    if (this._keepStored) {                                               // an unreadable save with no room for a copy: not written over
+      if (!this._saveFailed || now - this._saveFailed > 300000 || now < this._saveFailed) { this._saveFailed = now; Sim.emit('savefail', {}); }
+      return false;
+    }
+    if (!this._ownsSave()) { this._standDown(); return false; }   // another tab opened this game later: it owns the save now
     this._syncWallet();
     p.lastSeenAt = now; p.savedAt = now;
     if (this._acc) this._acc.lastSave = now;
-    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); return true; } catch (e) { return false; }
+    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); this._saveFailed = 0; return true; }
+    catch (e) { /*qa:L3*/ if (!this._saveFailed || now - this._saveFailed > 300000 || now < this._saveFailed) { this._saveFailed = now; Sim.emit('savefail', {}); } return false; }   // said at once, then every five minutes while it lasts
   },
+
+  /*qa:H4tools*/ // A save can pass the fix-ups and still hold a field of the wrong kind. Use it the way a start does: anything that
+  // throws here, or a container that is a number, a string or true, means it is not safe to keep. `strict` (an import)
+  // also refuses a station without a name; a start gives it one instead.
+  _proveProfile(strict) {
+    /*qa:prove2*/ const p = this.profile, now = this.now(), kind = v => (v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v);
+    // Every container a new profile has must be the same kind of container here, all the way down. An import refuses
+    // a save where one is not. A start mends it (that container goes back to its new-profile value, the rest of the
+    // station stays) and remembers that it did (this.mended: init() keeps a copy of the save, the HUD says so).
+    const same = (fresh, got, where) => {
+      for (const k in fresh) {
+        const a = kind(fresh[k]);
+        if (a !== 'object' && a !== 'array') { /*qa:figures*/ if (got[k] === undefined && a !== 'null' && k !== 'name') got[k] = fresh[k]; continue; }   // a figure missing altogether starts from the new-game value
+        const b = kind(got[k]);
+        if (b === 'undefined') { got[k] = fresh[k]; continue; }                 // an older save: the field did not exist yet
+        if (b !== a) { if (strict) throw new Error(`${where}.${k} is ${b}, not ${a}`); got[k] = fresh[k]; this.mended = true; continue; }
+        if (a === 'object') same(fresh[k], got[k], `${where}.${k}`);
+      }
+    };
+    const rows = (list, ok, what) => {                                           // a list of records: drop the ones nothing can be done with
+      if (list.every(ok)) return list;
+      if (strict) throw new Error(what);
+      this.mended = true; return list.filter(ok);
+    };
+    same(this._newProfile(now), p, 'profile');
+    p.expeditions.list = rows(p.expeditions.list, e => !!e && typeof e === 'object' && !!SECTORS[e.sector] && typeof e.endsAt === 'number', 'an expedition that cannot be read');
+    for (const id in p.sectors) {
+      const st = p.sectors[id], fresh = Sim.makeState(id);
+      if (!st || typeof st !== 'object') throw new Error(`sector ${id}`);
+      for (const k of ['grid', 'hub', 'cells', 'companies']) if (kind(st[k]) !== kind(fresh[k])) throw new Error(`sector ${id}.${k}`);   // what the station is built of: nothing to mend it from
+      same(fresh, st, `sector ${id}`);
+      /*qa:ships2*/ // a ship must be of a known class, and one that is under way must have somewhere to go
+      st.ships = rows(st.ships, s => !!s && typeof s === 'object' && (typeof SHIP_CLASSES === 'undefined' || !!SHIP_CLASSES[s.cls])
+        && ((s.state !== 'approach' && s.state !== 'depart') || (!!s.target && typeof s.target === 'object' && typeof s.target.x === 'number' && typeof s.target.y === 'number')), `sector ${id} has a ship that cannot be read`);
+      st.log = rows(st.log, l => !!l && typeof l === 'object', `sector ${id} has a log line that cannot be read`);
+      if (typeof st.name !== 'string' || !st.name) { if (strict) throw new Error(`sector ${id} has no name`); st.name = typeof fresh.name === 'string' && fresh.name ? fresh.name : 'Station'; this.mended = true; }
+    }
+    // then use it the way the game does: anything that throws here would throw there. An import runs with the whole game
+    // up, so it reads everything the HUD reads; a start runs before the HUD and the engine exist and keeps to the basics.
+    void this.rank;
+    for (const f of strict ? ['totalRate', 'totalRateAll', 'plot', 'sectors', 'expeditions', 'collection', 'missions', 'lifetimeStats', 'achievements', 'achievementBadge', 'daily', 'convoy', 'livery', 'liveries', 'nextUp'] : ['daily', 'missions', 'totalRate']) if (typeof this[f] === 'function') this[f]();
+    if (typeof Sim.totals === 'function') Sim.totals();
+    JSON.stringify(p);
+  },
+
+  // One tab owns the save at a time: the one opened last. A second tab that went on saving would put an older station
+  // back over a newer one, and a purchase with it. A tab that finds it is no longer the owner stops saving and says so.
+  _tabId: null,
+  stoodDown: false,
+  _claimSave() {
+    if (!this._tabId) {
+      this._tabId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+      try { window.addEventListener('storage', e => { if (e.key === PROFILE_KEY + '.owner' && e.newValue && e.newValue !== this._tabId && !this._lockOff) this._standDown();   /*qa:lockOff3*/ }); } catch (e) { /* no window: a test harness */ }
+    }
+    /*qa:lockOff*/ // a write that fails, or does not read back, means there is no lock to hold (and no save to protect)
+    try { localStorage.setItem(PROFILE_KEY + '.owner', this._tabId); this._lockOff = localStorage.getItem(PROFILE_KEY + '.owner') !== this._tabId; } catch (e) { this._lockOff = true; }
+  },
+  _ownsSave() { /*qa:lockOff2*/ if (this._lockOff) return true; try { const o = localStorage.getItem(PROFILE_KEY + '.owner'); return !o || !this._tabId || o === this._tabId; } catch (e) { return true; } },
+  _standDown() { if (this.stoodDown) return; this.stoodDown = true; Sim.emit('standdown', {}); },
 
   // re-read the stored profile and bind it (no offline pass; init() does that)
   load() {
     const p = this._readJSON(PROFILE_KEY);
     if (!this._validProfile(p)) return false;
     const now = this.now();
-    this.profile = p; this._fixup(p, now); this._acc = this._freshAcc(now); this._bindActive();
-    this._convoyWas = this.convoyActive();
+    /*qa:load2*/ const keep = { profile: this.profile, acc: this._acc, convoy: this._convoyWas };
+    try {
+      this.profile = p; this._fixup(p, now); this._acc = this._freshAcc(now); this._bindActive();
+      this._convoyWas = this.convoyActive();
+      this._proveProfile(false);
+      this._offlineEvent = null;   /*qa:awayGone2*/
+    } catch (e) {                                              // what is stored cannot be used: the station in memory stays
+      this.profile = keep.profile; this._acc = keep.acc; this._convoyWas = keep.convoy;
+      try { if (this.profile) this._bindActive(); } catch (e2) { /* it was bound before */ }
+      return false;
+    }
     return true;
   },
 
-  export() { if (!this.profile) return ''; this._syncWallet(); return JSON.stringify(this.profile); },
+  export() { if (!this.profile) return ''; this._syncWallet(); return JSON.stringify(this.profile, (k, v) => (k === 'asideAt' ? undefined : v)); },   /*qa:exportMark*/ // the mark that a copy is waiting belongs to this device
 
-  import(json) {
+  import(json, o) {   /*qa:dryArg*/ // o.dry: only say whether it could be imported (retryAside)
     let p = null;
     try { p = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return { ok: false, why: 'Not valid JSON' }; }
-    if (!this._validProfile(p)) return { ok: false, why: 'Not a Port Solace v2 profile' };
+    if (!this._validProfile(p)) return { ok: false, why: 'That does not look like a Port Solace save' };
     const now = this.now();
-    this.profile = p; this._fixup(p, now); this._acc = this._freshAcc(now); this._offline = null;
-    this._bindActive();
-    this._convoyWas = this.convoyActive();
-    this.evalMissions(now, true);
+    /*qa:H4import*/ // Read the save into place, but keep the station that is running until the new one is whole: what is in memory
+    // when the fix-ups throw half-way must never reach storage.
+    const keep = { profile: this.profile, acc: this._acc, offline: this._offline, convoy: this._convoyWas };
+    try {
+      this.profile = p; this._fixup(p, now); this._acc = this._freshAcc(now); this._offline = null;
+      this._bindActive();
+      this._convoyWas = this.convoyActive();
+      this.evalMissions(now, true);
+      this._proveProfile(true);
+      /*qa:dry*/ if (o && o.dry) {                               // the running station is put back, untouched
+        const st = p.sectors[p.activeSector], info = { ok: true, dry: true, name: st ? st.name : '', day: st ? st.day : 1, level: st ? st.level : 1 };
+        this.profile = keep.profile; this._acc = keep.acc; this._offline = keep.offline; this._convoyWas = keep.convoy;
+        if (this.profile) this._bindActive();
+        return info;
+      }
+      /*qa:import2*/ // and show it: the world and the HUD redraw from it here, before it is stored. What they cannot draw is not kept.
+      // (this._trial: the cloud push that a new sector sets off waits until the save is known to be whole, account.js)
+      this._trial = true;
+      Sim.emit('sector', { id: p.activeSector, state: 'switched' });
+      Sim.emit('change'); Sim.emit('log');
+      this._trial = false;
+      if (keep.profile && keep.profile.asideAt && !p.asideAt) p.asideAt = keep.profile.asideAt;   /*qa:importMark*/ // a copy set aside is still waiting
+      this._offlineEvent = null;   /*qa:awayGone*/ // an away report belonged to the profile this one replaces
+    } catch (e) {
+      this.profile = keep.profile; this._acc = keep.acc; this._offline = keep.offline; this._convoyWas = keep.convoy;
+      try { if (this.profile) { this._bindActive(); Sim.emit('sector', { id: this.profile.activeSector, state: 'switched' }); Sim.emit('change'); Sim.emit('log'); } } catch (e2) { /* the station that was running draws as it did */ }
+      this._trial = false;
+      return { ok: false, why: 'That save is damaged and was not imported' };
+    }
     this.save(now);
-    Sim.emit('sector', { id: p.activeSector, state: 'switched' });
-    Sim.emit('change'); Sim.emit('log');
+    Sim.emit('change');                                        // now the cloud may have it
     return { ok: true };
   },
 
   resetProfile() {
-    try { localStorage.removeItem(PROFILE_KEY); } catch (e) { /* ignore */ }
+    /*qa:resetKeeps*/ // a stored save that is being kept as it is (see secondTry and init) is not removed by starting over, and the
+    // mark that a copy is waiting for its retry goes with the new profile
+    const mark = this.profile && this.profile.asideAt;
+    if (!this._keepStored && !this.newer) { try { localStorage.removeItem(PROFILE_KEY); } catch (e) { /* ignore */ } }
     const now = this.now(), p = this._newProfile(now);
+    if (mark) p.asideAt = mark;
     p.sectors.home = Sim.makeState('home');
     this.profile = p; this._acc = this._freshAcc(now); this._offline = null; this._bankCarry = 0;
     this._bindActive();
@@ -191,7 +420,7 @@ const Meta = {
 
   renameStation(name) {
     if (!Sim.state) return false;
-    const n = String(name || '').trim().slice(0, 28);
+    const n = /*qa:L5*/ this.cleanName(name);
     if (!n) return false;
     Sim.state.name = n; Sim.emit('change'); return true;
   },
@@ -212,7 +441,9 @@ const Meta = {
       summary.credits = cu.credits; summary.events = cu.events; summary.served = cu.served; summary.days = cu.days; summary.pending = cu.pending;
       summary.banked = Math.round(summary.banked);
       this._offline = summary;
-      Sim.emit('offline', { ms: elapsed, credits: summary.credits, banked: summary.banked, events: summary.events, builds: summary.builds.length, expeditions: summary.expeditions, served: summary.served, summary });
+      /*qa:H2*/ // kept as well as sent: at the start this runs before the HUD listens, and the HUD picks it up from here (hud.js init)
+      this._offlineEvent = { ms: elapsed, credits: summary.credits, banked: summary.banked, events: summary.events, builds: summary.builds.length, expeditions: summary.expeditions, served: summary.served, summary };
+      Sim.emit('offline', this._offlineEvent);
     }
     this._syncWallet();
     return summary;
@@ -313,7 +544,7 @@ const Meta = {
     if (cell.readyAt != null && !cell.up) return null;                              // building: no bank yet
     const def = MODULES[m.id], lvl = cell.lvl || 1, cap = this._cap(def, lvl), rate = this._rate(def, lvl);
     const bank = Math.min(cap, cell.bank || 0);
-    return { bank, cap, rate, ready: bank >= cap * 0.25, full: bank >= cap, lvl };
+    return { bank, cap, rate, ready: bank >= cap * 0.25, full: cap > 0 && bank >= cap, lvl };   /*qa:L7*/ // nothing to fill is not "full"
   },
 
   collect(r, c) {
@@ -378,6 +609,7 @@ const Meta = {
     const cells = state && state.cells; if (!cells) return done;
     for (const k in cells) {
       const cell = cells[k];
+      /*qa:L1build*/ if (cell.readyAt != null && cell.totalMs > 0 && cell.readyAt - now > cell.totalMs + 1000) { cell.readyAt = now + cell.totalMs; cell.startedAt = now; }   // the clock went back: no timer runs longer than its whole length
       if (cell.readyAt == null || cell.readyAt > now) continue;
       const i = k.indexOf(','), r = +k.slice(0, i), c = +k.slice(i + 1);
       if (!state.grid[r] || !state.grid[r][c]) { delete cells[k]; continue; }
@@ -511,6 +743,7 @@ const Meta = {
 
   _settlePlot(state, now) {
     const C = state && state.plot && state.plot.clearing;
+    /*qa:L1plot*/ if (C && C.totalMs > 0 && C.endsAt - now > C.totalMs + 1000) { C.endsAt = now + C.totalMs; C.startedAt = now; }
     if (!C || C.endsAt > now) return null;
     return this._finishPlot(state, 'timer');
   },
@@ -662,6 +895,7 @@ const Meta = {
   _settleExpeditions(now) {
     const p = this.profile; let n = 0;
     for (const e of p.expeditions.list) {
+      /*qa:L1exp*/ if (e.status === 'out' && e.startedAt > now + 1000) { const whole = Math.max(0, e.endsAt - e.startedAt); e.startedAt = now; e.endsAt = now + whole; }
       if (e.status !== 'out' || e.endsAt > now) continue;
       e.status = 'ready'; n++;
       Sim.emit('expedition', { id: e.id, state: 'ready', sector: e.sector });
@@ -969,11 +1203,11 @@ const Meta = {
     const p = this.profile, now = this.now();
     const d = p ? p.daily : { streak: 0, lastClaimAt: 0 };
     const since = d.lastClaimAt ? this._daysBetween(d.lastClaimAt, now) : null;     // 0 today, 1 yesterday, >= 2 a miss
-    const claimable = since !== 0;
+    const claimable = since == null || since > 0;   /*qa:M1*/ // a claim stamped in the future (the clock went back) is not a new day
     const broken = since != null && since >= 2 && d.streak > 0;
     const breakAt = d.lastClaimAt ? this._dayStart(d.lastClaimAt) + 2 * DAY_MS : 0;
     const repairable = broken && now - breakAt <= TIMERS.STREAK_REPAIR_MS;
-    const streakIfClaim = since == null ? 1 : since === 0 ? d.streak : since === 1 ? d.streak + 1 : 1;
+    const streakIfClaim = since == null ? 1 : since <= 0 ? d.streak : since === 1 ? d.streak + 1 : 1;   /*qa:M1b*/ // a claim stamped ahead of the clock counts as today
     const dayIndex = (Math.max(1, claimable ? streakIfClaim : d.streak) - 1) % 7;
     return { streak: d.streak, dayIndex, claimable, broken, repairable, repairAM: TIMERS.STREAK_REPAIR_AM, streakIfClaim,
       nextAt: claimable ? now : this._dayStart(now) + DAY_MS, rewards: DAILY_REWARDS, today: DAILY_REWARDS[dayIndex] };
@@ -1160,6 +1394,7 @@ const Meta = {
   tick(now = this.now()) {
     const p = this.profile, s = Sim.state; if (!p || !s || !this._acc) return;
     const a = this._acc;
+    /*qa:L1acc*/ if (now < a.lastSave - 1000) { a.lastSave = now; a.lastInactive = Math.min(a.lastInactive, now); a.lastMission = Math.min(a.lastMission, now); }   // the clock went back: the autosave must not wait for it to catch up
     const r = this._accrue(s, now, TIMERS.OFFLINE_BANK_CAP_MS, true);
     for (const x of r.crossings) Sim.emit('hopper', x);
     if (now - a.lastInactive >= 5000) {

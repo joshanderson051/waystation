@@ -247,8 +247,9 @@ const Store = (() => {
     const hist = m && m.profile.entitlements && m.profile.entitlements.history;
     return Array.isArray(hist) && hist.some(h => h === grantId || (h && (h.grantId === grantId || h.id === grantId)));
   }
-  const ledger = () => readJson(KEYS.grants, []).filter(g => g && g.grantId);
-  const pendingQueue = () => readJson(KEYS.pending, []).filter(g => g && g.grantId);
+  /*qa:H4queue*/ const asList = v => (Array.isArray(v) ? v : []);   // a damaged key reads as empty, never as a throw at the start
+  const ledger = () => asList(readJson(KEYS.grants, [])).filter(g => g && g.grantId);
+  const pendingQueue = () => asList(readJson(KEYS.pending, [])).filter(g => g && g.grantId);
   function isRecorded(grantId) {
     return historyHas(grantId) || ledger().some(g => g.grantId === grantId) || pendingQueue().some(g => g.grantId === grantId);
   }
@@ -705,6 +706,8 @@ const Store = (() => {
     if (isRecorded(sessionId)) { clearInflight(); return { handled: true, ok: true, duplicate: true, sku: known.sku || null, grantId: sessionId, ...extra }; }
     try {
       const data = await callApi(`/claim?session_id=${enc(sessionId)}&playerId=${enc(playerId())}`);
+      /*qa:M4answer*/ // a 200 that names no item is not an answer (a Wi-Fi sign-in page, a cut-off body): keep the session and ask again
+      if (!data || typeof data !== 'object' || typeof data.sku !== 'string') throw new StoreError('bad-answer', 'The store has not confirmed the purchase yet.', 200);
       const entry = findEntry(data.sku);
       if (!entry) throw new StoreError('unknown-sku', `The backend granted an unknown item "${data.sku}".`, 200);
       // a special: the claim names it and says what it brings; the offer we left the page with fills any gap
@@ -719,10 +722,11 @@ const Store = (() => {
       emit('purchase', payload);
       return { handled: true, ok: true, ...payload, ...extra };
     } catch (err) {
-      const transient = err.code === 'network' || err.status >= 500;
+      const transient = err.code === 'network' || err.status >= 500 || err.code === 'bad-answer' || /^http-/.test(err.code || '');   /*qa:M4keep*/ // a refusal that is not in the store's own words (a firewall, a proxy) is not a verdict: ask again
       if (transient) writeJson(KEYS.inflight, { ...known, sessionId, unclaimed: true, at: known.at || Date.now() });   // retried on the next resume()
       else clearInflight();
-      const payload = { sku: known.sku || null, granted: false, mode: 'stripe', grantId: sessionId, error: err.code || 'network', message: err.message };
+      /*qa:M4say*/ // someone who has just paid must hear that nothing is lost
+      const payload = { sku: known.sku || null, granted: false, mode: 'stripe', grantId: sessionId, error: err.code || 'network', message: transient ? 'Your purchase is safe. The store has not confirmed it yet; it will arrive the next time the game opens.' : err.message };
       emit('purchase', payload);
       return { handled: true, ok: false, ...payload, ...extra };
     }
