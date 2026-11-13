@@ -791,6 +791,20 @@ table.market { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .market tbody tr[data-row] { cursor: pointer; }
 .market tr[aria-expanded="true"] td { background: rgba(24,33,60,.8); }
 .market tr.mdetail td { height: auto; padding: 6px 4px 10px; white-space: normal; font: 400 13px/1.5 var(--font-body); color: var(--ink-2); background: rgba(24,33,60,.8); }
+/* the Market's "Best moves now" and its guide */
+.mtips { margin: 0 0 12px; padding: 10px 12px 6px; background: var(--glass-2); border: 1px solid var(--edge); border-left: 2px solid var(--amber); border-radius: 3px; }
+.mtips-h { margin: 0 0 4px; font: 600 var(--fs-label)/16px var(--font-cond); letter-spacing: .10em; text-transform: uppercase; color: var(--amber); }
+.mtip { display: flex; align-items: center; gap: 10px; padding: 6px 0; font: 400 13px/1.45 var(--font-body); color: var(--ink); }
+.mtip + .mtip { border-top: 1px solid rgba(94,196,255,.08); }
+.mtip span { flex: 1; min-width: 0; }
+.mtip .btn { flex: none; }
+.mguide { margin: 0 0 10px; padding-left: 20px; text-align: left; }
+.mguide li { margin: 0 0 6px; }
+.mguide-h { margin: 12px 0 6px; font: 600 var(--fs-label)/16px var(--font-cond); letter-spacing: .10em; text-transform: uppercase; color: var(--amber); text-align: left; }
+@media (max-width: 760px), ((pointer: coarse) and (max-width: 1023px)) {
+  .mtip { flex-wrap: wrap; gap: 6px; }
+  .mtip span { flex-basis: 100%; }
+}
 .market tr.mdetail .mdl { display: inline-block; min-width: 72px; font: 500 var(--fs-label)/16px var(--font-cond); letter-spacing: .10em; text-transform: uppercase; color: var(--ink-3); }
 .market .dump { opacity: 0; transition: opacity var(--dur-micro) var(--ease-out); vertical-align: middle; }
 .market tr:hover .dump, .market tr:focus-within .dump, .market .dump:focus-visible { opacity: 1; }
@@ -1915,4 +1929,21 @@ body[data-motion="reduced"] #condition::before, body[data-motion="reduced"] #con
   .tour-callout.compact .tour-title { margin: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .tour-callout.compact .tour-actions { margin: 0; flex-wrap: nowrap; flex: none; }
   .tour-callout.compact .tour-spacer { display: none; }
+}
+
+/* phones: the Market's switches keep clear of the broker button; on the narrowest screens the broker moves into the opened
+   row (its button there is hidden everywhere else), so a good's name has room */
+.market tr.mdetail .mbroker { display: none; margin-top: 8px; }
+@media (max-width: 760px), ((pointer: coarse) and (max-width: 1023px)) {
+  .market th.icon, .market td.icon { width: 30px; }
+  .market th.stock, .market td.stock { width: 36px; }
+  .market th.price, .market td.price { width: 58px; }
+  .market th.pol, .market td.pol { width: 96px; padding: 0 2px; }
+  .market td.pol .seg button { min-width: 44px; padding: 0 2px; }
+}
+@media (max-width: 359px) {
+  .market th.act, .market td.act { display: none; }
+  .market tr.mdetail .mbroker { display: inline-flex; }
+  .market th.icon, .market td.icon { width: 26px; }
+  .market td.gname { font-size: 13px; line-height: 1.2; }
 }

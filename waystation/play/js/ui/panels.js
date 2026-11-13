@@ -541,12 +541,49 @@ const Panels = {
   market(host, ctx) {
     const F = frame(host, { id: 'market', title: 'Market', sub: '' }, ctx), sig = {};
     let openRow = null;   // A4: the good whose From / Wanted by line is open (tap or click a row)
+    // Best moves now: up to three things that would earn more at this moment, the most valuable first. Each is read from
+    // the same numbers the trades use (Sim.buyPrice / sellPrice, storage, the Boom and the Glut), so it never promises
+    // what the sim does not do.
+    const wanted = g => Object.values(PLANETS).some(pl => pl.imports.includes(g));
+    const usual = g => GOODS[g].base * (((Sim.bias(Sim.state) || {}).goods || {})[g] || 1);   // the base price, as this region values it
+    const vsUsual = g => Math.round((Sim.effPrice(g) / usual(g) - 1) * 100);
+    const tips = (s, T, boom, glut, buyPct, sellPct) => {
+      const out = [], room = T.storage - T.stockTotal, nm = g => esc(GOODS[g].name);
+      const sw = (g, k, on) => T.hasMarket ? `<button type="button" class="btn" data-tip-g="${g}" data-tip-k="${k}" data-tip-v="${on ? 1 : 0}">Turn ${k === 'buy' ? 'Buy' : 'Sell'} ${on ? 'on' : 'off'}</button>` : '';
+      const build = `<button type="button" class="btn" data-act="mbuild">Open Build</button>`;
+      if (!T.hasMarket) out.push([`Build a Trade Exchange. It unlocks the Buy and Sell switches, and each one widens what you keep on every trade by 10 points.`, build]);
+      if (boom && s.stock[boom.good] > 0 && !s.policy[boom.good].sell) out.push([`Boom: ${nm(boom.good)} sells at three times its price until day ${boom.until}, and you hold ${s.stock[boom.good]}. Turn Sell on while it lasts.`, sw(boom.good, 'sell', true)]);
+      if (boom && s.policy[boom.good].buy) out.push([`While the Boom lasts, ships charge three times as much for ${nm(boom.good)}. Turn Buy off until day ${boom.until}.`, sw(boom.good, 'buy', false)]);
+      if (glut && s.stock[glut.good] > 0 && s.policy[glut.good].sell) out.push([`Glut: ${nm(glut.good)} sells at half price until day ${glut.until}. Turn Sell off and hold your ${s.stock[glut.good]}.`, sw(glut.good, 'sell', false)]);
+      if (T.storage > 0 && room <= Math.max(5, T.storage * 0.1)) out.push([`Storage is nearly full (${Fmt.n(T.stockTotal)} of ${Fmt.n(T.storage)}). Ships can only sell you what fits, and what does not fit goes to a broker at half price. Build a Cargo Warehouse.`, build]);
+      const dear = GOOD_IDS.filter(g => !(boom && boom.good === g) && s.stock[g] > 0 && !s.policy[g].sell && vsUsual(g) >= 20).sort((a, b) => vsUsual(b) - vsUsual(a))[0];
+      if (dear) out.push([`${nm(dear)} is ${vsUsual(dear)}% above its usual price and you hold ${s.stock[dear]}. Turn Sell on.`, sw(dear, 'sell', true)]);
+      const cheap = GOOD_IDS.filter(g => !(boom && boom.good === g) && !s.policy[g].buy && room > 0 && wanted(g) && vsUsual(g) <= -15).sort((a, b) => vsUsual(a) - vsUsual(b))[0];
+      if (cheap) out.push([`${nm(cheap)} is ${-vsUsual(cheap)}% below its usual price. Turn Buy on and hold it until the price comes back.`, sw(cheap, 'buy', true)]);
+      const dead = GOOD_IDS.filter(g => s.stock[g] > 0 && !wanted(g)).sort((a, b) => s.stock[b] - s.stock[a])[0];
+      if (dead && T.storage > 0 && room <= T.storage * 0.3) out.push([`Nobody nearby wants ${nm(dead)}, and your ${s.stock[dead]} take up room. The broker pays half price for it.`, '']);
+      if (!out.length) out.push([`Nothing needs changing. Every unit bought at ${buyPct}% and sold at ${sellPct}% keeps ${sellPct - buyPct}% of its price: more ships and another Trade Exchange mean more of that.`, '']);
+      return out.slice(0, 3);
+    };
+    const guide = (T, buyPct, sellPct) => Overlays.modal({ kind: 'confirm', icon: 'market', tag: 'Market', title: 'How trading pays',
+      html: `<ol class="mguide"><li>A ship that arrives sells you its cargo, for every good whose <b>Buy</b> switch is on. You pay <b>${buyPct}%</b> of the price in the table.</li>` +
+        `<li>Then it buys what its home world needs from your stock, for every good whose <b>Sell</b> switch is on. It pays <b>${sellPct}%</b>.</li>` +
+        `<li>So a unit bought and sold at the same price keeps <b>${sellPct - buyPct}%</b> of it. Each Trade Exchange you build adds 10 more.</li>` +
+        `<li>Room left in its hold it fills with your other goods on Sell, at <b>${Math.round((0.85 + T.margin) * 100)}%</b>.</li>` +
+        `<li>Prices drift a little each day and pull back toward their usual level. A Boom triples one good for four days; a Glut halves one.</li></ol>` +
+        `<p class="mguide-h">To earn more</p><ul class="mguide"><li>Keep room in storage. A ship can only sell you what fits, and what does not fit goes to a broker at half price.</li>` +
+        `<li>Keep credits on hand. A ship can only sell you what you can pay for.</li>` +
+        `<li>Choose a good in the table to see which worlds want it, and stock what your visitors buy.</li>` +
+        `<li>Turn Sell off to hold a good through a Glut. Turn it on again when the price recovers or a Boom comes.</li>` +
+        `<li>More ships mean more trades: build another Docking Bay, raise your reputation and sign a Trade Contract.</li>` +
+        `<li>The broker pays half price. Use it only to clear what nobody wants.</li></ul>`,
+      actions: [{ label: 'Got it', primary: true }] });
     const render = () => {
       const s = ctx.state(); if (!s) return;
       const T = Sim.totals();
       const buyPct = Math.round((0.65 - T.margin) * 100), sellPct = Math.round((1.05 + T.margin) * 100);
       F.setSub(`Trade exchange ${MID} Storage ${Fmt.n(T.stockTotal)} / ${Fmt.n(T.storage)}`);
-      let h = `<p class="lead">Ships sell cargo into your warehouses at <span class="num">${buyPct}%</span> of market price and buy what their home world needs at <span class="num">${sellPct}%</span>. ${ctx.ui.phone ? 'Tap a row to see which worlds sell it and which want it.' : 'Hover or click a row for the worlds that want it.'}</p>`;
+      let h = `<p class="lead">Ships sell cargo into your warehouses at <span class="num">${buyPct}%</span> of market price and buy what their home world needs at <span class="num">${sellPct}%</span>. ${ctx.ui.phone ? 'Tap a row to see which worlds sell it and which want it.' : 'Hover or click a row for the worlds that want it.'} <button type="button" class="linkish" data-act="mguide">How trading pays</button></p>`;
       const boom = s.fx.boom && s.day < s.fx.boom.until ? s.fx.boom : null, glut = s.fx.glut && s.day < s.fx.glut.until ? s.fx.glut : null;
       if (boom || glut) {
         h += `<div class="chips">`;
@@ -555,6 +592,7 @@ const Panels = {
         h += `</div>`;
       }
       if (!T.hasMarket) h += `<div class="shelf-note warn"><i class="sq"></i>Needs a Trade Exchange ${MID} policies locked</div>`;
+      h += `<div class="mtips"><p class="mtips-h">Best moves now</p>${tips(s, T, boom, glut, buyPct, sellPct).map(([t, b]) => `<div class="mtip"><span>${t}</span>${b}</div>`).join('')}</div>`;
       h += `<table class="market"><thead><tr><th class="kind"></th><th class="icon"></th><th>Good</th><th class="r stock">Stock</th><th class="r price">Price</th><th class="pol">Policy</th><th class="act"></th></tr></thead><tbody>`;
       for (const g of GOOD_IDS) {
         const G = GOODS[g], p = Sim.effPrice(g), pol = s.policy[g], stock = s.stock[g];
@@ -568,12 +606,17 @@ const Panels = {
           `<td class="stock num">${stock}</td><td class="price num"><i class="tri ${tr}"></i><span class="prc">${p.toFixed(1)}</span>${mult}</td>` +
           `<td class="pol"><div class="seg small"><button type="button" data-g="${g}" data-k="buy" class="${pol.buy ? 'on' : ''}"${dis} title="Buy ${esc(G.name)} from ships">Buy</button><button type="button" data-g="${g}" data-k="sell" class="${pol.sell ? 'on' : ''}"${dis} title="Sell ${esc(G.name)} to ships">Sell</button></div></td>` +
           `<td class="act"><button type="button" class="btn icon small danger dump" data-dump="${g}" title="Sell all to a passing broker at half price" aria-label="Sell all ${esc(G.name)} to a broker"${stock ? '' : ' disabled'}>${icon('dump', 14)}</button></td></tr>`;
-        if (openRow === g) h += `<tr class="mdetail" style="--hue:${kindHue(G.kind)}"><td class="kind"><i></i></td><td colspan="6"><span class="mdl">From</span> ${esc(from || 'nowhere nearby')}<br><span class="mdl">Wanted by</span> ${esc(to || 'nobody nearby')}</td></tr>`;
+        if (openRow === g) h += `<tr class="mdetail" style="--hue:${kindHue(G.kind)}"><td class="kind"><i></i></td><td colspan="6"><span class="mdl">Price</span> ${p.toFixed(1)} now ${MID} ${usual(g).toFixed(1)} usual (${vsUsual(g) >= 0 ? '+' : ''}${vsUsual(g)}%)<br><span class="mdl">From</span> ${esc(from || 'nowhere nearby')}<br><span class="mdl">Wanted by</span> ${esc(to || 'nobody nearby')}<br><button type="button" class="btn danger mbroker" data-dump="${g}"${stock ? '' : ' disabled'}>${icon('dump', 14)}<span>Broker: sell all at half price</span></button></td></tr>`;
       }
       h += `</tbody></table>`;
       paint(F.body, h, sig, 'm');
     };
     F.body.addEventListener('click', e => {
+      const act = e.target.closest('[data-act]');
+      if (act && act.dataset.act === 'mguide') { const T = Sim.totals(); guide(T, Math.round((0.65 - T.margin) * 100), Math.round((1.05 + T.margin) * 100)); return; }
+      if (act && act.dataset.act === 'mbuild') { ctx.ui.openPanel('build'); return; }
+      const tip = e.target.closest('button[data-tip-g]');
+      if (tip) { Sim.setPolicy(tip.dataset.tipG, tip.dataset.tipK, tip.dataset.tipV === '1'); ctx.sound.click(); render(); return; }
       const pol = e.target.closest('button[data-g][data-k]');
       if (pol) { if (pol.disabled) return; Sim.setPolicy(pol.dataset.g, pol.dataset.k, !ctx.state().policy[pol.dataset.g][pol.dataset.k]); ctx.sound.click(); return; }
       const dump = e.target.closest('button[data-dump]');
