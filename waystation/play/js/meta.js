@@ -580,7 +580,7 @@ const Meta = {
   buildMul(state = Sim.state) { const d = state && SECTORS[state.sector]; return d ? d.buildMul : 1; },
   skipCost(remainingMs) { return Math.max(1, Math.ceil(Math.max(0, remainingMs) / 60000 / TIMERS.SKIP_MINUTES_PER_AM)); },
   // A1.1: upgrading from `lvl` takes UPGRADE_TIME_MUL[lvl - 1] x the build time (2x to level 2, 5x to level 3 in `patient`)
-  upgradeMs(def, lvl, state = Sim.state) { const M = TIMERS.UPGRADE_TIME_MUL, m = Array.isArray(M) ? M[clamp(lvl, 1, 2) - 1] : M; return Math.round((def.buildMs || 0) * m * this.buildMul(state)); },
+  upgradeMs(def, lvl, state = Sim.state) { if (def.upgrade && def.upgrade.ms) return Math.round(def.upgrade.ms[clamp(lvl, 1, 2) - 1] * this.buildMul(state)); /*core:ms*/ const M = TIMERS.UPGRADE_TIME_MUL, m = Array.isArray(M) ? M[clamp(lvl, 1, 2) - 1] : M; return Math.round((def.buildMs || 0) * m * this.buildMul(state)); },
 
   // called by Sim.place after the grid cell is set: creates the cell meta and emits build-start (or an instant build-done)
   onPlace(r, c, id) {
@@ -653,6 +653,25 @@ const Meta = {
     return { ok: true, cost };
   },
 
+  /*core:cost*/ // what the next level costs: a multiple of the building's price, or the core's own prices (raised by region)
+  _upgradeCost(id, def, lvl, s = Sim.state) {
+    const U = def.upgrade;
+    if (U.cost) { const v = U.cost[clamp(lvl, 1, 2) - 1] * Sim.priceMul(s); return v >= 1000 ? Math.round(v / 50) * 50 : Math.round(v); }
+    return Sim.costOf(id, s) * U.costMul[lvl - 1];
+  },
+  // the station level a level needs (the core's levels wait for the station's), or null
+  _upgradeNeeds(def, lvl, s = Sim.state) { const N = def.upgrade && def.upgrade.needLevel; const need = N ? N[clamp(lvl, 1, 2) - 1] : 0; return need && (s.level || 1) < need ? need : null; },
+  // what else the core's next level brings, in words
+  _coreNote(def, lvl, nl) {
+    const E = (typeof UPGRADE_EFFECTS !== 'undefined' && UPGRADE_EFFECTS.core) || {};
+    const v = (k, key, L) => Math.round((def[k] || 0) * (E[key] ? E[key][clamp(L, 1, 3) - 1] : 1));
+    const out = [];
+    if (def.power > 0) out.push(`Power ${v('power', 'power', lvl)} to ${v('power', 'power', nl)}`);
+    if (def.beds) out.push(`beds ${v('beds', 'capacity', lvl)} to ${v('beds', 'capacity', nl)}`);
+    if (def.storage) out.push(`storage ${v('storage', 'storage', lvl)} to ${v('storage', 'storage', nl)}`);
+    if (def.food) out.push(`food ${v('food', 'food', lvl)} to ${v('food', 'food', nl)}`);
+    return out.join(', ');
+  },
   upgrade(r, c) {
     const s = Sim.state, cell = Sim.cellMeta(r, c); if (!s || !cell) return null;
     const m = s.grid[r][c]; if (!m) return null;
@@ -661,9 +680,11 @@ const Meta = {
     if (!def.upgrade || lvl >= 3) return out;
     const nl = lvl + 1;
     const effectKey = { dock: 'dockTime', capacity: 'capacity', power: 'power' }[def.upgrade.kind] || null;
-    out.next = { lvl: nl, cost: Sim.costOf(m.id, s) * def.upgrade.costMul[lvl - 1], rate: this._rate(def, nl), cap: this._cap(def, nl),
+    out.next = { lvl: nl, cost: this._upgradeCost(m.id, def, lvl, s), rate: this._rate(def, nl), cap: this._cap(def, nl),   /*core:next*/
       ms: this.upgradeMs(def, lvl, s), kind: def.upgrade.kind,
       effect: effectKey ? Sim.upgradeEffect(m.id, effectKey, nl) : null };   // dockTime multiplier, or capacity / power multiplier
+    /*core:nextMore*/ const need = this._upgradeNeeds(def, lvl, s); if (need) out.next.locked = `Needs station level ${need}`;
+    if (def.upgrade.kind === 'core') out.next.gains = this._coreNote(def, lvl, nl);   /*core:gains*/
     return out;
   },
 
@@ -671,10 +692,11 @@ const Meta = {
     const s = Sim.state, cell = Sim.cellMeta(r, c);
     if (!s || !cell || !s.grid[r][c]) return { ok: false, cost: 0, totalMs: 0, why: 'Nothing there' };
     const id = s.grid[r][c].id, def = MODULES[id], lvl = cell.lvl || 1;
-    if (!def.upgrade) return { ok: false, cost: 0, totalMs: 0, why: 'The Core Hub cannot be upgraded' };
+    if (!def.upgrade) return { ok: false, cost: 0, totalMs: 0, why: `${def.name} cannot be upgraded` };
     if (cell.readyAt != null) return { ok: false, cost: 0, totalMs: 0, why: cell.up ? 'Already upgrading' : 'Still under construction' };
     if (lvl >= 3) return { ok: false, cost: 0, totalMs: 0, why: 'Already at level 3' };
-    const cost = Sim.costOf(id, s) * def.upgrade.costMul[lvl - 1];
+    /*core:start*/ const need = this._upgradeNeeds(def, lvl, s); if (need) return { ok: false, cost: 0, totalMs: 0, why: `Needs station level ${need}` };
+    const cost = this._upgradeCost(id, def, lvl, s);
     if (s.credits < cost) return { ok: false, cost, totalMs: 0, why: 'Not enough credits' };
     const now = this.now(), totalMs = this.upgradeMs(def, lvl, s);
     s.credits -= cost; this._syncWallet();

@@ -157,7 +157,15 @@ const UPGRADE_EFFECTS = {
   dock: { dockTime: [1, 0.85, 0.70] },         // service time multiplier by level
   capacity: { capacity: [1, 1.25, 1.5] },      // beds / homes
   power: { power: [1, 1.25, 1.5] },
+  core: { power: [1, 1.5, 2], capacity: [1, 1.5, 2], storage: [1, 1.5, 2], food: [1, 1.5, 2] },   /*core:effects*/ // the core (CORE_UPGRADE)
 };
+/*core:def*/ // The core has levels too. Its own price is nothing, so its upgrades have prices of their own (raised by region like
+// every price, Sim.priceMul), take the build time of a tier-2 and then a tier-3 building, and wait for the station level.
+const CORE_UPGRADE = (() => {
+  const M = TIMERS.UPGRADE_TIME_MUL, mul = Array.isArray(M) ? M[0] : (M || 1);
+  return { cost: [6000, 20000], needLevel: [2, 3], ms: [(TIMERS.BUILD_MS[2] || 0) * mul, (TIMERS.BUILD_MS[3] || 0) * mul],
+    rateMul: TIMERS.RATE_MUL, capMinutes: TIMERS.CAP_MINUTES, kind: 'core' };
+})();
 (function extendModules() {
   const kind = { dock: 'dock', quarters: 'capacity', habitat: 'capacity', solar: 'power', reactor: 'power' };
   for (const id in MODULES) {
@@ -167,7 +175,7 @@ const UPGRADE_EFFECTS = {
       rate,                                    // credits per real minute at level 1
       cap: rate * TIMERS.CAP_MINUTES[0],       // bank cap at level 1
       buildMs: TIMERS.BUILD_MS[d.tier] || 0,
-      upgrade: id === 'hub' ? null : { costMul: [2, 5], rateMul: TIMERS.RATE_MUL, capMinutes: TIMERS.CAP_MINUTES, kind: kind[id] || null },
+      upgrade: id === 'hub' ? CORE_UPGRADE /*core:hub*/ : { costMul: [2, 5], rateMul: TIMERS.RATE_MUL, capMinutes: TIMERS.CAP_MINUTES, kind: kind[id] || null },
     });
   }
 })();

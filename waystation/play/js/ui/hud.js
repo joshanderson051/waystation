@@ -336,7 +336,7 @@ const UI = {
       Sim.on('levelup', d => this.onLevelUp(typeof d === 'object' && d ? d.level : d));
       Sim.on('collect', d => this.onCollect(d));
       Sim.on('hopper', () => this.refreshContext());
-      Sim.on('build-start', d => { if (d && MODULES[d.id]) this.toast(`${MODULES[d.id].name} under construction ${MID2} ${Fmt.dur(d.totalMs || 0)}`, 'info', { icon: 'build', chip: 'Build' }); this.refresh(); });
+      Sim.on('build-start', d => { if (d && MODULES[d.id] && !d.upgrade) this.toast(`${MODULES[d.id].name} under construction ${MID2} ${Fmt.dur(d.totalMs || 0)}`, 'info', { icon: 'build', chip: 'Build' }); this.refresh(); });   /*core:startNote*/ // an upgrade is announced by upgrade() below
       Sim.on('build-done', d => this.onBuildDone(d));
       Sim.on('upgrade', d => { if (d && S() && S().grid[d.r] && S().grid[d.r][d.c]) this.toast(`${MODULES[S().grid[d.r][d.c].id].name} is now level ${d.lvl}`, 'good', { icon: 'upgrade', chip: 'Upgrade' }); this.refresh(); });
       Sim.on('am', d => { const el = $('#v-am'); if (el && d && d.delta) Counter.lit(el, d.delta > 0 ? 'up' : 'down'); this.refreshTop(); });
@@ -752,7 +752,7 @@ const UI = {
       h += `<span class="ctx-name">${esc(MODULES[m.id].name)} <span class="micro">${Fmt.grid(sel.r, sel.c)}</span></span>`;
       if (hp && hp.bank >= 1) h += `<button type="button" class="btn primary" data-act="collect" title="Collect ${Fmt.n(hp.bank)} credits">${icon('collect', 14)}<span>Collect ${Fmt.n(Math.floor(hp.bank))}</span></button>`;
       if (bd && bd.building) h += `<button type="button" class="btn am" data-act="skip" title="Skip the build">${icon('skip', 14)}<span>Skip ${MID2} ${bd.skipAM} AM</span></button>`;
-      else if (up && up.next && m.id !== 'hub') h += `<button type="button" class="btn" data-act="upgrade"${s.credits < up.next.cost ? ' disabled' : ''} title="Upgrade for ${Fmt.n(up.next.cost)}">${icon('upgrade', 14)}<span>Upgrade</span></button>`;
+      else if (up && up.next) h += `<button type="button" class="btn" data-act="upgrade"${s.credits < up.next.cost || up.next.locked ? ' disabled' : ''} title="${up.next.locked ? esc(up.next.locked) : `Upgrade for ${Fmt.n(up.next.cost)}`}">`/*core:bar*/ + `${icon('upgrade', 14)}<span>Upgrade</span></button>`;
       h += `<button type="button" class="btn ghost" data-act="focus" title="Focus the camera">${icon('focus', 14)}<span>Focus</span></button>`;
       if (m.id !== 'hub') h += `<button type="button" class="btn ghost danger" data-act="scrap" title="Scrap">${icon('scrap', 14)}<span>Scrap</span></button>`;
     } else if (EngineAdapter.placing()) {
@@ -796,7 +796,7 @@ const UI = {
       if (bd && bd.building) return `${MODULES[m.id].name} is under construction: ${Fmt.ms(bd.remainingMs)} left. Skip it for ${bd.skipAM} AM.`;
       const hp = MetaAdapter.hopper(sel.r, sel.c);
       if (hp && hp.ready) return `${MODULES[m.id].name} has ${Fmt.n(Math.floor(hp.bank))} credits banked. Collect them here or tap the coin on the station.`;
-      return m.id === 'hub' ? 'The Core Hub cannot be removed. Everything else grows from it.' : 'Collect, upgrade or scrap it from the actions here. Esc deselects.';
+      return m.id === 'hub' ? 'The Core Hub cannot be removed, and it can be upgraded: more power, beds, storage and food.' /*core:hint*/ : 'Collect, upgrade or scrap it from the actions here. Esc deselects.';
     }
     if (MetaAdapter.expeditions().some(x => x.status === 'ready')) return 'An expedition is back. Debrief it in Expeditions (E) to open the loot.';
     if (MetaAdapter.missions().some(x => x.claimable)) return 'A mission reward is waiting. Claim it in Missions (J).';
@@ -1573,8 +1573,12 @@ const UI = {
   },
   upgrade(r, c) {
     const up = MetaAdapter.upgrade(r, c); if (!up || !up.next) return;
+    /*core:verb*/ if (up.next.locked) { this.toast(up.next.locked, 'warn', { icon: 'upgrade', chip: 'Upgrade' }); Sound.error(); return; }
     const s = S(); if (s && s.credits < up.next.cost) { this.toast(`Need ${Fmt.n(up.next.cost - s.credits)} more credits`, 'warn'); return; }
-    if (MetaAdapter.upgradeModule(r, c)) { this.toast(`Upgrade started ${MID2} level ${up.lvl + 1}`, 'good', { icon: 'upgrade', chip: 'Upgrade' }); Sound.click(); } else this.toast('Upgrade needs the station link (Meta)', 'warn');
+    // upgradeModule answers { ok, why }: a refusal is an object too, so it is read, not taken as true
+    const res = MetaAdapter.upgradeModule(r, c);
+    if (res && res.ok !== false) { const nm = S() && S().grid[r][c] && MODULES[S().grid[r][c].id] ? MODULES[S().grid[r][c].id].name : 'The building'; this.toast(`${nm} upgrading to level ${up.lvl + 1} ${MID2} ${Fmt.dur(res.totalMs || 0)}`, 'good', { icon: 'upgrade', chip: 'Upgrade' }); Sound.click(); }   /*core:verbNote*/
+    else { this.toast((res && res.why) || 'The upgrade could not start', 'warn', { icon: 'upgrade', chip: 'Upgrade' }); Sound.error(); }
     this.refresh();
   },
   demolish(r, c) {

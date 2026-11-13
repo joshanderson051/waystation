@@ -178,11 +178,12 @@ Prices rise the further out you go. Your wallet travels with you, so each sector
 
 ### Upgrades
 
-Every module except the Core Hub has three levels. Select it and press Upgrade. Level 2 costs twice the module's price and takes twice its build time; level 3 costs five times the price and takes five times the build time. The module keeps working at its current level while the scaffold runs, and the upgrade can be skipped like any build. Each level raises the bank rate and cap (Banks), and some modules gain more:
+Every module has three levels, the Core Hub included. Select it and press Upgrade. Level 2 costs twice the module's price and takes twice its build time; level 3 costs five times the price and takes five times the build time. The module keeps working at its current level while the scaffold runs, and the upgrade can be skipped like any build. Each level raises the bank rate and cap (Banks), and some modules gain more:
 
 - Docking Bay: ships are served in 85% of the time at level 2 and 70% at level 3.
 - Crew Quarters and Residential Habitat: 25% more beds or homes at level 2, 50% more at level 3.
 - Solar Array and Fusion Reactor: 25% more power at level 2, 50% more at level 3.
+- Core Hub: 50% more power, beds, storage and food at level 2, twice as much at level 3. Its levels have prices of their own (6,000 and 20,000 credits, more in later sectors) and wait for station level 2 and station level 3.
 
 Upgrades also count toward your station level, at half a module per level gained.
 

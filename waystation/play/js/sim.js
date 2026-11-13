@@ -283,11 +283,12 @@ const Sim = {
       if (this.isBuilding(r, c, s)) { T.building++; continue; }
       const lvl = this.levelOf(r, c, s);
       const capMul = this.upgradeEffect(m.id, 'capacity', lvl), powMul = this.upgradeEffect(m.id, 'power', lvl);
+      const stoMul = this.upgradeEffect(m.id, 'storage', lvl), foodMul = this.upgradeEffect(m.id, 'food', lvl);   /*core:mul*/ // the core's levels
       T.counts[m.id] = (T.counts[m.id] || 0) + 1;
-      if (m.id !== 'hub') T.modules += 1 + (lvl - 1) * W;
+      T.modules += (m.id !== 'hub' ? 1 : 0) + (lvl - 1) * W;   /*core:mods*/ // the core's own levels count like any upgrade
       if (d.power > 0 && !(m.id === 'solar' && T.flare)) T.produced += d.power * powMul;
-      T.docks += d.docks || 0; T.storage += d.storage || 0; T.beds += (d.beds || 0) * capMul;
-      T.food += d.food || 0; T.homes += (d.homes || 0) * capMul; T.fun += d.fun || 0;
+      T.docks += d.docks || 0; T.storage += (d.storage || 0) * stoMul; /*core:sto*/ T.beds += (d.beds || 0) * capMul;
+      T.food += (d.food || 0) * foodMul; /*core:food*/ T.homes += (d.homes || 0) * capMul; T.fun += d.fun || 0;
       T.security += d.security || 0; T.tariff += d.tariff || 0; T.margin += d.margin || 0;
       T.traffic += d.traffic || 0; T.business += d.business || 0;
       T.repairIncome += d.repairIncome || 0; T.fuelIncome += (d.fuelIncome || 0) * B.fuel; T.repBonus += d.rep || 0;
@@ -300,7 +301,7 @@ const Sim = {
       if (d.produces) for (const g in d.produces) T.produces[g] = (T.produces[g] || 0) + d.produces[g];
       if (d.converts) T.converts.push(B.refinery === 1 ? d.converts : Object.assign({}, d.converts, { outAmt: Math.round(d.converts.outAmt * B.refinery) }));
     }
-    T.beds = Math.round(T.beds); T.homes = Math.round(T.homes); T.produced = Math.round(T.produced);
+    T.beds = Math.round(T.beds); T.homes = Math.round(T.homes); T.storage = Math.round(T.storage); T.food = Math.round(T.food);   /*core:round*/ T.produced = Math.round(T.produced);
     T.efficiency = T.used > T.produced ? clamp(T.produced / Math.max(1, T.used), 0.3, 1) : 1;
     T.stockTotal = GOOD_IDS.reduce((a, g) => a + s.stock[g], 0);
     T.visitors = s.ships.filter(sh => sh.state === 'docked').reduce((a, sh) => a + sh.crew, 0);

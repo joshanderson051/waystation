@@ -542,12 +542,12 @@ const Panels = {
           `<button type="button" class="btn big primary" data-act="collect"${hp.bank < 1 ? ' disabled' : ''}>${icon('collect', 16)}<span>Collect</span></button></div>`;
       }
       // upgrade
-      if (!(bd && bd.building) && m.id !== 'hub') {
+      if (!(bd && bd.building)) {   /*core:panel*/ // the core too
         if (up && up.next) {
-          const n = up.next, poor = s.credits < n.cost;
+          const n = up.next, poor = s.credits < n.cost, lock = n.locked || '';
           h += shelf(`Upgrade to level ${lvl + 1}`, esc(`${Fmt.n(n.cost)} cr ${MID} ${Fmt.dur(n.ms || upgradeMs(m.id, lvl + 1, sectorIndex(s.sector || 'home')))}`));
           h += `<div class="kv tight"><span>Rate</span><span class="num">${Fmt.n(hp ? hp.rate : modRate(m.id, lvl))} ${GLYPH.arrow} <b class="c-amber-hi">${Fmt.n(n.rate)}</b> / min</span><span>Capacity</span><span class="num">${Fmt.n(hp ? hp.cap : 0)} ${GLYPH.arrow} <b class="c-amber-hi">${Fmt.n(n.cap)}</b></span>${n.note ? `<span>Also</span><span class="ink">${esc(n.note)}</span>` : ''}</div>` +
-            `<div class="actions"><button type="button" class="btn big primary" data-act="upgrade"${poor ? ' disabled' : ''} title="${poor ? `Need ${Fmt.n(n.cost - s.credits)} more credits` : 'Start the upgrade'}">${icon('upgrade', 16)}<span>Upgrade ${MID} ${Fmt.n(n.cost)}</span></button>${poor ? `<span class="why">Need ${Fmt.n(n.cost - s.credits)} more</span>` : ''}</div>`;
+            (n.gains ? `<p class="status">${GLYPH.up} ${esc(n.gains)}</p>` : '') + /*core:gainsLine*/ `<div class="actions"><button type="button" class="btn big primary" data-act="upgrade"${poor || lock ? ' disabled' : ''} title="${lock ? esc(lock) : poor ? `Need ${Fmt.n(n.cost - s.credits)} more credits` : 'Start the upgrade'}">${icon('upgrade', 16)}<span>Upgrade ${MID} ${Fmt.n(n.cost)}</span></button>${lock ? `<span class="why">${esc(lock)}</span>` : poor ? `<span class="why">Need ${Fmt.n(n.cost - s.credits)} more</span>` : ''}</div>`;   /*core:panelBtn*/
         } else if (up) {
           h += shelf('Upgrade', `${GLYPH.sq} Max level`, { tagCls: 'c-ink2' });
         }
