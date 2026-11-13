@@ -13,6 +13,9 @@
 /* ---- contents (sticky at desktop widths, a top list on narrow screens) ---- */
 .toc { position: sticky; top: 68px; max-height: calc(100vh - 84px); overflow: auto; padding: 2px 0 12px; scrollbar-width: thin; }
 .toc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 10px; color: var(--ink-2); }
+.toc summary { list-style: none; }
+.toc summary::-webkit-details-marker { display: none; }
+@media (min-width: 1001px) { .toc summary { pointer-events: none; } }   /* the folding is for phones */
 .toc ol { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--hairline-2); }
 .toc li { margin: 0; }
 .toc a { position: relative; display: grid; grid-template-columns: 26px 1fr; align-items: baseline; gap: 8px; padding: 6px 10px 6px 14px; margin-left: -1px; border-left: 2px solid transparent;
@@ -180,6 +183,11 @@ table.data:not(.roster-t) .mod.tight { grid-template-columns: 28px auto; }
   .manual { padding-top: 28px; }
   .manual .wrap { grid-template-columns: 1fr; gap: 0; }
   .toc { position: static; max-height: none; overflow: visible; padding: 0 0 8px; margin-bottom: 24px; }
+  .toc summary { min-height: 44px; margin: 0; cursor: pointer; border-top: 1px solid var(--hairline-2); border-bottom: 1px solid var(--hairline-2); }
+  .toc summary::after { content: ''; flex: none; width: 9px; height: 9px; margin: 0 4px 4px 12px; border-right: 1.5px solid var(--amber); border-bottom: 1.5px solid var(--amber); transform: rotate(45deg); }
+  .toc details[open] summary { margin-bottom: 12px; }
+  .toc details[open] summary::after { transform: rotate(-135deg); margin-bottom: -4px; }
+  .toc summary .micro { margin-left: auto; }
   .toc ol { border-left: 0; display: flex; flex-wrap: wrap; gap: 6px; }
   .toc a { display: inline-flex; gap: 6px; align-items: baseline; padding: 0 10px; min-height: 32px; margin: 0; border: 1px solid var(--edge); border-left-width: 1px; background: var(--glass-2); border-radius: 3px; font-size: 13px; }
   .toc a.active { border-color: var(--amber-dim); box-shadow: none; background: var(--amber-ghost); }
@@ -215,4 +223,11 @@ table.data:not(.roster-t) .mod.tight { grid-template-columns: 28px auto; }
   .rail, .toc, .foot { display: none; }
   .manual .wrap { grid-template-columns: 1fr; }
   body { background: #fff; color: #000; }
+}
+
+/* 2026-11-11 phones and touch tablets: the contents chips are 44 px tap targets, and the smallest labels read at 12 px */
+@media (max-width: 760px), ((pointer: coarse) and (max-width: 1023px)) {
+  .toc a { min-height: 44px; align-items: center; }
+  .toc a .n, .gallery .gsub { font-size: 12px; }
+  table.data .chip { height: 20px; font-size: 11px; }
 }

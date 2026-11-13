@@ -704,7 +704,7 @@ const Panels = {
       if (!picked) picked = active.def.id;
       const owned = rows.filter(r => r.status === 'active' || r.status === 'owned').length;
       F.setSub(`${owned} of ${rows.length} sectors ${MID} ${esc(active.def.name)} active`);
-      const W = 400, H = 200;
+      const W = 400, H = 200, HALO = innerWidth < 375 ? 32 : 26;   // the halo is the touch area: 44 px on the narrowest phones too
       let svg = `<svg class="galaxy" viewBox="0 0 ${W} ${H}" width="100%" aria-label="Galaxy map" role="group">`;
       // routes
       for (let i = 0; i < rows.length - 1 && i < NODE.length - 1; i++) {
@@ -718,7 +718,7 @@ const Panels = {
         // A6.3: sector thumbnails (sectors/256) clipped to the node circles; the painted disc stays under them as the fallback
         const R = r.status === 'active' ? 16 : r.status === 'locked' ? 10 : 13, imgUrl = Art.url('sectors', r.def.id, R * 2);
         svg += `<g class="${cls}" data-sector="${esc(r.def.id)}" tabindex="0" role="button" aria-label="${esc(r.def.name)} ${esc(r.status)}" style="--hue:${look.rim}">` +
-          `<circle class="halo" cx="${x}" cy="${y}" r="26"/><circle class="glow" cx="${x}" cy="${y}" r="${R + 6}"/><circle class="disc" cx="${x}" cy="${y}" r="${R}" fill="${r.status === 'locked' ? 'var(--surface-3)' : look.base}"/>` +
+          `<circle class="halo" cx="${x}" cy="${y}" r="${HALO}"/><circle class="glow" cx="${x}" cy="${y}" r="${R + 6}"/><circle class="disc" cx="${x}" cy="${y}" r="${R}" fill="${r.status === 'locked' ? 'var(--surface-3)' : look.base}"/>` +
           (imgUrl ? `<clipPath id="gm-${esc(r.def.id)}"><circle cx="${x}" cy="${y}" r="${R - 1}"/></clipPath><image class="node-img" href="${imgUrl}" x="${x - R}" y="${y - R}" width="${R * 2}" height="${R * 2}" clip-path="url(#gm-${esc(r.def.id)})" preserveAspectRatio="xMidYMid slice"/>` : '') +
           (r.status === 'locked' ? `<path class="lock" d="M${x - 3} ${y - .5}h6v4h-6Z M${x - 2} ${y - .5}v-1.5a2 2 0 0 1 4 0v1.5" />` : '') +
           `<text class="node-lbl" x="${x}" y="${y + (ny > .5 ? R + 16 : -(R + 8))}" text-anchor="middle">${esc(r.def.name.toUpperCase())}</text></g>`;

@@ -296,3 +296,13 @@ img { max-width: 100%; }
 .faq details p { margin: 0; padding: 0 0 14px; max-width: 72ch; font: 400 14px/1.6 var(--font-body); color: var(--ink-2); }
 @media (max-width: 860px) { .about { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .quick div { grid-template-columns: 1fr; gap: 2px; } }
+
+/* 2026-11-11 phones and touch tablets: tap targets are at least 44 px (they were 32), and the smallest labels read at 12 px */
+@media (max-width: 760px), ((pointer: coarse) and (max-width: 1023px)) {
+  .btn, .btn.big { min-height: 44px; }
+  .rail-nav .link { min-height: 44px; }
+  .brand { min-height: 44px; justify-content: center; }
+  .foot .wrap { row-gap: 0; }
+  .foot a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; }
+  .micro, .shelf-tag, .chip, .card .name .tag, .quick dt { font-size: 12px; }
+}

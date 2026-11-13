@@ -2,14 +2,14 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://portsolace.com/</loc>
-    <lastmod>2026-11-09</lastmod>
+    <lastmod>2026-11-12</lastmod>
     <image:image><image:loc>https://portsolace.com/assets/og-card.jpg</image:loc></image:image>
     <image:image><image:loc>https://portsolace.com/assets/hero.jpg</image:loc></image:image>
     <image:image><image:loc>https://portsolace.com/assets/bridge.webp</image:loc></image:image>
   </url>
   <url>
     <loc>https://portsolace.com/manual/</loc>
-    <lastmod>2026-11-09</lastmod>
+    <lastmod>2026-11-12</lastmod>
     <image:image><image:loc>https://portsolace.com/assets/manual/fig-achievements.webp</image:loc></image:image>
     <image:image><image:loc>https://portsolace.com/assets/manual/fig-bank.webp</image:loc></image:image>
     <image:image><image:loc>https://portsolace.com/assets/manual/fig-bridge.webp</image:loc></image:image>
@@ -24,6 +24,6 @@
   </url>
   <url>
     <loc>https://portsolace.com/play/</loc>
-    <lastmod>2026-11-09</lastmod>
+    <lastmod>2026-11-12</lastmod>
   </url>
 </urlset>

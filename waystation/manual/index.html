@@ -98,7 +98,8 @@
 
     <!-- ================= Contents ================= -->
     <aside class="toc" id="contents" aria-label="Contents">
-      <div class="toc-head"><span class="section">Contents</span><span class="micro">19 chapters</span></div>
+      <details open>
+      <summary class="toc-head"><span class="section">Contents</span><span class="micro">19 chapters</span></summary>
       <ol>
         <li><a href="#s1"><span class="n">01</span><span>What Port Solace is</span></a></li>
         <li><a href="#s2"><span class="n">02</span><span>Your first ten minutes</span></a></li>
@@ -120,6 +121,8 @@
         <li><a href="#s18"><span class="n">18</span><span>Controls and accessibility</span></a></li>
         <li><a href="#s19"><span class="n">19</span><span>Glossary</span></a></li>
       </ol>
+      </details>
+      <script>/* phones fold the contents behind their heading; everything else keeps them open */ if (window.matchMedia('(max-width: 1000px)').matches) document.querySelector('.toc details').removeAttribute('open');</script>
       <div class="toc-foot glass">
         <p>Every figure here is read from the game's own data files, the shipped <span class="mono">patient</span> pacing. Times are real, wall-clock time unless a sentence says game days.</p>
         <p><a href="../play/">Open the bridge</a> in another tab and read along.</p>
@@ -135,7 +138,7 @@
         <ul class="facts micro">
           <li>Numbers from the shipped game data</li>
           <li>Real-time timers</li>
-          <li>Desktop and tablet</li>
+          <li>Desktop, tablet and phone</li>
           <li>Updated 2026-10-29</li>
         </ul>
         <figure class="fig glass masthead">
@@ -1024,7 +1027,7 @@
           <h3>Notifications</h3>
           <p>The Notifications shelf offers a browser notification when a build, upgrade, expedition or ring clearing finishes. Turning <span class="ui">Notify me when something finishes</span> on asks the browser for permission; once it is on, a <span class="ui">Daily reward reminder</span> (nine in the morning, local time) and <span class="ui">Send a test notification</span> appear under it. The chip beside the switch reads On, Off, Connecting, Blocked when the browser refused, Offline when the service cannot be reached, or Unavailable in a browser without push.</p>
           <h3>Devices</h3>
-          <p>Port Solace is a desktop and tablet game. It needs a screen at least 1,024 pixels wide and WebGL; a phone gets a polite message instead of a broken bridge. The reference layout is 1440&times;900; at 1180 and below the rail collapses to icons and the panel narrows, and at 1024 the notices hide behind a bell. Current Chrome, Edge, Firefox and Safari are supported.</p>
+          <p>Port Solace plays on desktop, tablet and phone, in any browser with WebGL. The reference layout is 1440&times;900; at 1180 and below the rail collapses to icons and the panel narrows, at 1024 the notices hide behind a bell, and on a phone the bridge folds into a bottom dock with the panels as sheets (see Sizes, below). Current Chrome, Edge, Firefox and Safari are supported.</p>
         </div>
       </section>
 

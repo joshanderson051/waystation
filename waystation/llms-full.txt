@@ -877,7 +877,7 @@ The Notifications shelf offers a browser notification when a build, upgrade, exp
 
 ### Devices
 
-Port Solace is a desktop and tablet game. It needs a screen at least 1,024 pixels wide and WebGL; a phone gets a polite message instead of a broken bridge. The reference layout is 1440×900; at 1180 and below the rail collapses to icons and the panel narrows, and at 1024 the notices hide behind a bell. Current Chrome, Edge, Firefox and Safari are supported.
+Port Solace plays on desktop, tablet and phone, in any browser with WebGL. The reference layout is 1440×900; at 1180 and below the rail collapses to icons and the panel narrows, at 1024 the notices hide behind a bell, and on a phone the bridge folds into a bottom dock with the panels as sheets (see Sizes, below). Current Chrome, Edge, Firefox and Safari are supported.
 
 ## 18. Controls and accessibility
 
