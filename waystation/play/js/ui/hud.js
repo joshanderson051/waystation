@@ -444,6 +444,7 @@ const UI = {
   // ---------------------------------------------------------- start / tick / refresh (0.4)
   start() {
     this.started = true;
+    setTimeout(() => { if (this.guestCardDue()) this.accountCard(); }, 12000);
     this.sig = {};
     document.body.removeAttribute('data-screen');
     // the profile exists now: persisted settings replace the pre-profile defaults bound in init
@@ -568,7 +569,7 @@ const UI = {
       let state = 'off', tip = '';
       const last = st.lastSyncAt ? ` ${MID2} last synced ${Fmt.ago(Date.now() - st.lastSyncAt)} ago` : '';
       if (!avail) state = 'off';
-      else if (!st.signedIn) { state = 'signed-out'; tip = 'Cloud save · sign in to save across devices'; }
+      else if (!st.signedIn) { state = 'signed-out'; tip = 'Guest · this station is saved on this device only. Sign in to keep it.'; }
       else if (st.syncing) { state = 'syncing'; tip = 'Cloud save · syncing…'; }
       else if (st.lastError) { state = 'error'; tip = `Cloud save · ${st.lastError}${last}`; }
       else if (offline) { state = 'offline'; tip = `Cloud save · offline, retrying${last}`; }
@@ -577,7 +578,7 @@ const UI = {
       btn.hidden = state === 'off';
       if (btn.dataset.state !== state) btn.dataset.state = state;
       if (btn.dataset.tip !== tip) btn.dataset.tip = tip;
-      const dot = btn.querySelector('.dot'); if (dot) dot.hidden = !(state === 'syncing' || state === 'error' || state === 'offline' || state === 'dirty');
+      const dot = btn.querySelector('.dot'); if (dot) dot.hidden = !(state === 'signed-out' || state === 'syncing' || state === 'error' || state === 'offline' || state === 'dirty');
     }
     const ta = $('#title-account');
     if (ta) {
@@ -588,9 +589,41 @@ const UI = {
           `<span class="micro">${c ? `Cloud save ${MID2} ${esc(c.name || 'station')} ${MID2} ${Fmt.day(c.day || 1)} ${MID2} L${c.level || 1} ${MID2} ${Fmt.n(c.credits || 0)} cr` : 'No cloud save yet'}${st.cloud && st.cloud.updatedAt ? ` ${MID2} ${Fmt.ago(Date.now() - st.cloud.updatedAt)} ago` : ''}</span>` +
           `<button type="button" class="linkish" data-account="notyou">Not you?</button></div>`;
       } else if (!avail) h = '';   // no cloud on this build: the Settings shelf explains, the title band stays quiet
-      else h = `<button type="button" class="btn ghost" data-account="signin">${icon('cloud', 14)}<span>Sign in</span></button>`;
+      else h = `<button type="button" class="btn ghost" data-account="signin">${icon('cloud', 14)}<span>Sign in or create an account</span></button>`;
       if (ta._h !== h) { ta._h = h; ta.innerHTML = h; }
     }
+  },
+  // ---------------------------------------------------------- a guest's station lives on one device: say so, and reward the fix
+  // The first sign-in on a save adds ACCOUNT_BONUS Antimatter, once: the mark is part of the save, so a cloud save carries it.
+  // A guest is asked at quiet moments only: a notice a few seconds after a level is reached, and a card on a later day's
+  // visit (at most once in twenty hours, six times in all). The cloud glyph keeps its dot until they sign in.
+  ACCOUNT_BONUS: 30,
+  isGuest() { return AccountAdapter.available() && !AccountAdapter.state().signedIn; },
+  payAccountBonus() {
+    const m = typeof Meta !== 'undefined' ? Meta : null;
+    if (!m || !m.profile || typeof m.addAM !== 'function' || !AccountAdapter.state().signedIn) return false;
+    const E = m.profile.entitlements || (m.profile.entitlements = {});
+    if (E.accountBonus) return false;
+    E.accountBonus = Date.now();
+    m.addAM(this.ACCOUNT_BONUS, 'account');
+    if (typeof m.save === 'function') m.save();
+    this.toast(`Thank you for signing in: ${this.ACCOUNT_BONUS} Antimatter added, and this station is saved to your account.`, 'gold', { icon: 'cloud', chip: 'Account' });
+    return true;
+  },
+  _nudgeLog() { try { return JSON.parse(localStorage.getItem('portsolace.accountNudge') || '{}') || {}; } catch (e) { return {}; } },
+  _nudgeMark() { try { const l = this._nudgeLog(); localStorage.setItem('portsolace.accountNudge', JSON.stringify({ n: (l.n | 0) + 1, at: Date.now() })); } catch (e) { /* a private window: it asks again next visit */ } },
+  // the card: what a guest stands to lose, what an account gives, and the two ways on
+  accountCard() {
+    if (!this.isGuest()) return;
+    this._nudgeMark();
+    Overlays.modal({ kind: 'confirm', icon: 'cloud', tag: 'Cloud save', title: 'Keep this station safe',
+      html: `Right now this station is saved on this device only. Clearing the browser's data, or changing phone or computer, loses it.<br><br>A free account keeps it safe, opens it on any device, and adds <b>${this.ACCOUNT_BONUS} Antimatter</b> as a thank-you.`,
+      actions: [{ label: 'Create a free account', primary: true, icon: 'cloud', fn: () => this.openPortal('login') }, { label: 'Not now', ghost: true }] });
+  },
+  guestCardDue() {
+    if (!this.started || !this.isGuest() || Overlays.anyOpen() || (typeof Tutorial !== 'undefined' && Tutorial.active)) return false;
+    const p = typeof Meta !== 'undefined' && Meta ? Meta.profile : null, l = this._nudgeLog(), GAP = 20 * 3600e3, now = Date.now();
+    return !!p && now - (p.createdAt || now) > GAP && (l.n | 0) < 6 && now - (l.at || 0) > GAP;
   },
   // A gauge of demand against supply (owner, 2026-11-09: the block pips, hatched red when over, read as stray letters):
   // the fill is the share of supply in use, amber from 85%, and the whole track red and pulsing when demand outruns it.
@@ -913,7 +946,7 @@ const UI = {
     h += `<div class="menu-rows">`;
     h += row('daily', 'calendar', 'Daily reward', daily ? (daily.claimable ? '<span class="chip amber" data-shape="up">Ready</span>' : 'Claimed today') : '');
     h += row('pause', s.speed ? 'pause' : 'play', s.speed ? 'Pause the station' : 'Resume the station', s.speed ? '' : '<span class="chip warn" data-shape="sq">Paused</span>');
-    if (cloud && !cloud.hidden) { const CLOUD_WORD = { 'signed-out': 'Sign in', synced: 'Synced', dirty: 'Pending', syncing: 'Syncing', offline: 'Offline', error: 'Error' }; h += row('cloud', 'cloud', 'Cloud save', esc(CLOUD_WORD[cloud.dataset.state] || '')); }
+    if (cloud && !cloud.hidden) { const CLOUD_WORD = { 'signed-out': `Sign up +${this.ACCOUNT_BONUS}`, synced: 'Synced', dirty: 'Pending', syncing: 'Syncing', offline: 'Offline', error: 'Error' }; h += row('cloud', 'cloud', 'Cloud save', esc(CLOUD_WORD[cloud.dataset.state] || '')); }
     h += row('panel:map', 'map', 'Galaxy map', esc(sectorName));
     h += `<a class="menu-row" href="../manual/" target="_blank" rel="noopener"><span class="menu-ic">${icon('registry', 18)}</span><span class="menu-lbl">Manual</span><span class="menu-chev">${icon('chevron-right', 14)}</span></a>`;
     if (HUB_URL) h += `<a class="menu-row menu-hub" href="${esc(hubHref())}"><span class="menu-ic">${hubMark(18)}</span><span class="menu-lbl">All games</span><span class="menu-meta">Build the Ages</span><span class="menu-chev">${icon('chevron-right', 14)}</span></a>`;
@@ -1194,6 +1227,7 @@ const UI = {
   onLevelUp(level) {
     document.body.setAttribute('data-level', String(level));
     this.celebrate('level', { level });
+    if (this.isGuest()) setTimeout(() => { if (this.isGuest() && !Overlays.anyOpen()) this.toast('This station is saved on this device only. A free account keeps it safe.', 'info', { icon: 'cloud', chip: 'Account', action: { label: 'Save it', fn: () => this.accountCard() } }); }, 9000);
     this.refresh();
   },
   onMission(d) {
@@ -1410,6 +1444,7 @@ const UI = {
   onAccount(d) {
     if (!d) return;
     const st = d.state;
+    if (st === 'signed-in' || st === 'synced') setTimeout(() => this.payAccountBonus(), 1500);
     if (st === 'signed-in') { this._acctOffline = false; this._acctLastErr = null; this.toast(`Signed in as ${d.email || (AccountAdapter.state().user || {}).email || 'your account'}`, 'good', { icon: 'cloud', chip: 'Account' }); }
     else if (st === 'signed-out') { this._acctOffline = false; this.toast(d.why ? `Signed out: ${d.why}` : 'Signed out. Your profile stays in this browser.', d.why ? 'warn' : 'info', { icon: 'cloud', chip: 'Account' }); }
     else if (st === 'synced') { if (this._acctOffline) this.toast('Back online. Cloud save up to date.', 'good', { icon: 'cloud', chip: 'Account' }); this._acctOffline = false; this._acctLastErr = null; }
