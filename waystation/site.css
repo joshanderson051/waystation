@@ -306,3 +306,6 @@ img { max-width: 100%; }
   .foot a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; }
   .micro, .shelf-tag, .chip, .card .name .tag, .quick dt { font-size: 12px; }
 }
+
+/* inside a store app (html[data-app], set by the page's first script) nothing is sold: what is only true on the web is hidden */
+html[data-app] [data-web-only] { display: none !important; }
