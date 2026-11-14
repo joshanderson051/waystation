@@ -317,7 +317,10 @@ const Meta = {
   stoodDown: false,
   _claimSave() {
     if (!this._tabId) {
-      this._tabId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+      /*qa:tabId*/ // not Math.random: this name must not draw from the numbers the game itself plays with, or a seeded test
+      // run (tools/kit-sim-test.js) changes course with every start
+      let salt = ''; try { const u = new Uint32Array(2); crypto.getRandomValues(u); salt = u[0].toString(36) + u[1].toString(36); } catch (e) { salt = String(typeof performance !== 'undefined' && performance && performance.now ? Math.round(performance.now() * 1000) : 0); }
+      this._tabId = `${Date.now().toString(36)}-${salt}`;
       try { window.addEventListener('storage', e => { if (e.key === PROFILE_KEY + '.owner' && e.newValue && e.newValue !== this._tabId && !this._lockOff) this._standDown();   /*qa:lockOff3*/ }); } catch (e) { /* no window: a test harness */ }
     }
     /*qa:lockOff*/ // a write that fails, or does not read back, means there is no lock to hold (and no save to protect)
