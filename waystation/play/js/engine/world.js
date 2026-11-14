@@ -35,6 +35,16 @@ const EngineWorld = (() => {
   // width (the hub a little larger) and centred on the cell centre. The opaque box is measured once per texture.
   const ISO = ST.ISO, MINI_K = 0.86, MINI_K_HUB = 0.95;
   const miniW = id => (id === 'hub' ? MINI_K_HUB : MINI_K) * 2 * ISO.HW;
+  /*lv:size*/ // Levels: a building stands larger with each level (0.86 of its cell's width, then 0.95, then a little over the
+  // whole cell; the hub starts larger and ends the same), and its level 2 or 3 picture is used when the pack has one.
+  const LVL_TOP = 1.04;
+  const lvlScale = (id, lvl) => { const k0 = id === 'hub' ? MINI_K_HUB : MINI_K, t = lvl >= 3 ? 1 : lvl === 2 ? 0.5 : 0; return 1 + (LVL_TOP / k0 - 1) * t; };
+  const lvlOf = (r, c) => { const up = metaUpgrade(r, c); return up && up.lvl ? Math.max(1, Math.min(3, up.lvl | 0)) : 1; };
+  // the picture for a building at a level: that level's own, else the level below's, else the building's first picture
+  function levelArt(id, lvl) {
+    for (let n = lvl; n > 1; n--) { const u = ST.assets.url('modules', `${id}@${n}`, 512); if (u) return { url: u, lvl: n }; }
+    return { url: ST.assets.url('modules', id, 512), lvl: 1 };
+  }
   const depthZ = d => Math.round(d * 100);                                         // zIndex in world.minis for a depth gx + gy
   // corridor tube: thickness in world px and how far its crown rides above the deck; the deck slab's thickness
   const TUBE_T = 0.2 * CELL, TUBE_LIFT = 0.09 * CELL, DECK_T = 6;
@@ -179,9 +189,9 @@ const EngineWorld = (() => {
     return b;
   }
   // scale and anchor that stand a texture's footprint on a cell (world px per texture px; anchor in 0..1)
-  function standGeom(tex, id) {
+  function standGeom(tex, id, lvl) {
     const b = artBox(tex); if (!b) return null;
-    const k = miniW(id) / Math.max(1, b.w);
+    const k = miniW(id) * lvlScale(id, lvl || 1) / Math.max(1, b.w);   /*lv:geom*/
     return { k, ax: (b.x0 + b.w / 2) / b.W, ay: (b.y1 - b.w * ISO.RATIO / 2) / b.H, w: b.W * k, h: b.H * k, b };
   }
   // world box of a cell's render (its opaque part)
@@ -208,7 +218,7 @@ const EngineWorld = (() => {
     sp.position.set(cx - (S.cellDev / 2 + S.pad) * S.worldPerDev * sc, cy - (S.cellDev / 2 + S.pad) * S.worldPerDev * sc);
   }
   function placeMini(rec, scale) {
-    const g = rec.geom || (rec.geom = standGeom(rec.mini.texture, rec.id)); if (!g) return;
+    const g = rec.geom || (rec.geom = standGeom(rec.mini.texture, rec.id, rec.lvl)); if (!g) return;   /*lv:place*/
     const p = cellCentre(rec.r, rec.c);
     rec.mini.anchor.set(g.ax, g.ay);
     rec.mini.scale.set(g.k * (scale || 1));
@@ -436,13 +446,14 @@ const EngineWorld = (() => {
 
   function createCell(r, c, id) {
     const hero = GLOW_HERO[id];
+    const lvl0 = lvlOf(r, c), art0 = levelArt(id, lvl0);   /*lv:cellA*/
     const rec = {
       key: keyOf(r, c), r, c, id, def: MODULES[id],
       plate: new PIXI.Sprite(), mini: new PIXI.Sprite(), shadow: new PIXI.Sprite(shadowTexture()),
       glow: ST.sprite(ST.glowTexture(glowColor(id), 32), { blend: 'add', alpha: 0 }),
       glowR: hero ? hero.r : 0.5, glowA: hero ? hero.a : 0.26,
-      chase: null, artUrl: ST.assets.url('modules', id, 512), artState: 'none', fadeT0: 0,
-      bakeKey: '', scaffold: null, bank: null, lvl: 1, building: false,
+      chase: null, artUrl: art0.url, artLvl: art0.lvl, artNext: null, pin: null, artState: 'none', fadeT0: 0,   /*lv:cellB*/
+      bakeKey: '', scaffold: null, bank: null, lvl: lvl0, building: false,
     };
     rec.plate.eventMode = rec.mini.eventMode = rec.shadow.eventMode = 'none';
     rec.mini.visible = false; rec.mini.zIndex = depthZ(r + c + 1);
@@ -462,7 +473,7 @@ const EngineWorld = (() => {
   function destroyCell(rec) {
     rec.plate.destroy(); rec.mini.destroy(); rec.shadow.destroy(); rec.glow.destroy();
     if (rec.chase) for (const d of rec.chase) d.destroy();
-    hideScaffold(rec); hideBank(rec);
+    hideScaffold(rec); hideBank(rec); hidePin(rec);   /*lv:gone*/
   }
 
   // Fallback plate: keep its bake in step with band / variant / tag / level while it is still visible.
@@ -484,7 +495,7 @@ const EngineWorld = (() => {
     if (rec.artState !== 'none') return;
     const tex = ST.assets.texture(rec.artUrl);
     if (!tex) return;
-    rec.mini.texture = tex; rec.mini.visible = true; rec.geom = standGeom(tex, rec.id);
+    rec.mini.texture = tex; rec.mini.visible = true; rec.geom = standGeom(tex, rec.id, rec.lvl);   /*lv:adopt*/
     rec.artState = 'fading'; rec.fadeT0 = U.nowMs();
   }
 
@@ -658,6 +669,58 @@ const EngineWorld = (() => {
   function chipY(rec) {
     const top = rec.artState !== 'none' ? renderBox(rec).y0 : cellCentre(rec.r, rec.c).y - ISO.HH * 1.6;
     return top - 6 - chipRadius();
+  }
+  /*lv:pin*/ // The level pin: a bronze, silver or gold shield with one, two or three chevrons on the roof of every building, drawn
+  // above every picture, so a level reads at any zoom without opening a panel.
+  const PIN = { 1: ['#F0BE8A', '#C07A3E', '#6A3A16'], 2: ['#FFFFFF', '#BCC7D3', '#566270'], 3: ['#FFF4BE', '#F5BC3C', '#8A590A'] };
+  const PIN_D = 0.25, PIN_MAX_PX = 28;
+  function pinTexture(lvl) {
+    /*lv:shield*/ // a shield, so it is never taken for a collect coin: flat top, pointed foot, the metal lit from the upper left
+    const r = Math.round(13 * S.band * ST.dpr);
+    return ST.bake(`pin|${lvl}|${r}`, r * 2 + 4, r * 2 + 4, g => {
+      const c = r + 2, [hi, mid, lo] = PIN[lvl], w = r * 0.84, top = c - r * 0.92, mid_y = c + r * 0.1, foot = c + r * 0.98, cr = r * 0.2;
+      const shape = () => { g.beginPath(); g.moveTo(c - w + cr, top); g.lineTo(c + w - cr, top); g.quadraticCurveTo(c + w, top, c + w, top + cr); g.lineTo(c + w, mid_y);
+        g.quadraticCurveTo(c + w, c + r * 0.62, c, foot); g.quadraticCurveTo(c - w, c + r * 0.62, c - w, mid_y); g.lineTo(c - w, top + cr); g.quadraticCurveTo(c - w, top, c - w + cr, top); g.closePath(); };
+      shape();
+      const gr = g.createLinearGradient(c - w, top, c + w * 0.6, foot);
+      gr.addColorStop(0, hi); gr.addColorStop(0.5, mid); gr.addColorStop(1, lo);
+      g.fillStyle = gr; g.fill();
+      g.strokeStyle = 'rgba(22,14,6,.85)'; g.lineWidth = Math.max(1.5, r * 0.15); g.lineJoin = 'round'; g.stroke();
+      g.save(); shape(); g.clip();
+      g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = Math.max(1, r * 0.1); g.beginPath(); g.moveTo(c - w + r * 0.16, top + r * 0.2); g.lineTo(c + w - r * 0.16, top + r * 0.2); g.stroke();
+      g.restore();
+      g.strokeStyle = 'rgba(30,20,8,.92)'; g.lineWidth = Math.max(1.5, r * 0.17); g.lineCap = 'round'; g.lineJoin = 'round';
+      const cw = r * 0.42, ch = r * 0.18, gap = r * 0.38, cy = c - r * 0.06;
+      for (let k = 0; k < lvl; k++) { const y = cy + (k - (lvl - 1) / 2) * gap; g.beginPath(); g.moveTo(c - cw, y + ch); g.lineTo(c, y - ch); g.lineTo(c + cw, y + ch); g.stroke(); }
+    });
+  }
+  function pinRadius(lvl) { return Math.min(PIN_D * CELL, PIN_MAX_PX / Math.max(0.01, CAM.zoom)) / 2 * (lvl === 1 ? 0.82 : 1); }
+  function showPin(rec) {
+    if (!rec.pin) { const sp = new PIXI.Sprite(); sp.anchor.set(0.5); sp.eventMode = 'none'; ST.layers.world.emissive.addChild(sp); rec.pin = { sprite: sp, key: '' }; }
+    const key = `${rec.lvl}|${S.band}`, tex = pinTexture(rec.lvl);
+    if (rec.pin.key !== key) { rec.pin.key = key; rec.pin.sprite.texture = tex.texture; }
+    const r = pinRadius(rec.lvl), top = chipY(rec) + 6 + chipRadius();           // the top edge of what the cell shows
+    rec.pin.sprite.position.set(cellCentre(rec.r, rec.c).x, top + r * 0.9);
+    rec.pin.sprite.scale.set(r * 2 / tex.w);
+    rec.pin.sprite.alpha = rec.lvl === 1 ? 0.9 : 1;
+  }
+  function hidePin(rec) { if (rec.pin) { rec.pin.sprite.destroy(); rec.pin = null; } }
+  // A building reached a new level: it stands larger at once, and its level picture is fetched if the pack has one.
+  function levelChanged(rec, lvl) {
+    rec.lvl = lvl;
+    if (rec.geom && rec.mini.texture) rec.geom = standGeom(rec.mini.texture, rec.id, lvl);
+    const art = levelArt(rec.id, lvl);
+    if (art.url && art.url !== rec.artUrl) {
+      ST.assets.load(art.url);
+      if (rec.artState === 'none') { rec.artUrl = art.url; rec.artLvl = art.lvl; } else rec.artNext = art;
+    }
+  }
+  // the level picture has arrived: it takes the place of the picture standing there (the upgrade's own pop covers the change)
+  function swapLevelArt(rec) {
+    const tex = ST.assets.texture(rec.artNext.url); if (!tex) return;
+    rec.artUrl = rec.artNext.url; rec.artLvl = rec.artNext.lvl; rec.artNext = null;
+    rec.mini.texture = tex; rec.geom = standGeom(tex, rec.id, rec.lvl);
+    if (rec.rise) rec.riseStep = -1;
   }
   function showBank(rec, h) {
     if (!rec.bank) {
@@ -1187,8 +1250,9 @@ const EngineWorld = (() => {
     let padsKey = liveryId();
     for (const rec of S.cells) {
       const offline = rec.id === 'solar' && T.flare;
-      const up = metaUpgrade(rec.r, rec.c);
-      rec.lvl = up && up.lvl ? Math.max(1, Math.min(3, up.lvl | 0)) : 1;
+      /*lv:frame*/ const lvlNow = lvlOf(rec.r, rec.c);
+      if (lvlNow !== rec.lvl) levelChanged(rec, lvlNow);
+      if (rec.artNext) swapLevelArt(rec);
       padsKey += '|' + rec.lvl;
       // construction state (Meta.build)
       const b = metaBuild(rec.r, rec.c);
@@ -1226,6 +1290,7 @@ const EngineWorld = (() => {
       rec.glow.alpha = building ? 0 : rec.glowA * (powered ? 1 : 0.35) * breathe;
       if (rec.chase) updateChase(rec, S.dockInfo.get(rec.key), S.shipsByDock.get(rec.key));
       // bank chip above the render's top edge
+      /*lv:pinShow*/ if (building && !(b && b.upgrade)) hidePin(rec); else showPin(rec);   // a building still going up has no level to show
       const h = building ? null : metaHopper(rec.r, rec.c);
       if (h && h.ready) showBank(rec, h); else hideBank(rec);
     }
@@ -1370,6 +1435,7 @@ const EngineWorld = (() => {
     get hover() { return S.hover; }, set hover(v) { S.hover = v || null; },
     get station() { return S.station; },
     get band() { return S.band; },
+    /*lv:read*/ get cells() { return S.cells; }, renderAt: pickRender,      // read-only views for the checks (tools/level-look-check.mjs), as in Build the Ages
     get artReady() { return S.cells.length > 0 && S.cells.every(r => r.artState !== 'none' || !r.artUrl); },
   };
 })();

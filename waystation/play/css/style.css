@@ -2003,3 +2003,12 @@ button.qol-row:hover .qol-lbl, button.qol-row:focus-visible .qol-lbl { color: va
 #statusbar.fit-3 .sb-hub { width: 36px; padding: 0; justify-content: center; }
 #statusbar.fit-4 #ro-power .ro-top, #statusbar.fit-4 #ro-people .ro-top, #statusbar.fit-4 #ro-rep .ro-top, #statusbar.fit-4 #ro-kit-workers .ro-top { display: none; }
 #statusbar.fit-5 .sb-left { display: none; }
+
+/* lv:css 2026-11-14 levels read as metals: bronze, silver, gold, the same three as the pin on a building's roof
+   (engine/world.js). The ticks, the label and a small medal take the level's metal wherever a level is shown. */
+.lvl.t1 { --lv: var(--bronze, #D08A4E); } .lvl.t2 { --lv: var(--silver, #C9D2DC); } .lvl.t3 { --lv: var(--tier-gold, #FFD66B); }
+.lvl .lvl-medal { flex: none; width: 14px; height: 14px; margin-right: 5px; border-radius: 50%; background: radial-gradient(circle at 34% 30%, rgba(255,255,255,.8), rgba(255,255,255,0) 46%), var(--lv, var(--ivory)); box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.45), 0 0 6px color-mix(in srgb, var(--lv, #fff) 45%, transparent); }
+.lvl.t1 i, .lvl.t2 i, .lvl.t3 i { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lv) 60%, transparent); }
+.lvl.t1 i.on, .lvl.t2 i.on, .lvl.t3 i.on { background: var(--lv); box-shadow: 0 0 6px color-mix(in srgb, var(--lv) 55%, transparent); }
+.lvl.t1 .lvl-n, .lvl.t2 .lvl-n, .lvl.t3 .lvl-n { color: var(--lv); font-weight: 600; }
+.ctx-name .lvl, .tt-title .lvl { margin-left: 8px; }

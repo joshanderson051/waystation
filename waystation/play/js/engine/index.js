@@ -66,7 +66,7 @@ const Engine = (() => {
     const A = ST.assets;
     if (!A.active) return;
     const urls = [];
-    for (const id of (A.ids('modules') || [])) urls.push(A.url('modules', id, 512));
+    for (const id of (A.ids('modules') || [])) if (!id.includes('@')) urls.push(A.url('modules', id, 512));   /*lv:preload*/ // level pictures load when a building needs them
     urls.push(A.url('props', 'gangway', 256));
     for (const id of ['crew', 'officer', 'dockworker', 'passenger_a', 'passenger_b', 'security', 'trader_alien']) { const sh = A.sheet(id); if (sh) urls.push(sh.url); }
     A.preload(urls).then(() => emit('loading', A.loading));

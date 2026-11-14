@@ -767,7 +767,7 @@ const UI = {
     let h = '';
     if (m && !EngineAdapter.placing()) {
       const hp = MetaAdapter.hopper(sel.r, sel.c), bd = MetaAdapter.build(sel.r, sel.c), up = MetaAdapter.upgrade(sel.r, sel.c);
-      h += `<span class="ctx-name">${esc(MODULES[m.id].name)} <span class="micro">${Fmt.grid(sel.r, sel.c)}</span></span>`;
+      h += `<span class="ctx-name">${esc(MODULES[m.id].name)}${up && !(bd && bd.building && !bd.upgrade) ? lvlTicks(up.lvl) : ''} <span class="micro">${Fmt.grid(sel.r, sel.c)}</span></span>`;   /*lv:bar*/
       if (hp && hp.bank >= 1) h += `<button type="button" class="btn primary" data-act="collect" title="Collect ${Fmt.n(hp.bank)} credits">${icon('collect', 14)}<span>Collect ${Fmt.n(Math.floor(hp.bank))}</span></button>`;
       if (bd && bd.building) h += `<button type="button" class="btn am" data-act="skip" title="Skip the build">${icon('skip', 14)}<span>Skip ${MID2} ${bd.skipAM} AM</span></button>`;
       else if (up && up.next) h += `<button type="button" class="btn" data-act="upgrade"${s.credits < up.next.cost || up.next.locked ? ' disabled' : ''} title="${up.next.locked ? esc(up.next.locked) : `Upgrade for ${Fmt.n(up.next.cost)}`}">`/*core:bar*/ + `${icon('upgrade', 14)}<span>Upgrade</span></button>`;
@@ -1080,7 +1080,8 @@ const UI = {
     const hp = MetaAdapter.hopper(d.r, d.c), bd = MetaAdapter.build(d.r, d.c);
     let foot = `Grid ${Fmt.grid(d.r, d.c)} ${MID2} PWR ${def.power > 0 ? '+' : GLYPH.minus}${Math.abs(def.power)}`;
     if (def.docks && m.id !== 'hub') foot += Sim.dockUsable(d.r, d.c) ? ` ${MID2} Berth clear` : ` ${MID2} <span class="bad">${GLYPH.down} Berth blocked</span>`;
-    let body = `<div class="tt-title">${esc(def.name)}</div><p class="tt-body">${esc(def.desc)}</p>`;
+    /*lv:tip*/ const tipLvl = bd && bd.building && !bd.upgrade ? 0 : ((MetaAdapter.upgrade(d.r, d.c) || {}).lvl || 1);
+    let body = `<div class="tt-title">${esc(def.name)}${tipLvl ? lvlTicks(tipLvl) : ''}</div><p class="tt-body">${esc(def.desc)}</p>`;
     if (bd && bd.building) body += `<p class="tt-body ice">${GLYPH.sq} Under construction ${MID2} ${Fmt.ms(bd.remainingMs)}</p>`;
     else if (hp) body += `<p class="tt-body ${hp.ready ? 'good' : ''}">${hp.ready ? GLYPH.up : GLYPH.sq} Banked ${Fmt.n(Math.floor(hp.bank))} / ${Fmt.n(hp.cap)} ${MID2} +${Fmt.n(hp.rate)}/min</p>`;
     body += `<div class="tt-foot">${foot}</div>`;

@@ -186,7 +186,11 @@ const pips = (power) => {
 // A6.3: the module render (modules/256 at 64px) on the family plate; the glyph plate stays as the fallback
 const plate = (id, size = 22) => { const img = Art.img('modules', id, 64, { alt: MODULES[id] ? MODULES[id].name : id }); return `<span class="plate${img ? ' art-plate' : ''}" style="--hue:${famHue(id)}">${img || icon(id, size)}</span>`; };
 const countdown = (until, cls = '') => `<span class="num cd ${cls}" data-until="${Math.round(until)}"></span>`;   // text filled by tickTimers
-const lvlTicks = lvl => `<span class="lvl" title="Level ${lvl}">${[1, 2, 3].map(i => `<i class="${i <= lvl ? 'on' : ''}"></i>`).join('')}<span class="lvl-n">L${lvl}</span></span>`;
+/*lv:ticks*/ // a level reads as a metal everywhere: bronze, silver, gold (the same as the pin on the building's roof)
+const LVL_METAL = ['', 'Bronze', 'Silver', 'Gold'];
+const lvlTicks = lvl => `<span class="lvl t${lvl}" title="Level ${lvl} of 3 ${GLYPH.mid} ${LVL_METAL[lvl] || ''}"><b class="lvl-medal"></b>${[1, 2, 3].map(i => `<i class="${i <= lvl ? 'on' : ''}"></i>`).join('')}<span class="lvl-n">L${lvl}</span></span>`;
+// the art id for a building at a level: that level's own picture when the pack has it, else the level below's, else the first
+const lvlArtId = (id, lvl) => { for (let n = lvl || 1; n > 1; n--) if (Art.url('modules', `${id}@${n}`, 64)) return `${id}@${n}`; return id; };
 
 let _svgSeq = 0;
 // darken a hex colour toward black by k (0..1) for terminators and bands
@@ -631,7 +635,7 @@ const Panels = {
       const lvl = up ? up.lvl : ((s.cells && s.cells[`${sel.r},${sel.c}`] && s.cells[`${sel.r},${sel.c}`].lvl) || 1);
       F.setSub(`Grid ${Fmt.grid(sel.r, sel.c)} ${MID} ${esc(famOf(m.id))} ${MID} <button type="button" class="linkish" data-act="back">${GLYPH.arrow} Station overview</button>`);
       // A6.3: the 512 render as a 160px hero with the name over its lower edge; the static card is the fallback
-      const heroImg = Art.img('modules', m.id, 150, { alt: d.name, eager: true });
+      const heroImg = Art.img('modules', lvlArtId(m.id, lvl), 150, { alt: d.name, eager: true });   /*lv:hero*/
       let h = heroImg
         ? `<div class="mod-hero" data-fam="${famOf(m.id)}">${heroImg}<div class="mod-hero-cap"><div class="name">${esc(d.name)} ${lvlTicks(lvl)}</div><div class="card-side"><div class="cost">${Fmt.n(Sim.costOf(m.id, s))}</div>${pips(d.power)}</div></div></div><p class="mod-desc">${esc(d.desc)}</p>`
         : `<div class="card bcard static" data-mod="${m.id}" data-fam="${famOf(m.id)}"><i class="spine"></i>${plate(m.id, 24)}<div class="card-main"><div class="name">${esc(d.name)} ${lvlTicks(lvl)}</div><div class="desc wrap">${esc(d.desc)}</div></div>` +
