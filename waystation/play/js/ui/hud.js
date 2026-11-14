@@ -405,6 +405,24 @@ const UI = {
       // A4 phone: the menu holds what the compact bar hides (readouts, daily reward, pause, cloud save, Next up)
       `<button type="button" class="sb-btn phone-only" id="sb-menu" title="Menu" aria-label="Bridge menu" aria-haspopup="dialog">${icon('menu', 20)}<i class="dot" hidden></i></button>` +
       `</div>`;
+    // fold by content as well as by width: see fitStatusBar()
+    if (typeof ResizeObserver !== 'undefined') {
+      let queued = false;
+      const watch = new ResizeObserver(() => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; this.fitStatusBar(); }); });
+      for (const part of [el, ...el.querySelectorAll('.sb-left, .sb-center, .sb-right')]) watch.observe(part);
+    }
+  },
+  // The width steps in style.css are sized for an early game: a top rank title, a long town name or large balances need
+  // more room than they leave, and the readouts ran into the rank block. So the bar also folds by what it holds: while
+  // the readouts do not fit, one more of the classes fit-1 to fit-5 goes on (rules at the end of style.css). It starts
+  // from none every time, so the bar unfolds again when there is room. Widths are offsetWidth on purpose: a readout's
+  // "hit" animation scales it, and a scaled box must not read as too wide.
+  fitStatusBar() {
+    const sb = $('#statusbar'), c = sb && sb.querySelector('.sb-center'); if (!c) return;
+    const set = k => { for (let i = 1; i <= 5; i++) sb.classList.toggle('fit-' + i, i <= k); };
+    const fits = () => { let w = 0; for (const part of c.children) w += part.offsetWidth; return w <= c.clientWidth + 3; };
+    let n = 0; set(0);
+    while (n < 5 && !fits()) set(++n);
   },
   buildRail() {
     const el = $('#rail'); if (!el) return;
