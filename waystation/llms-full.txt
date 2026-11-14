@@ -403,6 +403,8 @@ The Station panel shows a ring and four rows. Each row is a coverage from 0 to 1
 - Entertainment (25%): forty people per venue. Venues are the Rec Deck, the Promenade and the Xeno Menagerie. With nobody aboard, one venue counts as full coverage and none as half.
 - Health care (20%): 100% with a Med Bay; without one, 70%, falling to 40% once more than 20 people are aboard.
 
+Click or tap any of the four rows to open its advice: the figures behind the reading as they stand now, and the modules that would raise it. Show in Build takes you to the one you pick.
+
 The score drives three things: how much visitors spend, whether residents arrive or leave, and 2.4 of the 5 points of your reputation target. The Good Posting mission asks for 70%.
 
 ### Visitors

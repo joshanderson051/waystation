@@ -151,6 +151,27 @@ function step(name, ok, detail) { steps.push({ name, ok: !!ok, detail }); consol
   await settle(1500); await clear(); await clear();
   step('resumed with the livery intact', await ev(() => Engine.livery.id === 'founder' && Meta.livery().id === 'founder'));
 
+  // 9. the status bar late in the game: a top rank title, a million credits and a 28-letter station name must not push
+  // a readout into the rank block at any desktop width (hud.js fitStatusBar folds the bar by what it holds)
+  await ev(() => { Meta._addXP(2000000, 'journey'); Sim.state.rep = 5; Sim.state.credits = 1e6; Meta.profile.am = 1000; Meta._syncWallet(); Sim.state.name = 'W' + 'w'.repeat(27); Sim.emit('change'); Sim.emit('am', { delta: 1, total: 1000 }); UI.refresh(); });
+  await settle(1800); await clear(); await clear();
+  const crowded = [];
+  for (const w of [1920, 1600, 1537, 1440, 1391, 1367, 1331, 1281, 1241, 1200, 1181]) {
+    await page.setViewport({ width: w, height: 900 }); await settle(400);
+    const hit = await ev(() => {
+      const sb = document.getElementById('statusbar'), seen = e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
+      const parts = [...sb.querySelectorAll('.sb-hub, .sb-left, .ro, .rank, .sb-right > button, #speed')].filter(seen);
+      for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
+        const a = parts[i].getBoundingClientRect(), b = parts[j].getBoundingClientRect(), over = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        if (over > 2) return `${parts[i].id || parts[i].className} and ${parts[j].id || parts[j].className} overlap by ${Math.round(over)} px`;
+      }
+      return parts[parts.length - 1].getBoundingClientRect().right > innerWidth + 1 ? 'the bar runs past the right edge' : '';
+    });
+    if (hit) crowded.push(`${w} px: ${hit}`);
+    if (w === 1440) await shot('late-bar');
+  }
+  step('status bar: no readout runs into another late in the game (11 widths)', !crowded.length, crowded.join('; '));
+
   await browser.close();
   const failed = steps.filter(s => !s.ok);
   console.log(`\n${steps.length - failed.length} of ${steps.length} steps ok`);

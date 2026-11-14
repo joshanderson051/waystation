@@ -399,6 +399,121 @@ function frame(host, spec, ctx) {
 }
 
 // ------------------------------------------------------------
+// 2c. Quality of life advice (2026-11-13). Each of the four readings on the Station overview opens a sheet that says how
+// the reading is worked out for this station right now and what would raise it. Every figure is read from the simulation
+// (Sim.totals, Sim.amenity) and every building from MODULES, so a game's own names and numbers appear; none of it is fixed
+// advice. What the sim does with the readings is in Sim.amenity (the score and its weights) and Sim.dailyTick (what
+// visitors spend, residents moving in or leaving, reputation): change the words here when those change.
+// ------------------------------------------------------------
+const QOL_ROWS = [['food', 'Food'], ['beds', 'Beds for crews'], ['fun', 'Entertainment'], ['health', 'Health care']];
+const QOL_WEIGHT = { food: 35, beds: 20, fun: 25, health: 20 };       // Sim.amenity: each reading's share of the score, in percent
+const QOL_FUN = { ids: ['rec', 'plaza', 'menagerie'], each: 40 };      // Sim.totalsOf counts these three; Sim.amenity gives each 40 people
+function qolAdvice(key) {
+  const s = Sim.state; if (!s) return null;
+  const T = Sim.totals(), A = Sim.amenity(T), people = T.visitors + s.residents, v = A[key];
+  const kit = typeof Kit !== 'undefined' && Kit.on;
+  const count = (n, one, many) => `${Fmt.n(n)} ${n === 1 ? one : many}`;
+  // a building that raises the reading, and whether it can be built now
+  const option = (id, gain) => {
+    const d = MODULES[id]; if (!d || id === 'hub') return null;
+    const lock = kit && Kit.moduleLock ? Kit.moduleLock(id) : null, open = Sim.tierUnlocked(d.tier) && !lock;
+    const price = Sim.costOf(id, s), th = LEVEL_THRESHOLDS.find(t => t.level === d.tier), poor = s.credits < price;
+    const why = lock ? `Needs ${lock}` : !open ? `Unlocks at level ${d.tier}${th ? `: ${th.modules} modules and ${th.rep.toFixed(1)} reputation` : ''}` : poor ? `Need ${Fmt.n(price - s.credits)} more credits` : '';
+    // a building that waits on a discovery (a game with ages): the sheet offers the way to that panel instead
+    const eras = lock && typeof PANEL_DEFS !== 'undefined' ? PANEL_DEFS.find(p => p.id === 'eras') : null;
+    return { id, name: d.name, gain, price, open, can: open && !poor, why, have: T.counts[id] || 0, study: eras ? { id: eras.id, label: eras.label, icon: eras.icon } : null };
+  };
+  // how many of these are built, and how many of them are short of workers (a game with workers only)
+  const built = ids => { let n = 0, low = 0; for (const { r, c, m } of Sim.cells()) { if (!ids.includes(m.id) || Sim.isBuilding(r, c)) continue; n++; if (kit && Kit.staffing && Kit.staffing(r, c, s) < 1) low++; } return { n, low }; };
+  const out = { key, value: v, lead: '', facts: [], options: [], notes: [], staff: null };
+  if (key === 'food') {
+    const ids = MODULE_ORDER.filter(id => MODULES[id].food);
+    out.lead = !people ? 'Nobody needs feeding yet, so this reads 100%. It starts to matter when visitors arrive and residents move in.'
+      : v >= 1 ? `${Fmt.n(T.food)} meals are served a day, enough for all ${count(people, 'person', 'people')} here.`
+      : `${Fmt.n(T.food)} meals are served a day and ${count(people, 'person needs', 'people need')} feeding, so this reads ${Fmt.pct(v)}.`;
+    out.facts = [['Meals served a day', Fmt.n(T.food)], ['People to feed', Fmt.n(people)], ['Visitors', Fmt.n(T.visitors)], ['Residents', Fmt.n(s.residents)]];
+    if (people && v < 1) out.notes.push(`${count(Math.ceil(people - T.food), 'more meal', 'more meals')} a day would feed everyone.`);
+    out.options = ids.map(id => option(id, `Serves ${Fmt.n(MODULES[id].food)} meals a day`)).filter(Boolean);
+    out.staff = built(ids);
+    out.notes.push('Visitors spend more the better they are fed.');
+  } else if (key === 'beds') {
+    const ids = MODULE_ORDER.filter(id => MODULES[id].beds);
+    out.lead = !T.visitors ? 'No visitors are here right now, so nobody needs a bed and this reads 100%. Visitors need a bed for as long as they stay.'
+      : v >= 1 ? `${count(T.beds, 'bed', 'beds')}, enough for all ${count(T.visitors, 'visitor', 'visitors')} here now.`
+      : `${count(T.beds, 'bed', 'beds')} for ${count(T.visitors, 'visitor', 'visitors')}, so this reads ${Fmt.pct(v)}.`;
+    out.facts = [['Visitor beds', Fmt.n(T.beds)], ['Visitors here now', Fmt.n(T.visitors)]];
+    if (T.visitors && v < 1) out.notes.push(`${count(Math.ceil(T.visitors - T.beds), 'more bed', 'more beds')} would give every visitor one.`);
+    out.options = ids.map(id => option(id, `Adds ${count(MODULES[id].beds, 'bed', 'beds')}`)).filter(Boolean);
+    for (const id of ids) {
+      const d = MODULES[id], e2 = Sim.upgradeEffect(id, 'capacity', 2), e3 = Sim.upgradeEffect(id, 'capacity', 3);
+      if (id !== 'hub' && e2 > 1) out.notes.push(`Upgrading ${Fmt.aOrAn(d.name)} also adds beds: ${Fmt.n(Math.round(d.beds * e2))} at level 2 and ${Fmt.n(Math.round(d.beds * e3))} at level 3.`);
+    }
+    out.staff = built(ids);
+    out.notes.push('Residents live in homes and do not use these beds.');
+    out.notes.push('Visitors spend more when they have a bed.');
+  } else if (key === 'fun') {
+    const ids = QOL_FUN.ids.filter(id => MODULES[id]), n = T.funCount, each = QOL_FUN.each;
+    out.lead = !people ? (n ? 'Nobody is here to entertain yet, so this reads 100%.' : `Nobody is here yet. With no place of entertainment this reads 50%; the first one makes it 100% until more than ${each} people are here.`)
+      : v >= 1 ? `Your ${n === 1 ? 'place of entertainment looks' : `${Fmt.n(n)} places of entertainment look`} after all ${count(people, 'person', 'people')} here.`
+      : n ? `Each place of entertainment looks after ${each} people. You have ${Fmt.n(n)} for ${count(people, 'person', 'people')}, so this reads ${Fmt.pct(v)}.`
+      : `There is no place of entertainment yet for the ${count(people, 'person', 'people')} here, so this reads ${Fmt.pct(v)}.`;
+    out.facts = [['Places of entertainment', Fmt.n(n)], ['People they look after', Fmt.n(n * each)], ['People here', Fmt.n(people)]];
+    if (people && v < 1) out.notes.push(`${count(Math.ceil(people / each) - n, 'more place', 'more places')} of entertainment would cover everyone here.`);
+    out.options = ids.map(id => option(id, `Looks after ${each} more people`)).filter(Boolean);
+    out.notes.push('Visitors spend more the better they are entertained: it adds more to their spending than food or beds do.');
+  } else if (key === 'health') {
+    const d = MODULES.clinic, name = d ? d.name : 'clinic';
+    out.lead = T.hasClinic ? `Your ${name} keeps this at 100%. One is enough: a second does not raise it further.`
+      : `There is no ${name} here yet. Without one this reads 70% while 20 people or fewer are here, and 40% once there are more.${people ? ` ${count(people, 'person is', 'people are')} here now.` : ''}`;
+    out.facts = [[name, T.hasClinic ? 'Built' : 'Not built'], ['People here', Fmt.n(people)]];
+    if (!T.hasClinic) out.options = [option('clinic', 'Brings this reading to 100%')].filter(Boolean);
+  } else return null;
+  out.notes.push(`This reading is ${QOL_WEIGHT[key]}% of the quality of life score.`);
+  if (T.efficiency < 1) out.notes.unshift(`Power is short: ${Fmt.n(T.produced)} produced and ${Fmt.n(T.used)} needed. That holds the whole quality of life score to ${Fmt.pct(T.efficiency)} of what the four readings would give.`);
+  return out;
+}
+function qolShowInBuild(id, ctx) {
+  ctx.ui.openPanel('build');
+  // the panel paints on the next frame: then bring the card into view and mark it for a moment
+  setTimeout(() => {
+    const card = document.querySelector(`#panel .card[data-mod="${id}"]`); if (!card) return;
+    card.scrollIntoView({ block: 'center' });
+    card.classList.add('qol-flash'); setTimeout(() => card.classList.remove('qol-flash'), 2600);
+  }, 280);
+}
+function qolSheet(key, ctx) {
+  const a = qolAdvice(key); if (!a) return;
+  const label = (QOL_ROWS.find(r => r[0] === key) || [])[1] || '', c = thr(a.value);
+  const facts = a.facts.map(([k, val]) => `<div class="qol-fact"><span>${esc(k)}</span><span class="num">${esc(String(val))}</span></div>`).join('');
+  const opts = a.options.map(o => `<div class="qol-opt${o.open ? '' : ' locked'}">${plate(o.id)}<div class="qol-opt-main">` +
+    `<span class="qol-opt-name">${esc(o.name)}${o.have ? ` <span class="tag">${GLYPH.times}${o.have}</span>` : ''}</span>` +
+    `<span class="qol-opt-gain">${esc(o.gain)} ${MID} <span class="num">${Fmt.n(o.price)} cr</span></span>` +
+    (o.why ? `<span class="qol-opt-why">${icon(o.open ? 'credits' : 'lock', 12)} ${esc(o.why)}</span>` : '') + `</div>` +
+    (o.open ? `<button type="button" class="btn${o.can ? ' primary' : ''}" data-qol-build="${o.id}">${icon('build', 14)}<span>Show in Build</span></button>`
+      : o.study ? `<button type="button" class="btn" data-qol-go="${o.study.id}">${icon(o.study.icon || 'lock', 14)}<span>${esc(o.study.label)}</span></button>` : '') + `</div>`).join('');
+  const short = a.staff && a.staff.low ? `<p class="fine warn">${icon('people', 12)}<span>${a.staff.low} of the ${a.staff.n} you have ${a.staff.low === 1 ? 'is' : 'are'} short of workers and ${a.staff.low === 1 ? 'gives' : 'give'} less than a full one.</span></p>` : '';
+  const html = `<div class="sheet-kicker">Quality of life</div>` +
+    `<h2 class="sheet-title qol-title">${esc(label)} <span class="chip ${c}" data-shape="${TIER_SHAPE[c]}">${Fmt.pct(a.value)} ${MID} ${TIER_WORD[c]}</span></h2>` +
+    `<p class="sheet-lead">${esc(a.lead)}</p><div class="qol-facts">${facts}</div>` +
+    (opts ? `<div class="section qol-head">${a.options.length === 1 ? 'What raises it' : 'What raises it: any of these'}</div><div class="qol-opts">${opts}</div>` : '') + short +
+    a.notes.map(n => `<p class="fine">${icon('info', 12)}<span>${esc(n)}</span></p>`).join('') +
+    `<p class="fine">${icon('info', 12)}<span>Above 55% quality of life, new residents move in while homes are free, and it is the largest part of reputation. Under 35%, residents leave.</span></p>`;
+  const actions = [];
+  const wp = short && typeof PANEL_DEFS !== 'undefined' ? PANEL_DEFS.find(p => p.id === 'workers') : null;
+  if (wp) actions.push({ id: 'workers', label: wp.label, icon: 'people', fn: () => { ctx.ui.openPanel('workers'); } });
+  actions.push({ id: 'close', label: 'Close', ghost: true });
+  Overlays.sheet({ id: 'qol', hue: c === 'good' ? 'good' : 'amber', html, actions });
+  // the sheet focuses its Close button, which sits at the foot of a tall sheet on a phone: it still opens at its title
+  const sheetBox = document.querySelector('#sheet .sheet-box'); if (sheetBox) sheetBox.scrollTop = 0;
+  const box = document.querySelector('#sheet .qol-opts');
+  if (box) box.addEventListener('click', e => {
+    const b = e.target.closest('[data-qol-build], [data-qol-go]'); if (!b || b.disabled) return;
+    Overlays.closeSheet();
+    if (b.dataset.qolGo) ctx.ui.openPanel(b.dataset.qolGo); else qolShowInBuild(b.dataset.qolBuild, ctx);
+  });
+}
+
+// ------------------------------------------------------------
 // 3. Panels
 // ------------------------------------------------------------
 const Panels = {
@@ -486,9 +601,10 @@ const Panels = {
         `<div class="tiles col"><div class="tile"><span class="tile-lbl">Residents</span><span class="tile-val num c-sage">${s.residents} <small>/ ${T.homes} homes</small></span></div>` +
         `<div class="tile"><span class="tile-lbl">Power</span><span class="tile-val num ${T.used > T.produced ? 'c-bad' : 'c-ice'}">${T.used} <small>/ ${T.produced}</small></span></div>` +
         `<div class="tile"><span class="tile-lbl">Berths</span><span class="tile-val num c-ice">${T.docks} <small>${T.visitors} aboard</small></span></div></div></div>`;
-      for (const [label, v] of [['Food', A.food], ['Beds for crews', A.beds], ['Entertainment', A.fun], ['Health care', A.health]]) {
-        const c = thr(v);
-        h += `<div class="qol-row ${c}"><span class="qol-lbl">${label}</span>${segBar(v, c)}<span class="qol-val num">${Fmt.pct(v)}</span><span class="chip ${c}" data-shape="${TIER_SHAPE[c]}">${TIER_WORD[c]}</span></div>`;
+      // each reading is a button: it opens the advice sheet for that reading (qolSheet)
+      for (const [key, label] of QOL_ROWS) {
+        const v = A[key], c = thr(v);
+        h += `<button type="button" class="qol-row ${c}" data-act="qol" data-qol="${key}" title="What raises this reading"><span class="qol-lbl">${label}</span>${segBar(v, c)}<span class="qol-val num">${Fmt.pct(v)}</span><span class="chip ${c}" data-shape="${TIER_SHAPE[c]}">${TIER_WORD[c]}</span><span class="qol-go">${icon('chevron-right', 12)}</span></button>`;
       }
       // banked total + Collect all (rank 3+)
       h += `<div class="bank-card${ready.length ? ' ready' : ''}"><i class="spine"></i><div class="bank-main"><span class="tile-lbl">Banked across the station</span><span class="bank-val num c-amber-hi"><span data-live="banked"></span><small> cr</small></span><span class="bank-note">${ready.length ? `${ready.length} hopper${ready.length === 1 ? '' : 's'} ready to tap` : 'Hoppers fill while you are away'}</span></div>` +
@@ -565,6 +681,7 @@ const Panels = {
       const sel = ctx.engine.selected(), act = b.dataset.act;
       if (act === 'rename') { const inp = host.querySelector('#station-name-input'); if (inp) ctx.ui.rename(inp.value); }
       else if (act === 'collect-all') ctx.ui.collectAll(b);
+      else if (act === 'qol') qolSheet(b.dataset.qol, ctx);
       else if (act === 'expand') ctx.ui.plotConfirm();
       else if (act === 'skip-plot') ctx.ui.skipPlot();
       else if (act === 'back') ctx.ui.deselect();

@@ -1,5 +1,6 @@
 // Phone layout audit: drives the real game by touch at each phone size and audits the title, the first tour step, the
-// world, the menu and More sheets and every panel with its tabs: no sideways scroll, tap targets of at least 44 px
+// world, the menu and More sheets, every panel with its tabs and the four quality of life advice sheets: no sideways
+// scroll, tap targets of at least 44 px
 // (measured by hit-testing outward from the centre, so widened hit areas count), nothing off screen, no text cut off.
 // tools/phone-touch.js checks what the touches do; this checks that every screen fits.
 //   start the server:  MSYS_NO_PATHCONV=1 node waystation/serve.js --port 8791 --base waystation
@@ -103,6 +104,21 @@ function auditScreen(minTap, scope) {
         if (!await page.evaluate(id => UI.panel === id, id)) { problems.push(`panel ${id}: did not open`); continue; }
         await page.evaluate(() => UI.setPeek && UI.setPeek(false)); await sleep(250);
         await shot(`panel-${id}`); await audit(`panel ${id}`);
+        if (id === 'station') {
+          // the four quality of life readings open their advice sheets by tap, and each sheet passes the same audit
+          for (const key of ['food', 'beds', 'fun', 'health']) {
+            const sel = `#panel button.qol-row[data-qol="${key}"]`;
+            if (!await page.$(sel)) { problems.push(`panel station: no advice button for ${key}`); continue; }
+            await page.$eval(sel, el => el.scrollIntoView({ block: 'center' })); await sleep(200);
+            await tap(sel);
+            const open = await page.waitForSelector('#sheet.open .sheet-box[data-sheet="qol"]', { visible: true, timeout: 3000 }).then(() => true, () => false);
+            if (!open) { problems.push(`advice ${key}: the sheet did not open by tap`); continue; }
+            await sleep(350);
+            if (key === 'food') await shot('advice-food');
+            await audit(`advice ${key}`, '#sheet.open');
+            await page.evaluate(() => { Overlays.closeSheet && Overlays.closeSheet(); }); await sleep(300);
+          }
+        }
         const tabs = await page.$$eval('#panel .ptab', els => els.map(e => e.dataset.tab));
         for (const t of tabs.slice(1)) { await page.$eval(`#panel .ptab[data-tab="${t}"]`, b => b.click()); await sleep(280); await audit(`panel ${id} tab ${t}`); }
       }
