@@ -299,7 +299,11 @@ const Account = (() => {
     if (!cloud) return 'local';
     if (!local || local.fresh) return 'cloud';
     const ct = cloud.updatedAt ? Date.parse(cloud.updatedAt) || 0 : 0;
-    return ct > (local.savedAt || 0) ? 'cloud' : 'local';
+    /*qa:newest*/ // "The newest" is judged by when this device last saved before this start. (The start itself stamps the save with
+    // now, which made the local side win every time: a device that had lain unused wrote its old save over the newer
+    // cloud save.) Within two minutes the local one stays: the two times are not read from the same clock.
+    const m = meta(), mine = m && m._asLoaded ? m._asLoaded.savedAt || 0 : (local.savedAt || 0);
+    return ct > mine + 120000 ? 'cloud' : 'local';
   }
   async function resolveConflict() {
     const choice = await choose();
@@ -333,8 +337,14 @@ const Account = (() => {
     }
     const mk = marker();
     const local = localSide();
+    /*qa:ownPush*/ // The last push of a visit goes out as the page closes, and its answer never comes back: at the next start the
+    // cloud's version is one this device does not know, though the save is its own. When the cloud holds exactly the save
+    // this device had when the game opened, the cloud has not moved.
+    const loaded = m._asLoaded && m._asLoaded.profile ? summarise(m._asLoaded.profile) : null;
+    const ownPush = !!(loaded && cloud.summary && ['name', 'day', 'level', 'credits', 'am', 'sectors', 'rank'].every(k => loaded[k] === cloud.summary[k]));
+    if (m._asLoaded) m._asLoaded.profile = null;              // only its time is needed from here on (choose())
     const localMoved = state.dirty || !mk || (local.savedAt || 0) > (mk.syncedAt || 0) + config.graceMs;   // dirty = a change since the last successful push
-    const cloudMoved = !mk || cloud.version !== mk.version;
+    const cloudMoved = (!mk || cloud.version !== mk.version) && !ownPush;
     if (local.fresh && cloudMoved) return outcome(await runPull(), 'cloud');     // nothing to lose here: take the cloud save
     if (!cloudMoved && !localMoved) return { status: 'local', inSync: true };
     if (cloudMoved && !localMoved) return outcome(await runPull(), 'cloud');

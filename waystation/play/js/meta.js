@@ -110,6 +110,10 @@ const Meta = {
     const now = this.now();
     let p = this._readJSON(PROFILE_KEY), resumed = false, migrated = false;
     if (!this._validProfile(p)) p = null;
+    /*qa:asLoaded*/ // the save as it stood when the game opened, before this start stamps and advances it: what the cloud save is
+    // compared with (account.js reconcile)
+    this._asLoaded = null;
+    try { if (p) this._asLoaded = { savedAt: p.savedAt || 0, profile: JSON.parse(JSON.stringify(p)) }; } catch (e) { this._asLoaded = null; }
     if (p) resumed = true;
     else { p = this._migrateV1(now); if (p) { resumed = true; migrated = true; } }
     if (!p) { p = this._newProfile(now); p.sectors.home = Sim.makeState('home'); }
