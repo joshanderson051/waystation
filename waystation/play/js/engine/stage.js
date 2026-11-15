@@ -534,7 +534,8 @@ const EngineStage = (() => {
     if (!hasPack()) return null;
     // props ship flat (props/<id>.webp); ARTPACK.url would insert a size folder that does not exist in the pack
     if (group === 'props') { const g = ARTPACK.groups && ARTPACK.groups.props; return g && g.ids.includes(id) ? ARTPACK.base + 'props/' + id + '.webp' : null; }
-    try { return ARTPACK.url(group, id, size); } catch (e) { return null; }
+    /*lv:url*/ // a level picture (hub@2) is asked for as hub%402: the host answers the plain address with a redirect to that one
+    try { const u = ARTPACK.url(group, id, size); return u && String(id).includes('@') ? u.replace('@', '%40') : u; } catch (e) { return null; }
   }
   function packIds(group) { if (!hasPack() || !ARTPACK.groups || !ARTPACK.groups[group]) return null; return ARTPACK.groups[group].ids; }
   function sheet(id) { if (!hasPack() || typeof ARTPACK.sheet !== 'function') return null; try { return ARTPACK.sheet(id); } catch (e) { return null; } }

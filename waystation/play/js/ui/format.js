@@ -89,7 +89,8 @@ const Art = {
   url(group, id, px) {
     if (!this.has(group, id)) return null;
     const sizes = (ARTPACK.groups[group].sizes || []).slice().sort((a, b) => a - b), want = Math.max(1, Math.round(px || 0)) * 2;
-    return ARTPACK.url(group, id, sizes.find(s => s >= want) || sizes[sizes.length - 1]);
+    /*lv:url*/ const u = ARTPACK.url(group, id, sizes.find(s => s >= want) || sizes[sizes.length - 1]);
+    return u && String(id).includes('@') ? u.replace('@', '%40') : u;   // as the engine asks for it (stage.js packUrl)
   },
   // <img> markup: width and height set, alt text, lazy unless o.eager (first-screen images); o.fallback comes back when the id has no render
   img(group, id, px, o = {}) {
