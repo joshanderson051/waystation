@@ -146,7 +146,11 @@ const Account = (() => {
     const override = readJson(KEYS.config, null);
     if (override && typeof override === 'object') apply(override);
     Object.assign(config, next);
-    setState({ available: /^https?:\/\/\S+$/.test(config.apiBase) });
+    // The App Store app's first version has no sign-in (store.js shell 'ios'): Apple lets a game use what was bought on
+    // the web only if it also sells it through in-app purchase, so the cloud save, which carries those purchases, waits
+    // for that. Unavailable hides every sign-in control and nudge; the game saves on the device as a guest's does.
+    const noAccountHere = typeof Store !== 'undefined' && !!Store && Store.shell === 'ios';
+    setState({ available: !noAccountHere && /^https?:\/\/\S+$/.test(config.apiBase) });
     if (state.signedIn) startInterval();
     return api;
   }

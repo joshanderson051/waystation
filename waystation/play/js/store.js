@@ -102,6 +102,10 @@ const Store = (() => {
   // The store apps open play/?app=android (Google Play) or ?app=windows (Microsoft Store); a Trusted Web Activity also
   // arrives with an android-app:// referrer. The answer is kept for this visit in sessionStorage (a store app's
   // reloads keep it; a browser tab on the same device never picks it up) and the parameter leaves the address bar.
+  // Two signals need no parameter: the App Store app's user agent carries BuildTheAgesApp/<version> (so a page iOS
+  // reloads after ending it for memory still knows), and the Microsoft Store app is an installed web app on Windows
+  // (display-mode standalone; Edge may later reset its start address to the manifest's plain "/"). A copy of the site
+  // installed from Chrome or Edge on Windows counts as the Windows app too, and so sells nothing.
   let shellMemo;
   function appShell() {
     if (shellMemo !== undefined) return shellMemo;
@@ -109,9 +113,13 @@ const Store = (() => {
     try {
       const p = hasLoc() && typeof location.search === 'string' ? new URLSearchParams(location.search).get('app') : null;
       const ref = typeof document !== 'undefined' && document && typeof document.referrer === 'string' ? document.referrer : '';
+      const ua = typeof navigator !== 'undefined' && navigator && typeof navigator.userAgent === 'string' ? navigator.userAgent : '';
+      const standalone = typeof matchMedia === 'function' && matchMedia('(display-mode: standalone)').matches;
       const ss = typeof sessionStorage !== 'undefined' ? sessionStorage : null;
       if (p && SHELLS.has(p.toLowerCase())) shell = p.toLowerCase();
+      else if (/BuildTheAgesApp\//.test(ua)) shell = 'ios';
       else if (ref.startsWith('android-app://')) shell = 'android';
+      else if (ref.startsWith('app-info://') || (standalone && /Windows/.test(ua))) shell = 'windows';
       else if (ss) { const v = ss.getItem('portsolace.app'); if (v && SHELLS.has(v)) shell = v; }
       if (shell && ss) ss.setItem('portsolace.app', shell);
     } catch (e) { /* no storage or a malformed address: a plain browser visit */ }

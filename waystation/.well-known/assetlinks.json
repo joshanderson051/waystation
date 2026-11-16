@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.primesignalmarketing.buildtheages",
+    "sha256_cert_fingerprints": [
+      "CD:13:17:4A:82:5B:DF:CE:3E:27:93:61:A6:01:EF:31:3F:7F:8A:3F:6F:4C:DF:23:9E:A8:5C:15:D2:04:51:5D"
+    ]
+  }
+}]

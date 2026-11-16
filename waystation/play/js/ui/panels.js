@@ -1283,7 +1283,9 @@ const Panels = {
       // A2.1 account shelf: not connected / signed out / signed in
       const acct = ctx.account, ast = acct ? acct.state() : null;
       let h = shelf('Account', null, { first: true, hue: 'var(--ice)', attrs: ' id="acct-shelf"' });
-      if (!acct || !acct.available()) h += `<p class="fine acct-off">${icon('cloud', 14)} Cloud saves are not connected on this build yet. Your profile is saved in this browser; export it from Save data to move it.</p>`;
+      if (!acct || !acct.available()) h += typeof Store !== 'undefined' && Store && Store.shell === 'ios'   // the App Store app has no sign-in yet (account.js)
+        ? `<p class="fine acct-off">${icon('cloud', 14)} Cloud saves are not in this app yet. Everything you build is saved on this device; export it from Save data to keep a copy.</p>`
+        : `<p class="fine acct-off">${icon('cloud', 14)} Cloud saves are not connected on this build yet. Your profile is saved in this browser; export it from Save data to move it.</p>`;
       else if (!ast.signedIn) h += `<div class="acct"><div class="acct-main"><span class="setting-lbl">Save this station to a free account</span><span class="setting-sub">Right now it is saved on this device only. An account keeps it safe, opens it on any device, and adds ${ctx.ui.ACCOUNT_BONUS} Antimatter the first time you sign in. One cloud save per account, newest wins.</span></div><button type="button" class="btn primary" data-act="signin">${icon('cloud', 14)}<span>Sign in or create</span></button></div>`;
       else {
         const when = ast.lastSyncAt ? `${Fmt.ago(Date.now() - ast.lastSyncAt)} ago` : 'not yet', line = ast.syncing ? 'Syncing…' : ast.lastError ? `Error: ${ast.lastError}` : ast.dirty ? 'Changes waiting to sync' : 'Synced';
