@@ -219,6 +219,9 @@
     on('#btn-resume', 'click', resume);
     on('#btn-newstation', 'click', () => showTitle('new', false));
     on('#btn-title-back', 'click', titleBack);
+    /*qa:titlePull*/ // Signing in from the title can bring the cloud station down (account.js pull): the title then offers it
+    // to resume. Left on the name form, Commission would rename the station that just arrived.
+    if (has(Sim, 'on')) Sim.on('account', d => { if (d && d.state === 'synced' && d.direction === 'pull' && T.open) showTitle('boot', true); });
     on('#btn-reroll', 'click', () => { setTitleName(randomName(T.name ? T.name.value.trim() : '')); if (T.name) T.name.focus(); });
     if (T.name) {
       T.name.addEventListener('input', updateRegistry);
