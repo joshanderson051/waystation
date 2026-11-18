@@ -13,6 +13,14 @@
 //            "Set a new password" view when Account.resetToken is set (the ?reset= link from a "Forgot your password?" email).
 //   Meta     export() / import(json) / save(now) / profile.savedAt; this file writes profile.cloud =
 //            {version, syncedAt, userId} after every successful sync.
+//
+// Signed in on the Build the Ages hub (only where the page carries <meta name="bta-hub">, which the bta-space Worker adds
+// at space.buildtheages.com, and only with authBase in the portsolace-account tag): boot() makes one quiet visit to
+// <authBase>/authorize?prompt=none, the hand-off every Build the Ages world uses (buildtheages workers/account/src/handoff.js),
+// and swaps the code that comes back at /handoff/exchange for the usual token. Port Solace keeps its own sign-in form;
+// portsolace.com has no hub tag and never runs any of this. The quiet visit happens at most once per browser session, unless
+// the hub says it has just signed in (?sso=1 on its links), or the token kept here has expired; never after the player signed
+// out here, unless the hub says so; never with a reset link, a purchase or a hand-off answer in the address; never in a frame.
 // ============================================================
 'use strict';
 
@@ -21,9 +29,21 @@ const Account = (() => {
   const KEYS = {
     session: 'portsolace.account',          // {token, email}
     config: 'portsolace.account.config',    // optional JSON override of the <meta> config (local testing)
+    signedOut: 'portsolace.account.signedOut',   // hub hand-off only: this player signed out here, so no quiet sign-in back
   };
+  const SESSION_KEYS = {                     // sessionStorage, hub hand-off only
+    state: 'portsolace.account.state',       // the state sent to /authorize
+    tried: 'portsolace.account.silent',      // a quiet visit to /authorize already happened in this browser session
+  };
+  const HANDOFF_GAME = 'portsolace';         // this game's id in the Build the Ages registry (workers/shared/games.js)
+  const SILENT_WAIT_MS = 2500;               // how long the title may wait on the /health check before the quiet visit
+  const SILENT_GIVE_UP_MS = 4000;            // if the browser has not left by then, the game carries on
+  // Query parameters a quiet visit may carry there and back. Anything else (a reset link, a checkout's return, a hand-off
+  // answer) is something this page has to deal with first, so the visit waits for the next load.
+  const QUIET_OK = /^(app|sso|ref|gclid|fbclid|msclkid|utm_[a-z]+)$/;
   const DEFAULTS = {
     apiBase: '',
+    authBase: '',          // the Build the Ages accounts host, for the hub hand-off (header); empty: no hand-off
     debounceMs: 20000,     // A2.1: push 20 s after the last `change`
     intervalMs: 60000,     // A2.1: and every 60 s while dirty (also retries while offline)
     timeoutMs: 15000,      // per request
@@ -140,6 +160,7 @@ const Account = (() => {
     const next = { ...config };
     const apply = o => {
       if (o.apiBase !== undefined) next.apiBase = String(o.apiBase || '').trim().replace(/\/+$/, '');
+      if (o.authBase !== undefined) next.authBase = String(o.authBase || '').trim().replace(/\/+$/, '');
       for (const k of ['debounceMs', 'intervalMs', 'timeoutMs', 'graceMs', 'gzipMin']) if (o[k] !== undefined) next[k] = Math.max(0, Number(o[k]) || 0);
     };
     apply(opts || {});
@@ -163,7 +184,7 @@ const Account = (() => {
   }
   function setSignedIn(user, token) {
     /*qa:L2user*/ if (!user || typeof user !== 'object' || !user.id) { const e = new Error('The account service gave an answer the game could not read. Please try again.'); e.code = 'bad-answer'; throw e; }
-    if (token) { session = { token, email: user.email }; writeJson(KEYS.session, session); }
+    if (token) { session = { token, email: user.email }; writeJson(KEYS.session, session); if (hubHandoff()) writeJson(KEYS.signedOut, null); }
     setState({ signedIn: true, user: { id: user.id, email: user.email }, conflict: false, lastError: null });
     startInterval();
     emit('signed-in', { user: { ...state.user } });
@@ -201,7 +222,7 @@ const Account = (() => {
     const timer = ctrl ? setTimeout(() => ctrl.abort(), config.timeoutMs) : null;
     let res;
     try {
-      res = await fetch(config.apiBase + path, {
+      res = await fetch((o.base || config.apiBase) + path, {
         method: o.method || 'GET', headers, body, mode: 'cors', credentials: 'omit',
         keepalive: !!o.keepalive, signal: ctrl ? ctrl.signal : undefined,
       });
@@ -428,13 +449,109 @@ const Account = (() => {
     if (hasDoc() && typeof document.addEventListener === 'function') document.addEventListener('visibilitychange', () => { if (document.hidden) flushOnHide(); });
   }
 
+  // ---------------------------------------------------------- the Build the Ages hub hand-off (header; only with the hub tag)
+  function hubTag() {
+    if (!hasDoc() || typeof document.querySelector !== 'function') return false;
+    try { return !!document.querySelector('meta[name="bta-hub"]'); } catch (e) { return false; }
+  }
+  const hubHandoff = () => state.available && /^https:\/\/\S+$/.test(config.authBase) && hubTag();
+  function sessionStore() { try { return typeof sessionStorage !== 'undefined' ? sessionStorage : null; } catch (e) { return null; } }
+  function cleanAddress(keys) {
+    try {
+      const h = window.history;
+      if (!h || typeof h.replaceState !== 'function') return;
+      const u = new URL(window.location.href);
+      for (const k of keys) u.searchParams.delete(k);
+      h.replaceState(h.state == null ? null : h.state, '', u.pathname + u.search + u.hash);
+    } catch (e) { /* a malformed location: leave the address bar alone */ }
+  }
+  const query = () => { try { return new URLSearchParams(hasWin() && window.location && typeof window.location.search === 'string' ? window.location.search : ''); } catch (e) { return new URLSearchParams(''); } };
+
+  // Taken once at load, and out of the address bar: the hub's "signed in just now" (?sso=1) and the answer from /authorize.
+  let hinted = false;        // the hub sent the player here signed in
+  let returned = null;       // {code} after a matching state
+  function captureHandoff() {
+    if (!hubHandoff() || !hasWin() || !window.location) return;
+    const q = query();
+    if (q.has('sso')) { hinted = q.get('sso') === '1'; cleanAddress(['sso']); }
+    if (!q.has('code') && !q.has('error')) return;
+    if (!q.has('state')) return;                             // not an answer from /authorize: not ours to touch
+    const ss = sessionStore();
+    let expected = null;
+    if (ss) { try { expected = ss.getItem(SESSION_KEYS.state); ss.removeItem(SESSION_KEYS.state); } catch (e) { expected = null; } }
+    const code = q.get('code');
+    if (code && expected && q.get('state') === expected) returned = { code };
+    cleanAddress(['code', 'state', 'error']);
+  }
+
+  /*qa:L9var*/ let handoffError = null;
+  async function finishHandoff() {
+    const { code } = returned;
+    returned = null;
+    let data;
+    try { data = await call('/handoff/exchange', { method: 'POST', auth: false, base: config.authBase, body: { code, game: HANDOFF_GAME } }); }
+    catch (err) {
+      setState({ lastError: err.code || 'error' });
+      /*qa:L9*/ handoffError = { code: err.code || 'error', status: err.status || 0 };   // the HUD is not listening yet: it asks for this when it starts
+      emit('error', { code: err.code, message: err.message, direction: 'handoff', status: err.status || 0 });
+      return null;
+    }
+    try { setSignedIn(data.user, data.token); }
+    catch (err) { setState({ lastError: 'bad-answer' }); handoffError = { code: 'bad-answer', status: 200 }; return null; }
+    return reconcile({ afterSignIn: true });
+  }
+
+  // Sends the player to /authorize?prompt=none. False, with nothing done, when this browser could not check the answer.
+  function redirectQuietly() {
+    const ss = sessionStore();
+    if (!ss || typeof window.location.assign !== 'function' || typeof crypto === 'undefined' || typeof crypto.getRandomValues !== 'function') return false;
+    const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+    try {
+      ss.setItem(SESSION_KEYS.state, nonce); ss.setItem(SESSION_KEYS.tried, '1');
+      if (ss.getItem(SESSION_KEYS.state) !== nonce || ss.getItem(SESSION_KEYS.tried) !== '1') return false;
+    } catch (e) { return false; }
+    const back = new URL(window.location.href);
+    for (const k of ['code', 'state', 'error', 'reset', 'sso']) back.searchParams.delete(k);
+    back.hash = '';
+    hinted = false;
+    window.location.assign(`${config.authBase}/authorize?game=${HANDOFF_GAME}&return=${encodeURIComponent(back.href)}&state=${nonce}&prompt=none`);
+    return true;
+  }
+
+  // One quiet look for a login made on the hub or in another world. Resolves false when nothing happened; otherwise the
+  // browser leaves. `expired`: the token kept here has just been refused, so this browser session's one look may be spent again.
+  async function trySilent(expired) {
+    const ss = sessionStore();
+    if (!hubHandoff() || !ss || !hasWin() || !window.location || resetToken || returned) return false;
+    for (const k of query().keys()) if (!QUIET_OK.test(k)) return false;
+    if (window.top && window.top !== window) return false;                 // /authorize never renders in a frame
+    if (typeof navigator !== 'undefined' && navigator && (navigator.webdriver || navigator.onLine === false)) return false;   // automated journeys keep their one page load
+    if (!hinted && readJson(KEYS.signedOut, null)) return false;
+    try { if (!hinted && !expired && ss.getItem(SESSION_KEYS.tried)) return false; } catch (e) { return false; }
+    const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctrl ? unref(setTimeout(() => ctrl.abort(), SILENT_WAIT_MS)) : null;
+    try {
+      const res = await fetch(`${config.authBase}/health`, { mode: 'cors', credentials: 'omit', signal: ctrl ? ctrl.signal : undefined });
+      const h = res.ok ? await res.json() : null;
+      if (!h || !Array.isArray(h.games) || !h.games.includes(HANDOFF_GAME)) return false;
+    } catch (e) { return false; } finally { if (timer) clearTimeout(timer); }
+    return redirectQuietly();
+  }
+  // boot()'s quiet look: while the browser leaves there is nothing to draw, so the title waits; if it is still here after
+  // that, the navigation is cancelled, or a slow answer would pull the player out of the game they start meanwhile.
+  async function quietLook(expired) {
+    if (!(await trySilent(expired))) return false;
+    await new Promise(done => unref(setTimeout(done, SILENT_GIVE_UP_MS)));
+    try { if (typeof window.stop === 'function') window.stop(); } catch (e) { /* nothing to cancel */ }
+    return true;
+  }
+
   // ---------------------------------------------------------- public API (A2.1)
   const validEmail = e => /^[^\s@]{1,64}@[^\s@]{1,189}\.[^\s@]{2,}$/.test(String(e || '').trim());
   const cleanEmail = e => String(e || '').trim().toLowerCase();
   const unavailable = () => fail(NOT_CONNECTED, { code: 'unavailable' });
   const netFail = err => fail(err.message, { code: err.code, status: err.status || 0, retryAfter: err.data && err.data.retryAfter });
 
-  /*qa:L9var*/ let handoffError = null;   // this game signs in on its own page: there is no hand-off to fail
   /*qa:L4*/ // The title waits for this. A cloud that has stalled must not hold it for the full request time twice over (16 s
   // measured): while starting, each request gets 6 s, and the game then plays locally and syncs when the cloud answers.
   async function boot() {
@@ -445,8 +562,11 @@ const Account = (() => {
   async function bootNow() {
     bindOnce();
     if (!state.available) return { status: 'none', why: NOT_CONNECTED };
-    if (!loadSession()) return { status: 'none' };
-    return reconcile();
+    if (returned) { const r = await finishHandoff(); if (r) return r; }
+    if (!loadSession()) { await quietLook(false); return { status: 'none' }; }
+    const r = await reconcile();
+    if (r.why === 'expired' && !state.signedIn) await quietLook(true);   // the hub's login may still be good
+    return r;
   }
 
   async function signup(email, password) {
@@ -540,6 +660,7 @@ const Account = (() => {
     if (!state.signedIn && !session) return { ok: true };
     try { await call('/logout', { method: 'POST' }); } catch (e) { /* the local sign-out happens regardless */ }
     setSignedOut('user');
+    if (hubHandoff()) writeJson(KEYS.signedOut, true);       // the accounts host still knows this browser: no quiet sign-in back
     return { ok: true };
   }
 
@@ -598,6 +719,7 @@ const Account = (() => {
 
   configure(readTagConfig());
   captureResetToken();
+  captureHandoff();
   if (hasDoc() && document.readyState === 'loading' && typeof document.addEventListener === 'function') {
     document.addEventListener('DOMContentLoaded', () => configure(readTagConfig()), { once: true });
   }

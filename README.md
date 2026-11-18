@@ -41,6 +41,11 @@ password resets and push subscriptions.
   menu and Settings). portsolace.com never carries the tag, so nothing changes here, and every page's canonical link still
   names portsolace.com. The three APIs list `https://space.buildtheages.com` in `ALLOWED_ORIGIN`. Saves are kept per
   address: a station saved on one address without an account does not appear on the other; signing in carries it across.
+  Signed in on the hub, a player opening Port Solace there is signed in too: with the `bta-hub` tag and the `authBase` in
+  the `portsolace-account` tag (`https://accounts.buildtheages.com`), `play/js/account.js` makes one quiet
+  `/authorize?prompt=none` visit to the Build the Ages accounts host and swaps the code for the usual token. It looks once
+  per browser session, again when the hub's link says it has just signed in (`?sso=1`) or when the token kept here has
+  expired, and never after the player signed out of Port Solace there (unless the hub says so). portsolace.com never runs it.
 - **Email.** Account mail (password resets) goes through Resend from `noreply@portsolace.com`, once the domain is verified
   in Resend (its SPF and DKIM records go into Cloudflare DNS). Until then the account Worker falls back to Resend's
   `onboarding@resend.dev`. A `_dmarc` TXT record (`v=DMARC1; p=none; ...`) is published for the domain.
