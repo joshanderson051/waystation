@@ -4,7 +4,8 @@
     "namespace": "android_app",
     "package_name": "com.primesignalmarketing.buildtheages",
     "sha256_cert_fingerprints": [
-      "CD:13:17:4A:82:5B:DF:CE:3E:27:93:61:A6:01:EF:31:3F:7F:8A:3F:6F:4C:DF:23:9E:A8:5C:15:D2:04:51:5D"
+      "CD:13:17:4A:82:5B:DF:CE:3E:27:93:61:A6:01:EF:31:3F:7F:8A:3F:6F:4C:DF:23:9E:A8:5C:15:D2:04:51:5D",
+      "17:4B:CC:AA:E4:C4:AF:D7:3E:96:65:1C:9E:85:77:5A:C1:0B:7C:08:42:66:58:DA:78:79:D9:B5:74:85:C2:F2"
     ]
   }
 }]
